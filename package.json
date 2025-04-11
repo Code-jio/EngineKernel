@@ -1,0 +1,16 @@
+{
+  "type": "module",
+  "scripts": {
+    "dev": "webpack serve --config config/dev.config.js --mode development",
+    "build": "webpack --config config/prod.config.js --mode production"
+  },
+  "devDependencies": {
+    "detect-port": "^2.1.0",
+    "html-webpack-plugin": "^5.6.3",
+    "internal-ip": "^8.0.0",
+    "terser-webpack-plugin": "^5.3.14",
+    "webpack": "^5.89.0",
+    "webpack-cli": "^5.1.4",
+    "webpack-dev-server": "^4.15.1"
+  }
+}
