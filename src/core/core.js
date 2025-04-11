@@ -1,13 +1,14 @@
-import EventBus from '../eventBus/eventBus.js';
+import eventBus from '../eventBus/eventBus.js';
 import PluginManager from './pluginManager.js';
 import { BasePlugin } from '../plugins/basePlugin.js';
 import { isValidPath } from '../utils/pathUtils.js';
+import { validatePlugin } from '@/utils/security.js';
 
 export default class Core {
-  constructor() {
+  constructor(dependencies = {}) {
     this.pluginRegistry = new Map(); // 插件注册表
-    this.eventBus = EventBus; // 使用事件总线通信
-    this.pluginManager = new PluginManager(); // 插件管理器实例
+    this.eventBus = dependencies.eventBus || eventBus;
+    this.pluginManager = dependencies.pluginManager || new PluginManager();
     this.loadStrategies = {
       sync: this._loadSync.bind(this),
       async: this._loadAsync.bind(this)
@@ -16,20 +17,19 @@ export default class Core {
 
   // 增强注册方法
   registerPlugin(pluginMeta) {
-    // 添加前置事件
     this.eventBus.emit('beforePluginRegister', pluginMeta);
-    
+
     if (this.pluginRegistry.has(pluginMeta.name)) {
       const error = new Error(`Plugin ${pluginMeta.name} already registered`);
       this.eventBus.emit('registrationError', { meta: pluginMeta, error });
       throw error;
     }
-    
+
     try {
       const plugin = new BasePlugin(pluginMeta);
       this.pluginRegistry.set(plugin.name, plugin);
       // 添加带校验的注册事件
-      this.eventBus.emit('pluginRegistered', { 
+      this.eventBus.emit('pluginRegistered', {
         name: plugin.name,
         version: plugin.version,
         dependencies: plugin.dependencies
@@ -54,14 +54,14 @@ export default class Core {
       // 添加加载前事件
       this.eventBus.emit('beforePluginLoad', pluginName);
       await this.loadStrategies[plugin.strategy](plugin);
-      
+
       // 添加初始化后事件
       plugin.status = 'loaded';
       this.eventBus.emit('pluginInitialized', {
         name: pluginName,
         exports: plugin.instance.getExports?.() || null
       });
-      
+
     } catch (error) {
       // 增强错误信息
       this.eventBus.emit('loadError', {
@@ -78,18 +78,18 @@ export default class Core {
   unregisterPlugin(pluginName) {
     // 添加前置检查事件
     this.eventBus.emit('beforePluginUnregister', pluginName);
-    
+
     if (!this.pluginRegistry.has(pluginName)) {
       this.eventBus.emit('unregisterWarning', `Attempt to unregister non-existent plugin: ${pluginName}`);
       return false;
     }
-    
+
     const plugin = this.pluginRegistry.get(pluginName);
     try {
       // 添加卸载前事件
       this.eventBus.emit('beforePluginUnload', plugin);
       this._unload(plugin);
-      
+
       this.pluginRegistry.delete(pluginName);
       // 添加详细卸载完成事件
       this.eventBus.emit('pluginUnregistered', {
@@ -104,7 +104,10 @@ export default class Core {
   }
 
   // 同步加载策略
-  async _loadSync(plugin) { // 添加 async 关键字
+  async _loadSync(plugin) {
+    if (!validatePlugin(plugin)) {
+      throw new Error('Invalid plugin');
+    }
     if (!isValidPath(plugin.path)) {
       throw new Error('Invalid plugin path');
     }
@@ -115,6 +118,12 @@ export default class Core {
 
   // 异步加载策略
   async _loadAsync(plugin) {
+    if (!validatePlugin(plugin)) {
+      throw new Error('Invalid plugin');
+    }
+    if (!isValidPath(plugin.path)) {
+      throw new Error('Invalid plugin path');
+    }
     return new Promise((resolve, reject) => {
       const script = document.createElement('script');
       script.src = plugin.path;
