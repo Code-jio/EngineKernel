@@ -7,5 +7,4 @@ export const pathUtils = {
     const validPattern = /^(\.\.?\/|[a-zA-Z]:\\|\/)/; // 允许相对路径和绝对路径
     return typeof filePath === 'string' && validPattern.test(filePath);
   }
-
 }

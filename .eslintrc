@@ -41,6 +41,6 @@
     "eslint-plugin-import/no-named-as-default": "off",
     "eslint-plugin-import/no-named-as-default-member": "off",
     "no-restricted-syntax": "off",
-    "no-multiple-empty-lines": "off",
+    "no-multiple-empty-lines": "off"
   }
 }

@@ -1,4 +1,4 @@
-import EventBus from "@/eventBus/eventBus";
+import EventBus from '@/eventBus/eventBus';
 // 插件管理器
 // 修改导出方式（在文件底部）
 export default class PluginManager { // 添加 default 导出
