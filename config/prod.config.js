@@ -8,6 +8,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default merge(baseConfig, {
   mode: 'production',
+  experiments: {
+    outputModule: true
+  },
   output: {
     path: path.join(__dirname, '../dist'),
     filename: 'my-library.min.js',
@@ -17,21 +20,8 @@ export default merge(baseConfig, {
       type: 'umd',
       umdNamedDefine: true
     },
-    globalObject: 'this'
-  },
-  optimization: {
-    minimize: true,
-    minimizer: [new TerserPlugin({
-      parallel: true,
-      extractComments: false,
-      terserOptions: {
-        compress: {
-          drop_console: true
-        }
-      }
-    })],
-    // 禁用所有代码分割配置
-    splitChunks: false,
-    runtimeChunk: false
+    iife: true, // 新增 IIFE 配置
+    globalObject: 'this',
+    chunkFormat: 'module'
   }
 });

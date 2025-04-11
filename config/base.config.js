@@ -18,7 +18,7 @@ export default {
   },
   resolve: {
     alias: {
-      '@': path.join(__dirname, '../src'),  // 修正路径指向
+      '@': path.resolve(__dirname, '../src')
     },
     extensions: ['.js', '.jsx', '.ts'],  // 添加更多扩展类型
   },
