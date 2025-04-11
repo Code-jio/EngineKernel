@@ -1,0 +1,43 @@
+# 依赖目录
+node_modules/
+jspm_packages/
+
+# 构建输出
+dist/
+build/
+coverage/
+
+# 缓存文件
+*.log
+*.tsbuildinfo
+.cache/
+.temp/
+
+# 环境文件
+.env
+.env.local
+.env*.local
+
+# 编辑器配置
+.vscode/
+.idea/
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 调试文件
+debug/
+*.pid
+
+# 包管理器控制文件
+.npm
+.yarn-integrity
+.pnpm-debug.log
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+
+# Webpack 调试文件
+stats.json
