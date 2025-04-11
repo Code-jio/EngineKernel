@@ -2,15 +2,23 @@
   "type": "module",
   "scripts": {
     "dev": "webpack serve --config config/dev.config.js --mode development",
-    "build": "webpack --config config/prod.config.js --mode production"
+    "build": "webpack --config config/prod.config.js --mode production",
+    "lint": "npx eslint .",
+    "lint:fix": "npx eslint . --fix"
   },
   "devDependencies": {
     "detect-port": "^2.1.0",
+    "eslint": "^8.57.1",
+    "eslint-config-airbnb-base": "^15.0.0",
+    "eslint-plugin-import": "^2.31.0",
     "html-webpack-plugin": "^5.6.3",
     "internal-ip": "^8.0.0",
     "terser-webpack-plugin": "^5.3.14",
     "webpack": "^5.89.0",
     "webpack-cli": "^5.1.4",
     "webpack-dev-server": "^4.15.1"
+  },
+  "dependencies": {
+    "mitt": "^3.0.1"
   }
 }

@@ -1,13 +1,11 @@
-export default class MyLibrary {
-    constructor() {
-        this.name = 'MyLibrary';
-        this.version = '1.0.0';
-    }
-    greet() {
-        console.log(`Hello from ${this.name} v${this.version}!`);
-    }
+import { BasePlugin } from './plugins/basePlugin.js';
+import Core from './core/core.js';
+import eventBus from './eventBus/eventBus.js';
+import pluginManager from './core/pluginManager.js';
 
-    hello(){
-        console.log('hello')
-    }
-}
+export { 
+  Core, 
+  eventBus, 
+  pluginManager, 
+  BasePlugin 
+};
