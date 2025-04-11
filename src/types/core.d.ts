@@ -1,5 +1,5 @@
-export interface IPlugin {
-  name: string;
-  initialize: () => void;
-  uninstall: () => void;
+interface IPlugin {
+  initialize(core: Core): void;
+  uninstall(): void;
+  getExports?(): Record<string, unknown>;
 }
