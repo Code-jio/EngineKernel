@@ -20,7 +20,7 @@ export default merge(baseConfig, {
       type: "umd",
       umdNamedDefine: true,
     },
-    iife: true, // 新增 IIFE 配置
+    iife: true,
     globalObject: "this",
     chunkFormat: "module",
   },

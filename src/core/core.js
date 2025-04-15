@@ -62,7 +62,6 @@ export default class Core {
         exports: plugin.instance.getExports?.() || null,
       });
     } catch (error) {
-      // 增强错误信息
       this.eventBus.emit("loadError", {
         pluginName,
         error,
@@ -73,7 +72,6 @@ export default class Core {
     }
   }
 
-  // 增强卸载方法
   unregisterPlugin(pluginName) {
     // 添加前置检查事件
     this.eventBus.emit("beforePluginUnregister", pluginName);
@@ -93,7 +91,6 @@ export default class Core {
       this._unload(plugin);
 
       this.pluginRegistry.delete(pluginName);
-      // 添加详细卸载完成事件
       this.eventBus.emit("pluginUnregistered", {
         name: pluginName,
         timestamp: Date.now(),
@@ -131,11 +128,11 @@ export default class Core {
       script.src = plugin.path;
       script.onload = () => {
         plugin.instance = window[plugin.name];
-        plugin.instance?.initialize?.(this); // 添加空值校验
+        plugin.instance?.initialize?.(this);
         resolve();
       };
       script.onerror = (e) =>
-        reject(new Error(`Failed to load ${plugin.name}: ${e.message}`)); // 增强错误信息
+        reject(new Error(`Failed to load ${plugin.name}: ${e.message}`));
       document.head.appendChild(script);
     });
   }
