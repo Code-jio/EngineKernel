@@ -1,7 +1,17 @@
 {
     "compilerOptions": {
+        "esModuleInterop": true, // 允许使用import和export
+        "allowSyntheticDefaultImports": true, // 允许使用默认导入
         "typeRoots": [
-            "./src/interface"
+            "./src/interface",
+            "./node_modules/@types"
+        ],
+        "types": [
+            "node"
+        ],
+        "moduleResolution": "node",
+        "lib": [
+            "es2015"
         ],
         "strict": true
     }

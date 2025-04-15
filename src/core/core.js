@@ -1,8 +1,8 @@
-import eventBus from '../eventBus/eventBus.js';
-import PluginManager from './pluginManager.js';
-import { BasePlugin } from '../plugins/basePlugin.js';
-import { isValidPath } from '../utils/pathUtils.js';
-import { validatePlugin } from '@/utils/security.js';
+import eventBus from "@/eventBus/eventBus.ts";
+import PluginManager from "./pluginManager.js";
+import { BasePlugin } from "@/plugins/basePlugin.ts";
+import { isValidPath } from "@/utils/pathUtils.ts";
+import { validatePlugin } from "@/utils/security.ts";
 
 export default class Core {
   constructor(dependencies = {}) {
@@ -11,17 +11,17 @@ export default class Core {
     this.pluginManager = dependencies.pluginManager || new PluginManager();
     this.loadStrategies = {
       sync: this._loadSync.bind(this),
-      async: this._loadAsync.bind(this)
+      async: this._loadAsync.bind(this),
     };
   }
 
   // 增强注册方法
   registerPlugin(pluginMeta) {
-    this.eventBus.emit('beforePluginRegister', pluginMeta);
+    this.eventBus.emit("beforePluginRegister", pluginMeta);
 
     if (this.pluginRegistry.has(pluginMeta.name)) {
       const error = new Error(`Plugin ${pluginMeta.name} already registered`);
-      this.eventBus.emit('registrationError', { meta: pluginMeta, error });
+      this.eventBus.emit("registrationError", { meta: pluginMeta, error });
       throw error;
     }
 
@@ -29,14 +29,14 @@ export default class Core {
       const plugin = new BasePlugin(pluginMeta);
       this.pluginRegistry.set(plugin.name, plugin);
       // 添加带校验的注册事件
-      this.eventBus.emit('pluginRegistered', {
+      this.eventBus.emit("pluginRegistered", {
         name: plugin.name,
         version: plugin.version,
-        dependencies: plugin.dependencies
+        dependencies: plugin.dependencies,
       });
       return true;
     } catch (error) {
-      this.eventBus.emit('registrationError', { meta: pluginMeta, error });
+      this.eventBus.emit("registrationError", { meta: pluginMeta, error });
       throw new Error(`Plugin registration failed: ${error.message}`);
     }
   }
@@ -46,30 +46,29 @@ export default class Core {
     const plugin = this.pluginRegistry.get(pluginName);
     if (!plugin) {
       const error = new Error(`Plugin ${pluginName} not registered`);
-      this.eventBus.emit('loadError', { pluginName, error });
+      this.eventBus.emit("loadError", { pluginName, error });
       throw error;
     }
 
     try {
       // 添加加载前事件
-      this.eventBus.emit('beforePluginLoad', pluginName);
+      this.eventBus.emit("beforePluginLoad", pluginName);
       await this.loadStrategies[plugin.strategy](plugin);
 
       // 添加初始化后事件
-      plugin.status = 'loaded';
-      this.eventBus.emit('pluginInitialized', {
+      plugin.status = "loaded";
+      this.eventBus.emit("pluginInitialized", {
         name: pluginName,
-        exports: plugin.instance.getExports?.() || null
+        exports: plugin.instance.getExports?.() || null,
       });
-
     } catch (error) {
       // 增强错误信息
-      this.eventBus.emit('loadError', {
+      this.eventBus.emit("loadError", {
         pluginName,
         error,
-        stack: error.stack
+        stack: error.stack,
       });
-      plugin.status = 'error';
+      plugin.status = "error";
       throw error;
     }
   }
@@ -77,28 +76,31 @@ export default class Core {
   // 增强卸载方法
   unregisterPlugin(pluginName) {
     // 添加前置检查事件
-    this.eventBus.emit('beforePluginUnregister', pluginName);
+    this.eventBus.emit("beforePluginUnregister", pluginName);
 
     if (!this.pluginRegistry.has(pluginName)) {
-      this.eventBus.emit('unregisterWarning', `Attempt to unregister non-existent plugin: ${pluginName}`);
+      this.eventBus.emit(
+        "unregisterWarning",
+        `Attempt to unregister non-existent plugin: ${pluginName}`
+      );
       return false;
     }
 
     const plugin = this.pluginRegistry.get(pluginName);
     try {
       // 添加卸载前事件
-      this.eventBus.emit('beforePluginUnload', plugin);
+      this.eventBus.emit("beforePluginUnload", plugin);
       this._unload(plugin);
 
       this.pluginRegistry.delete(pluginName);
       // 添加详细卸载完成事件
-      this.eventBus.emit('pluginUnregistered', {
+      this.eventBus.emit("pluginUnregistered", {
         name: pluginName,
-        timestamp: Date.now()
+        timestamp: Date.now(),
       });
       return true;
     } catch (error) {
-      this.eventBus.emit('unloadError', { plugin, error });
+      this.eventBus.emit("unloadError", { plugin, error });
       return false;
     }
   }
@@ -106,10 +108,10 @@ export default class Core {
   // 同步加载策略
   async _loadSync(plugin) {
     if (!validatePlugin(plugin)) {
-      throw new Error('Invalid plugin');
+      throw new Error("Invalid plugin");
     }
     if (!isValidPath(plugin.path)) {
-      throw new Error('Invalid plugin path');
+      throw new Error("Invalid plugin path");
     }
     const module = await import(/* webpackIgnore: true */ plugin.path);
     plugin.instance = module.default ? new module.default(this) : module;
@@ -119,20 +121,21 @@ export default class Core {
   // 异步加载策略
   async _loadAsync(plugin) {
     if (!validatePlugin(plugin)) {
-      throw new Error('Invalid plugin');
+      throw new Error("Invalid plugin");
     }
     if (!isValidPath(plugin.path)) {
-      throw new Error('Invalid plugin path');
+      throw new Error("Invalid plugin path");
     }
     return new Promise((resolve, reject) => {
-      const script = document.createElement('script');
+      const script = document.createElement("script");
       script.src = plugin.path;
       script.onload = () => {
         plugin.instance = window[plugin.name];
         plugin.instance?.initialize?.(this); // 添加空值校验
         resolve();
       };
-      script.onerror = (e) => reject(new Error(`Failed to load ${plugin.name}: ${e.message}`)); // 增强错误信息
+      script.onerror = (e) =>
+        reject(new Error(`Failed to load ${plugin.name}: ${e.message}`)); // 增强错误信息
       document.head.appendChild(script);
     });
   }
@@ -141,7 +144,7 @@ export default class Core {
   _unload(plugin) {
     plugin.instance?.uninstall?.();
     plugin.instance = null;
-    plugin.status = 'unloaded';
+    plugin.status = "unloaded";
   }
 }
 
