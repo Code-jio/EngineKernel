@@ -8,10 +8,10 @@ export default {
   output: {
     path: path.join(__dirname, "../dist"),
     filename: "my-library.js",
-    clean: true, // 新增自动清理 dist 目录
+    clean: true,
     publicPath: "/",
     library: {
-      name: "MyLibrary", // 更推荐的对象形式配置
+      name: "MyLibrary",
       type: "umd",
     },
     globalObject: "this",
@@ -24,7 +24,7 @@ export default {
           loader: "ts-loader",
           options: {
             compilerOptions: {
-              esModuleInterop: true, // 确保 loader 使用相同配置
+              esModuleInterop: true,
             },
           },
         },

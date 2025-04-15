@@ -5,7 +5,7 @@ export function isValidPath(filePath: string): boolean {
   return validPattern.test(filePath);
 }
 
-// 修改导出方式
+
 export const pathUtils = {
   resolvePath: (basePath: string, relativePath: string): string =>
     path.resolve(basePath, relativePath),

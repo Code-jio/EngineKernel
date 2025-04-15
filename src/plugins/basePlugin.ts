@@ -1,7 +1,6 @@
 import { PluginMeta } from '../types/Plugin';
 
 export class BasePlugin {
-    // 添加类型声明
     name: string;
     path: string;
     strategy: 'sync' | 'async';
@@ -9,8 +8,7 @@ export class BasePlugin {
     dependencies: string[];
     instance: any;
 
-    constructor(meta: PluginMeta) { // 添加参数类型
-        // 添加元数据校验
+    constructor(meta: PluginMeta) {
         if (!meta.name || !meta.path) {
             throw new Error('Plugin metadata must contain name and path');
         }

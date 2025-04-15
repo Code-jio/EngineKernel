@@ -5,7 +5,13 @@ interface PluginInstance {
 }
 
 interface Core {
-  registerPlugin(plugin: PluginInstance): void;
+  registerPlugin(pluginMeta: PluginMeta): void;
   unregisterPlugin(plugin: PluginInstance): void;
   getPlugin(name: string): PluginInstance | undefined;
+}
+
+interface PluginMeta {
+  name: string;
+  version: string;
+  dependencies?: string[];
 }

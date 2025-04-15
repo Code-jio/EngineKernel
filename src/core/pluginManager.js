@@ -1,4 +1,4 @@
-import eventBus from '@/eventBus/eventBus.ts';
+import eventBus from "@/eventBus/eventBus.ts";
 // 插件管理器
 export default class PluginManager {
   constructor() {
