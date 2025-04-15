@@ -9,6 +9,7 @@
   "devDependencies": {
     "@types/joi": "^17.2.2",
     "@types/node": "^22.14.1",
+    "@types/webpack-env": "^1.18.8",
     "detect-port": "^2.1.0",
     "eslint": "^8.57.1",
     "eslint-config-airbnb-base": "^15.0.0",

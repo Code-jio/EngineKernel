@@ -1,8 +1,5 @@
 import mitt from 'mitt';
-
-type EventBus = ReturnType<typeof mitt> & {
-    once: (type: string, handler: Function) => void;
-};
+import type { EventBus } from "../types/core"
 
 const eventBus = mitt() as EventBus;
 

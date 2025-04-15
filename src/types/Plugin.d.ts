@@ -1,8 +1,16 @@
 interface PluginMeta {
-    name: string;         // 插件唯一标识
-    path: string;         // 插件文件路径
-    strategy?: 'sync' | 'async';  // 加载策略
-    dependencies?: string[];     // 依赖插件列表
+    name: string;
+    path: string;
+    strategy?: 'sync' | 'async';
+    dependencies?: string[];
+    version?: string;
 }
 
-export { PluginMeta };
+interface PluginManager {
+    registerPlugin(pluginMeta: PluginMeta): void;
+    loadPlugin(pluginName: string): Promise<void>;
+    unloadPlugin(pluginName: string): void;
+    getPlugin(pluginName: string): PluginMeta | undefined;
+}
+
+export type { PluginMeta, PluginManager };

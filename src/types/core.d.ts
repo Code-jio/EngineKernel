@@ -1,3 +1,11 @@
+import mitt from 'mitt';
+import { PluginMeta, PluginManager } from './Plugin';
+
+
+type EventBus = ReturnType<typeof mitt> & {
+  once: (type: string, handler: Function) => void;
+};
+
 interface PluginInstance {
   initialize(core: Core): void;
   uninstall(): void;
@@ -5,13 +13,13 @@ interface PluginInstance {
 }
 
 interface Core {
+  pluginRegistry: Map<string, PluginInstance>;
+  eventBus: EventBus;
+  pluginManager: PluginManager;
+  loadStrategies: { [key: string]: (plugin: PluginInstance) => Promise<void> };
   registerPlugin(pluginMeta: PluginMeta): void;
   unregisterPlugin(plugin: PluginInstance): void;
   getPlugin(name: string): PluginInstance | undefined;
 }
 
-interface PluginMeta {
-  name: string;
-  version: string;
-  dependencies?: string[];
-}
+export type { PluginInstance, Core, EventBus };
