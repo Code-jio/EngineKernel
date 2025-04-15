@@ -1,11 +1,6 @@
-import { BasePlugin } from './plugins/basePlugin.js';
-import Core from './core/core.js';
-import eventBus from './eventBus/eventBus.js';
-import pluginManager from './core/pluginManager.js';
+import { BasePlugin } from "./plugins/basePlugin.ts";
+import Core from "./core/core.js";
+import pluginManager from "./core/pluginManager.js";
+import eventBus from "./eventBus/eventBus.ts";
 
-export { 
-  Core, 
-  eventBus, 
-  pluginManager, 
-  BasePlugin 
-};
+export { Core, eventBus, pluginManager, BasePlugin };

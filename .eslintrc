@@ -11,31 +11,45 @@
   "rules": {
     "no-console": "off",
     "import/prefer-default-export": "off",
-    "no-use-before-define":  "off",
-    "indent":  "off",
-    "linebreak-style":  "off",
-    "eol-last":  "off",
-    "no-empty-function":"off",
+    "no-use-before-define": "off",
+    "indent": [
+      "error",
+      2,
+      {
+        "SwitchCase": 1
+      }
+    ],
+    "linebreak-style": "off",
+    "eol-last": "off",
+    "no-empty-function": "off",
     "class-methods-use-this": "off",
     "no-unused-vars": "off",
     "no-trailing-spaces": "off",
     "semi": "off",
     "space-before-blocks": "off",
     "eslint-plugin-import/no-cycle": "off",
-    "arrow-parens":"off",
+    "arrow-parens": "off",
     "comma-dangle": "off",
     "padded-blocks": "off",
     "no-await-in-loop": "off",
     "new-cap": "off",
     "import/no-unresolved": "off",
     "import/extensions": "off",
-    "no-underscore-dangle": ["error", { "allowAfterThis": true }],
-    "no-param-reassign": ["error", { "props": false }],
-    "quotes": ["error", "single", { "avoidEscape": true }],
-    
+    "no-underscore-dangle": [
+      "error",
+      {
+        "allowAfterThis": true
+      }
+    ],
+    "no-param-reassign": [
+      "error",
+      {
+        "props": false
+      }
+    ],
+    "quotes": "off",
     // 处理类成员空白行
-    "lines-between-class-members": ["error", "always", { "exceptAfterSingleLine": true }],
-
+    "lines-between-class-members": "off",
     // 处理未定义变量
     "no-undef": "off",
     "eslint-plugin-import/no-named-as-default": "off",
