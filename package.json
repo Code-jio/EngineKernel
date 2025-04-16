@@ -13,9 +13,12 @@
     "detect-port": "^2.1.0",
     "eslint": "^8.57.1",
     "eslint-config-airbnb-base": "^15.0.0",
+    "eslint-config-prettier": "^10.1.2",
     "eslint-plugin-import": "^2.31.0",
+    "eslint-plugin-prettier": "^5.2.6",
     "html-webpack-plugin": "^5.6.3",
     "internal-ip": "^8.0.0",
+    "prettier": "^3.5.3",
     "terser-webpack-plugin": "^5.3.14",
     "ts-loader": "^9.5.2",
     "typescript": "^5.8.3",
@@ -24,6 +27,7 @@
     "webpack-dev-server": "^4.15.1"
   },
   "dependencies": {
+    "glsl-parser": "^2.0.1",
     "joi": "^17.13.3",
     "mitt": "^3.0.1",
     "path-browserify": "^1.0.1"

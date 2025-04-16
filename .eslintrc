@@ -14,9 +14,9 @@
     "no-use-before-define": "off",
     "indent": [
       "error",
-      2,
+      4, // 缩进
       {
-        "SwitchCase": 1
+        "SwitchCase": 1 // switch case 缩进
       }
     ],
     "linebreak-style": "off",
@@ -58,5 +58,7 @@
     "no-restricted-syntax": "off",
     "no-multiple-empty-lines": "off",
     "object-curly-newline": "off",
+    "no-confusing-arrow": "off",
+    "operator-linebreak": "off",
   }
 }

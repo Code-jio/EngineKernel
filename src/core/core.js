@@ -1,148 +1,169 @@
-import eventBus from "@/eventBus/eventBus.ts";
-import PluginManager from "./pluginManager.js";
-import { BasePlugin } from "@/plugins/basePlugin.ts";
-import { isValidPath } from "@/utils/pathUtils.ts";
-import { validatePlugin } from "@/utils/security.ts";
+import eventBus from "@/eventBus/eventBus.ts"
+import PluginManager from "./pluginManager.js"
+import { BasePlugin } from "@/plugins/basePlugin.ts"
+import { isValidPath } from "@/utils/pathUtils.ts"
+import { validatePlugin } from "@/utils/security.ts"
+
+import PluginSandbox from "@/utils/sandbox.js"
 
 export default class Core {
-  constructor(dependencies = {}) {
-    this.pluginRegistry = new Map(); // 插件注册表
-    this.eventBus = dependencies.eventBus || eventBus;
-    this.pluginManager = dependencies.pluginManager || new PluginManager();
-    this.loadStrategies = {
-      sync: this._loadSync.bind(this),
-      async: this._loadAsync.bind(this),
-    };
-  }
-
-  // 增强注册方法
-  registerPlugin(pluginMeta) {
-    this.eventBus.emit("beforePluginRegister", pluginMeta);
-
-    if (this.pluginRegistry.has(pluginMeta.name)) {
-      const error = new Error(`Plugin ${pluginMeta.name} already registered`);
-      this.eventBus.emit("registrationError", { meta: pluginMeta, error });
-      throw error;
+    constructor(dependencies = {}) {
+        this.pluginRegistry = new Map() // 插件注册表
+        this.eventBus = dependencies.eventBus || eventBus
+        this.pluginManager = dependencies.pluginManager || new PluginManager()
+        this.loadStrategies = {
+            sync: this._loadSync.bind(this),
+            async: this._loadAsync.bind(this),
+        }
     }
 
-    try {
-      const plugin = new BasePlugin(pluginMeta);
-      this.pluginRegistry.set(plugin.name, plugin);
-      // 添加带校验的注册事件
-      this.eventBus.emit("pluginRegistered", {
-        name: plugin.name,
-        version: plugin.version,
-        dependencies: plugin.dependencies,
-      });
-      return true;
-    } catch (error) {
-      this.eventBus.emit("registrationError", { meta: pluginMeta, error });
-      throw new Error(`Plugin registration failed: ${error.message}`);
-    }
-  }
+    // 增强注册方法
+    registerPlugin(pluginMeta) {
+        this.eventBus.emit("beforePluginRegister", pluginMeta)
 
-  // 增强加载方法
-  async loadPlugin(pluginName) {
-    const plugin = this.pluginRegistry.get(pluginName);
-    if (!plugin) {
-      const error = new Error(`Plugin ${pluginName} not registered`);
-      this.eventBus.emit("loadError", { pluginName, error });
-      throw error;
-    }
+        if (this.pluginRegistry.has(pluginMeta.name)) {
+            const error = new Error(`Plugin ${pluginMeta.name} already registered`)
+            this.eventBus.emit("registrationError", { meta: pluginMeta, error })
+            throw error
+        }
 
-    try {
-      // 添加加载前事件
-      this.eventBus.emit("beforePluginLoad", pluginName);
-      await this.loadStrategies[plugin.strategy](plugin);
-
-      // 添加初始化后事件
-      plugin.status = "loaded";
-      this.eventBus.emit("pluginInitialized", {
-        name: pluginName,
-        exports: plugin.instance.getExports?.() || null,
-      });
-    } catch (error) {
-      this.eventBus.emit("loadError", {
-        pluginName,
-        error,
-        stack: error.stack,
-      });
-      plugin.status = "error";
-      throw error;
-    }
-  }
-
-  unregisterPlugin(pluginName) {
-    // 添加前置检查事件
-    this.eventBus.emit("beforePluginUnregister", pluginName);
-
-    if (!this.pluginRegistry.has(pluginName)) {
-      this.eventBus.emit(
-        "unregisterWarning",
-        `Attempt to unregister non-existent plugin: ${pluginName}`
-      );
-      return false;
+        try {
+            const plugin = new BasePlugin(pluginMeta)
+            this.pluginRegistry.set(plugin.name, plugin)
+            // 添加带校验的注册事件
+            this.eventBus.emit("pluginRegistered", {
+                name: plugin.name,
+                version: plugin.version,
+                dependencies: plugin.dependencies,
+            })
+            return true
+        } catch (error) {
+            this.eventBus.emit("registrationError", { meta: pluginMeta, error })
+            throw new Error(`Plugin registration failed: ${error.message}`)
+        }
     }
 
-    const plugin = this.pluginRegistry.get(pluginName);
-    try {
-      // 添加卸载前事件
-      this.eventBus.emit("beforePluginUnload", plugin);
-      this._unload(plugin);
+    // 增强加载方法
+    async loadPlugin(pluginName) {
+        const plugin = this.pluginRegistry.get(pluginName)
+        if (!plugin) {
+            const error = new Error(`Plugin ${pluginName} not registered`)
+            this.eventBus.emit("loadError", { pluginName, error })
+            throw error
+        }
 
-      this.pluginRegistry.delete(pluginName);
-      this.eventBus.emit("pluginUnregistered", {
-        name: pluginName,
-        timestamp: Date.now(),
-      });
-      return true;
-    } catch (error) {
-      this.eventBus.emit("unloadError", { plugin, error });
-      return false;
-    }
-  }
+        const sandbox = new PluginSandbox(pluginName, this)
+        plugin.sandbox = sandbox // 存储沙盒实例到插件实例中
 
-  // 同步加载策略
-  async _loadSync(plugin) {
-    if (!validatePlugin(plugin)) {
-      throw new Error("Invalid plugin");
-    }
-    if (!isValidPath(plugin.path)) {
-      throw new Error("Invalid plugin path");
-    }
-    const module = await import(/* webpackIgnore: true */ plugin.path);
-    plugin.instance = module.default ? new module.default(this) : module;
-    plugin.instance.initialize?.();
-  }
+        try {
+            const pluginCode = await this.pluginManager.fetchPluginCode(plugin)
+            plugin.exports = sandbox.execute(pluginCode)
+            plugin.interface = this._createPluginInterfaceProxy(plugin)
 
-  // 异步加载策略
-  async _loadAsync(plugin) {
-    if (!validatePlugin(plugin)) {
-      throw new Error("Invalid plugin");
-    }
-    if (!isValidPath(plugin.path)) {
-      throw new Error("Invalid plugin path");
-    }
-    return new Promise((resolve, reject) => {
-      const script = document.createElement("script");
-      script.src = plugin.path;
-      script.onload = () => {
-        plugin.instance = window[plugin.name];
-        plugin.instance?.initialize?.(this);
-        resolve();
-      };
-      script.onerror = (e) =>
-        reject(new Error(`Failed to load ${plugin.name}: ${e.message}`));
-      document.head.appendChild(script);
-    });
-  }
+            // 添加加载前事件
+            this.eventBus.emit("beforePluginLoad", pluginName)
+            await this.loadStrategies[plugin.strategy](plugin)
 
-  // 卸载插件实例
-  _unload(plugin) {
-    plugin.instance?.uninstall?.();
-    plugin.instance = null;
-    plugin.status = "unloaded";
-  }
+            // 添加初始化后事件
+            plugin.status = "loaded"
+            this.eventBus.emit("pluginInitialized", {
+                name: pluginName,
+                exports: plugin.instance.getExports?.() || null,
+            })
+        } catch (error) {
+            this.eventBus.emit("loadError", {
+                pluginName,
+                error,
+                stack: error.stack,
+            })
+            plugin.status = "error"
+            throw error
+        }
+    }
+
+    // 卸载
+    unregisterPlugin(pluginName) {
+        // 添加前置检查事件
+        this.eventBus.emit("beforePluginUnregister", pluginName)
+
+        if (!this.pluginRegistry.has(pluginName)) {
+            this.eventBus.emit("unregisterWarning", `Attempt to unregister non-existent plugin: ${pluginName}`)
+            return false
+        }
+
+        const plugin = this.pluginRegistry.get(pluginName)
+        try {
+            // 添加卸载前事件
+            this.eventBus.emit("beforePluginUnload", plugin)
+            this._unload(plugin)
+
+            this.pluginRegistry.delete(pluginName)
+            this.eventBus.emit("pluginUnregistered", {
+                name: pluginName,
+                timestamp: Date.now(),
+            })
+            return true
+        } catch (error) {
+            this.eventBus.emit("unloadError", { plugin, error })
+            return false
+        }
+    }
+
+    // 同步加载策略
+    async _loadSync(plugin) {
+        if (!validatePlugin(plugin)) {
+            throw new Error("Invalid plugin")
+        }
+        if (!isValidPath(plugin.path)) {
+            throw new Error("Invalid plugin path")
+        }
+        const module = await import(/* webpackIgnore: true */ plugin.path)
+        plugin.instance = module.default ? new module.default(this) : module
+        plugin.instance.initialize?.()
+    }
+
+    // 异步加载策略
+    async _loadAsync(plugin) {
+        if (!validatePlugin(plugin)) {
+            throw new Error("Invalid plugin")
+        }
+        if (!isValidPath(plugin.path)) {
+            throw new Error("Invalid plugin path")
+        }
+        return new Promise((resolve, reject) => {
+            const script = document.createElement("script")
+            script.src = plugin.path
+            script.onload = () => {
+                plugin.instance = window[plugin.name]
+                plugin.instance?.initialize?.(this)
+                resolve()
+            }
+            script.onerror = e => reject(new Error(`Failed to load ${plugin.name}: ${e.message}`))
+            document.head.appendChild(script)
+        })
+    }
+
+    // 卸载插件实例
+    _unload(plugin) {
+        plugin.instance?.uninstall?.()
+        plugin.instance = null
+        plugin.status = "unloaded"
+    }
+
+    // 创建插件接口代理
+    _createPluginInterfaceProxy(plugin) {
+        return new Proxy(plugin.exports, {
+            get: (target, prop) => {
+                if (typeof target[prop] === "function") {
+                    return (...args) => {
+                        this.logger.log(`[${plugin.name}] Calling ${prop}`)
+                        return target[prop](...args)
+                    }
+                }
+                return target[prop]
+            },
+        })
+    }
 }
 
 // const core = new Core();
