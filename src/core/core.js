@@ -7,6 +7,14 @@ import { validatePlugin } from "@/utils/security.ts"
 import PluginSandbox from "@/utils/sandbox.js"
 
 export default class Core {
+    static STATUS = {
+        REGISTERED: "registered",
+        LOADING: "loading",
+        LOADED: "loaded",
+        ERROR: "error",
+        UNLOADING: "unloading",
+    }
+
     constructor(dependencies = {}) {
         this.pluginRegistry = new Map() // 插件注册表
         this.eventBus = dependencies.eventBus || eventBus
@@ -15,9 +23,14 @@ export default class Core {
             sync: this._loadSync.bind(this),
             async: this._loadAsync.bind(this),
         }
+        this._messageChannels = new Map() // 消息通道
+        this.performance = {
+            metrics: new Map(),
+            enable: true,
+        }
     }
 
-    // 增强注册方法
+    // 注册
     registerPlugin(pluginMeta) {
         this.eventBus.emit("beforePluginRegister", pluginMeta)
 
@@ -43,9 +56,11 @@ export default class Core {
         }
     }
 
-    // 增强加载方法
+    // 加载
     async loadPlugin(pluginName) {
         const plugin = this.pluginRegistry.get(pluginName)
+        plugin.status = Core.STATUS.LOADING
+
         if (!plugin) {
             const error = new Error(`Plugin ${pluginName} not registered`)
             this.eventBus.emit("loadError", { pluginName, error })
@@ -54,6 +69,8 @@ export default class Core {
 
         const sandbox = new PluginSandbox(pluginName, this)
         plugin.sandbox = sandbox // 存储沙盒实例到插件实例中
+        const perfMark = `pluginLoad:${pluginName}`
+        performance.mark(perfMark)
 
         try {
             const pluginCode = await this.pluginManager.fetchPluginCode(plugin)
@@ -70,13 +87,15 @@ export default class Core {
                 name: pluginName,
                 exports: plugin.instance.getExports?.() || null,
             })
+            performance.measure(perfMark)
         } catch (error) {
             this.eventBus.emit("loadError", {
                 pluginName,
                 error,
                 stack: error.stack,
             })
-            plugin.status = "error"
+            plugin.status = Core.STATUS.ERROR
+            this._rollbackPluginLoad(plugin) // 回滚
             throw error
         }
     }
@@ -111,15 +130,17 @@ export default class Core {
 
     // 同步加载策略
     async _loadSync(plugin) {
-        if (!validatePlugin(plugin)) {
-            throw new Error("Invalid plugin")
-        }
-        if (!isValidPath(plugin.path)) {
-            throw new Error("Invalid plugin path")
-        }
-        const module = await import(/* webpackIgnore: true */ plugin.path)
-        plugin.instance = module.default ? new module.default(this) : module
-        plugin.instance.initialize?.()
+        return this._withPerfMonitoring("loadSync", async () => {
+            if (!validatePlugin(plugin)) {
+                throw new Error("Invalid plugin")
+            }
+            if (!isValidPath(plugin.path)) {
+                throw new Error("Invalid plugin path")
+            }
+            const module = await import(/* webpackIgnore: true */ plugin.path)
+            plugin.instance = module.default ? new module.default(this) : module
+            plugin.instance.initialize?.()
+        })()
     }
 
     // 异步加载策略
@@ -147,7 +168,7 @@ export default class Core {
     _unload(plugin) {
         plugin.instance?.uninstall?.()
         plugin.instance = null
-        plugin.status = "unloaded"
+        plugin.status = Core.STATUS.UNLOADING
     }
 
     // 创建插件接口代理
@@ -163,6 +184,111 @@ export default class Core {
                 return target[prop]
             },
         })
+    }
+
+    // 消息通道
+    createMessageChannel(channelName) {
+        const channel = {
+            postMessage: data => this._validateMessage(data),
+            onmessage: null,
+        }
+        this._messageChannels.set(channelName, channel)
+        return channel
+    }
+
+    // 消息验证
+    _validateMessage(data) {
+        // 验证消息数据大小和类型
+        if (JSON.stringify(data).length > 1024) {
+            throw new Error("Message payload exceeds limit")
+        }
+    }
+
+    // 回滚
+    _rollbackPluginLoad(plugin) {
+        plugin.sandbox?.cleanup()
+        this.pluginRegistry.delete(plugin.name)
+    }
+
+    // 装饰器
+    _withPerfMonitoring(methodName, fn) {
+        return async (...args) => {
+            if (!this.performance.enable) return fn(...args)
+
+            const start = performance.now()
+            const memBefore = process.memoryUsage().rss
+
+            try {
+                const result = await fn(...args)
+                const duration = performance.now() - start
+                const memDelta = process.memoryUsage().rss - memBefore
+
+                this._recordMetrics(methodName, {
+                    duration,
+                    memoryDelta: memDelta,
+                    success: true,
+                })
+
+                return result
+            } catch (error) {
+                this._recordMetrics(methodName, {
+                    duration: performance.now() - start,
+                    error: error.message,
+                    success: false,
+                })
+                throw error
+            }
+        }
+    }
+
+    // 记录性能指标
+    _recordMetrics(methodName, data) {
+        const entry = this.performance.metrics.get(methodName) || {
+            callCount: 0, // 调用次数
+            totalDuration: 0, // 总耗时
+            successCount: 0, // 成功次数
+            errorCount: 0, // 错误次数
+            memoryChanges: [], // 内存变化
+        }
+
+        entry.callCount++
+        entry.totalDuration += data.duration
+        data.success ? entry.successCount++ : entry.errorCount++
+        entry.memoryChanges.push(data.memoryDelta)
+
+        this.performance.metrics.set(methodName, entry)
+        this.eventBus.emit("performanceMetrics", { methodName, ...data })
+    }
+
+    // GPU资源追踪
+    _monitorGLResources(gl, pluginName) {
+        const proxy = new Proxy(gl, {
+            get: (target, prop) => {
+                const methodsToTrack = {
+                    createTexture: "texture",
+                    createBuffer: "buffer",
+                    createFramebuffer: "framebuffer",
+                }
+
+                if (methodsToTrack[prop]) {
+                    return (...args) => {
+                        const resource = target[prop](...args)
+                        this._trackGLResource(pluginName, methodsToTrack[prop], resource)
+                        return resource
+                    }
+                }
+                return target[prop]
+            },
+        })
+
+        plugin.instance.setGLContext(proxy)
+    }
+
+    _trackGLResource(pluginName, type, resource) {
+        const stats = this.performance.metrics.get("gpuResources") || {}
+        stats[pluginName] = stats[pluginName] || { textures: 0, buffers: 0, framebuffers: 0 }
+        stats[pluginName][`${type}s`]++
+        this.performance.metrics.set("gpuResources", stats)
     }
 }
 

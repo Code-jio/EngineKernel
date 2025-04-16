@@ -60,5 +60,6 @@
     "object-curly-newline": "off",
     "no-confusing-arrow": "off",
     "operator-linebreak": "off",
+    "no-plusplus": "off",
   }
 }

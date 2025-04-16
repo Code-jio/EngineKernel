@@ -1,6 +1,8 @@
 import eventBus from "@/eventBus/eventBus.ts"
 // 插件管理器
 export default class PluginManager {
+    static instance // 单例
+
     constructor() {
         // 插件注册表
         this.registry = new Map()
@@ -10,6 +12,13 @@ export default class PluginManager {
 
         // 核心接口
         this.coreInterface = {}
+    }
+
+    static getInstance() {
+        if (!PluginManager.instance) {
+            PluginManager.instance = new PluginManager()
+        }
+        return PluginManager.instance
     }
 
     // 注册插件
