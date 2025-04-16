@@ -1,0 +1,8 @@
+src/
+config/
+examples/
+tsconfig.json
+jsconfig.json
+.eslint*
+.prettierrc
+*.config.js

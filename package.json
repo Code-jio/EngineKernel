@@ -2,9 +2,18 @@
   "type": "module",
   "scripts": {
     "dev": "webpack serve --config config/dev.config.js --mode development",
-    "build": "webpack --config config/prod.config.js --mode production",
+    "build": "npm run build:types && webpack --config config/prod.config.js --mode production",
+    "build:types": "tsc --emitDeclarationOnly",
     "lint": "npx eslint .",
     "lint:fix": "npx eslint . --fix"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/types/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
   },
   "devDependencies": {
     "@types/joi": "^17.2.2",
