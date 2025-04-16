@@ -2,210 +2,198 @@
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen)](https://github.com/yourname/engine-test/actions)
+[![Core Size](https://img.shields.io/badge/core_size-80KB_(gzip)-success)](https://bundlephobia.com/package/@engine-core/core)
 
 现代Web应用插件化解决方案，提供安全稳定的插件生命周期管理和模块通信能力。
 
-## ✨ 核心特性
+## 🚀 核心优势
 
-## ✨ 核心特性
+### 🧩 微内核架构
+- **核心系统** <80KB (gzip)
+- **冷启动时间** <50ms
+- **模块化设计**：Core/EventBus/PluginManager 三大基础模块
 
-🔧 **微内核架构**  
-⚡ 核心大小 <80KB (gzip)  
-📦 3大基础模块（Core/EventBus/PluginManager）  
-🚀 冷启动时间 <50ms
+### 🔌 动态插件管理
+- **DAG依赖解析**：基于PluginMeta规范自动拓扑排序
+- **7态生命周期**：INSTALLED → RESOLVED → STARTING → ACTIVE → STOPPING → UNINSTALLED
+- **混合加载策略**：同步/异步双模式（默认3000ms超时保护）
 
-🔄 **动态插件管理**  
-⏱️ 毫秒级热插拔（平均23ms）  
-🔗 依赖自动解析（通过PluginMeta规范）  
-📊 支持7种生命周期状态监控
+### 🛡️ 安全沙箱系统
+```mermaid
+graph TD
+   沙箱引擎 --> 环境隔离层
+   环境隔离层 -->|双重防护| iframe沙箱
+   环境隔离层 -->|策略注入| CSP引擎
+   iframe沙箱 --> 资源代理层
+   CSP引擎 --> 动态策略生成器
+```
+- **四层防护机制**：环境隔离 → 资源代理 → 策略注入 → 行为监控
+- **白名单管控**：通过validatePluginSource验证插件来源
 
-🔌 **混合加载策略**  
-⚖️ 同步/异步双模式  
-⏳ 异步加载超时保护（默认3000ms）  
-📦 支持UMD/ESM双模块格式
+### ⚡ 事件中枢系统
+```typescript
+// eventBus.ts 类型化事件定义
+interface CoreEvent {
+  PLUGIN_REGISTERED: { name: string; version: string }
+  PLUGIN_UNREGISTERED: string
+  SANDBOX_READY: DOMException | null
+}
+```
+- **百万级吞吐**：支持1M+ events/min
+- **强类型事件**：基于TypeScript类型推导
+- **响应延迟**：99%事件 <5ms
 
-🛡️ **安全沙箱系统**  
-🔒 双重隔离机制（iframe + CSP）  
-🚫 12项安全策略自动加载  
-🌐 白名单域名管控（通过validatePluginSource）
-
-⚡ **事件中枢系统**  
-📡 百万级事件/分钟吞吐  
-⏱️ 99%事件响应 <5ms  
-📌 强类型事件定义（基于TypeScript）
-
-### 模块协同  
-🚀 **启动加速**：核心系统 → 沙箱初始化 → 插件预加载  
-🔗 **通信链路**：插件 ↔ PluginManager ↔ EventBus ↔ Core
-
-## 🚀 快速开始
+## 🛠️ 快速集成
 
 ### 安装
-
 ```bash
 npm install @engine-core/core
 ```
 
-## 📂 项目结构
-
-``````
-EngineCore/
-└── src/
-    ├── core/                  # 核心系统模块
-    │   ├── core.js            # 引擎实例化与生命周期管理
-    │   └── pluginManager.js   # 插件注册/卸载核心逻辑
-    ├── eventBus/              # 事件中枢系统
-    │   └── eventBus.ts        # 类型化事件广播与订阅
-    ├── plugins/               # 插件基础架构
-    │   └── basePlugin.ts      # 插件接口抽象定义
-    ├── types/                 # 类型定义
-    │   ├── Plugin.d.ts        # 插件类型声明
-    │   └── core.d.ts          # 核心系统类型
-    └── utils/                # 工具模块
-        ├── glValidator.js    # WebGL上下文验证
-        ├── pathUtils.ts       # 路径规范化工具
-        ├── sandbox.js         # 安全沙箱实现
-        ├── security.ts        # CSP策略生成器
-        └── shaderValidator.js # 着色器语法校验
-``````
-
-▶️ 核心模块说明：
-- **/core** - 包含引擎初始化、插件管理核心逻辑
-- **/eventBus** - 提供强类型事件通信机制
-- **/plugins** - 定义插件开发基础接口规范
-- **/utils** - 安全验证和浏览器环境工具库
-
-### 基本用法
-
-```
+### 初始化引擎
+```javascript
 import EngineCore from '@engine-core/core';
 import LoggerPlugin from './plugins/logger';
 
-const core = new EngineCore();
+const core = new EngineCore({
+  sandbox: {
+    enabled: true,
+    csp: {
+      'default-src': ['self']
+    }
+  }
+});
 
 // 注册插件
 core.registerPlugin({
-  name: 'logger',
-  path: './plugins/logger.js',
-  strategy: 'async'
+  name: 'logger',
+  path: './plugins/logger.js',
+  strategy: 'async',
+  dependencies: ['metrics']
 });
 
 // 初始化系统
 core.init().then(() => {
-  console.log('EngineCore 初始化完成');
+  console.log('EngineCore 初始化完成');
 });
-```
-
-### 构建命令
-
-```
-npm run build  # 生产环境构建（单文件输出）
-npm run dev    # 开发模式（带热更新）
 ```
 
 ## 🏗️ 系统架构
 
-``````mermaid
-graph TD
-    Core[核心系统] -->|管理| PluginManager[插件管理器]
-    Core -->|通信| EventBus[事件总线]
-    PluginManager -->|加载| PluginA[业务插件A]
-    PluginManager -->|加载| PluginB[基础插件B]
-    PluginA -->|依赖| PluginB
-``````
-
-## 🔌 插件开发
-
-### 创建插件
-
+```mermaid
+graph LR
+    Core[核心系统] -->|生命周期管理| PluginManager
+    Core -->|事件路由| EventBus
+    PluginManager -->|加载| PluginLoader
+    PluginLoader -->|沙箱环境| Sandbox
+    Sandbox -->|安全策略| SecurityPolicy
+    EventBus -.-> |类型检查| TypeSystem
 ```
-export default class LoggerPlugin {
+
+## 🔧 插件开发
+
+### 插件规范
+```typescript
+// basePlugin.ts 基础接口
+export default abstract class BasePlugin {
+  abstract name: string;
+  abstract initialize(core: EngineCore): Promise<void>;
+  abstract uninstall(): void;
+  
+  // 依赖声明
+  get dependencies(): string[] {
+    return [];
+  }
+}
+```
+
+### 示例插件
+```javascript
+export default class NetworkMonitor extends BasePlugin {
   constructor(core) {
-    this.core = core;
-    this.name = 'logger';
+    super();
+    this.core = core;
+    this.name = 'network-monitor';
   }
 
-  initialize() {
-    this.core.eventBus.on('*', this.logEvent);
+  async initialize() {
+    this.core.eventBus.on('NETWORK_REQUEST', this.handleRequest);
   }
 
-  logEvent = (event, data) => {
-    console.log(`[${new Date().toISOString()}]`, event, data);
+  handleRequest = (data) => {
+    console.log(`[${this.name}]`, data);
+    this.core.eventBus.emit('METRICS_UPDATE', {
+      type: 'network',
+      count: 1
+    });
   }
 
   uninstall() {
-    this.core.eventBus.off('*', this.logEvent);
+    this.core.eventBus.off('NETWORK_REQUEST', this.handleRequest);
   }
 }
 ```
 
-### 插件规范
+## 🔒 安全规范
 
-* **必须实现 **`initialize` 和 `uninstall` 方法
-* **插件名称需符合 **`/^[a-zA-Z0-9_-]+$/` 格式
-* **异步插件需声明 **`strategy: 'async'`
-
-## ⚙️ 配置说明
-
-### 生产配置
-
-```
-output: {
-  filename: 'my-library.min.js',  // 单文件输出
-},
-optimization: {
-  splitChunks: false,        // 禁用代码分割
-  runtimeChunk: false         // 禁用runtime文件
+### CSP策略生成
+```javascript
+// security.ts 动态策略生成
+function generateCSP(policies) {
+  return Object.entries(policies)
+    .map(([directive, sources]) => {
+      return `${directive} ${sources.join(' ')}`;
+    }).join('; ');
 }
 ```
 
-### 安全策略
-
-```
-const ALLOWED_ORIGINS = [
-  '/plugins/',
-  'https://cdn.example.com/'
-];
-
-export function validatePluginSource(path) {
-  return ALLOWED_ORIGINS.some(origin => path.includes(origin));
+### 插件验证
+```typescript
+// PluginManager.ts 插件加载前校验
+private validatePlugin(meta: PluginMeta): boolean {
+  return (
+    /^[a-zA-Z0-9_-]+$/.test(meta.name) &&
+    this.security.validatePluginSource(meta.path) &&
+    !this.activePlugins.has(meta.name)
+  );
 }
+```
+
+## 📜 构建命令
+```bash
+npm run build  # 生产构建（输出engine-core.min.js）
+npm run dev    # 开发模式（带HMR热更新）
+npm run analyze # 包体积分析
 ```
 
 ## 📚 API 文档
 
-### Core 实例
-
-| **方法**             | **参数**         | **说明**         |
-| -------------------------- | ---------------------- | ---------------------- |
-| **registerPlugin**   | **PluginMeta**   | **注册新插件**   |
-| **unregisterPlugin** | **name: string** | **卸载插件**     |
-| **getPlugin**        | **name: string** | **获取插件实例** |
+### EngineCore 实例
+| 方法 | 参数 | 返回值 | 说明 |
+|------|------|--------|-----|
+| registerPlugin | PluginMeta | void | 注册新插件 |
+| unregisterPlugin | name: string | boolean | 卸载插件 |
+| getPlugin | name: string | BasePlugin | 获取插件实例 |
 
 ### PluginMeta 结构
-
-```
+```typescript
 interface PluginMeta {
-  name: string;         // 插件唯一标识
-  path: string;         // 插件文件路径
-  strategy?: 'sync' | 'async';  // 加载策略
-  dependencies?: string[];     // 依赖插件列表
+  name: string;
+  path: string;
+  strategy?: 'sync' | 'async';
+  dependencies?: string[];
+  metadata?: Record<string, any>;
 }
 ```
 
-## 🤝 贡献指南
+## 🤝 参与贡献
+1. 遵循 ESLint 规范
+2. 重要变更需更新类型定义（/types）
+3. 提交信息使用 Conventional Commits 格式
+4. 新功能需提供单元测试
 
-1. **Fork 仓库并创建特性分支**
-2. **遵循 ESLint 代码规范**
-3. **提交信息使用 Conventional Commits 格式**
-4. **更新相关文档**
-5. **提交 Pull Request**
+---
 
-## 📜 开源协议
-
-**本项目基于 **[MIT License](LICENSE) 授权
-
-## 📬 技术支持
-
-* **问题跟踪：**[GitHub Issues](https://github.com/yourname/engine-test/issues)
-* **技术讨论：**[Discussions](https://github.com/yourname/engine-test/discussions)
+📮 技术支持：
+- 问题跟踪：[GitHub Issues](https://github.com/yourname/engine-test/issues)
+- 技术讨论：[Discussions](https://github.com/yourname/engine-test/discussions)
