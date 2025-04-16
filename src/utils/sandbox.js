@@ -84,23 +84,23 @@ export default class PluginSandbox {
                     }
                 }
 
-                if (prop === "physics") {
-                    return new Proxy(target.physics, {
-                        get: (phyTarget, phyProp) => {
-                            // 使用get代替apply
-                            if (phyProp === "simulate") {
-                                return (...args) => {
-                                    const [steps] = args
-                                    if (steps > 1000) {
-                                        throw new Error(`模拟步数超过限制 (${steps}/1000)`)
-                                    }
-                                    return phyTarget[phyProp](...args)
-                                }
-                            }
-                            return phyTarget[phyProp]
-                        },
-                    })
-                }
+                // if (prop === "physics") {
+                //     return new Proxy(target.physics, {
+                //         get: (phyTarget, phyProp) => {
+                //             // 使用get代替apply
+                //             if (phyProp === "simulate") {
+                //                 return (...args) => {
+                //                     const [steps] = args
+                //                     if (steps > 1000) {
+                //                         throw new Error(`模拟步数超过限制 (${steps}/1000)`)
+                //                     }
+                //                     return phyTarget[phyProp](...args)
+                //                 }
+                //             }
+                //             return phyTarget[phyProp]
+                //         },
+                //     })
+                // }
 
                 // 加强方法白名单校验
                 const allowedMethods = ["emitEvent", "getConfig"]
