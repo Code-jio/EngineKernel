@@ -1,9 +1,11 @@
 {
+  "name": "enginekernel",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "webpack serve --config config/dev.config.js --mode development",
     "build": "npm run build:types && webpack --config config/prod.config.js --mode production",
-    "build:types": "tsc --emitDeclarationOnly",
+    "build:types": "tsc --emitDeclarationOnly --outDir ./dist/types",
     "lint": "npx eslint .",
     "lint:fix": "npx eslint . --fix"
   },

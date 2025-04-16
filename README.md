@@ -47,12 +47,12 @@ interface CoreEvent {
 
 ### 安装
 ```bash
-npm install @engine-core/core
+npm install enginekernel
 ```
 
 ### 初始化引擎
 ```javascript
-import EngineCore from '@engine-core/core';
+import EngineCore from 'enginekernel';
 import LoggerPlugin from './plugins/logger';
 
 const core = new EngineCore({
