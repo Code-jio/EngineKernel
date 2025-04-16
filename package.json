@@ -30,6 +30,8 @@
     "glsl-parser": "^2.0.1",
     "joi": "^17.13.3",
     "mitt": "^3.0.1",
-    "path-browserify": "^1.0.1"
+    "path-browserify": "^1.0.1",
+    "util": "^0.12.5",
+    "vm-browserify": "^1.1.2"
   }
 }
