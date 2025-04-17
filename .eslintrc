@@ -61,5 +61,6 @@
     "no-confusing-arrow": "off",
     "operator-linebreak": "off",
     "no-plusplus": "off",
+    "no-unused-expressions": "off"
   }
 }

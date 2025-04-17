@@ -28,6 +28,8 @@ export default class Core {
             metrics: new Map(),
             enable: true,
         }
+        this.components = new Map() // 组件注册表
+        this._servicePermissions = new Map() // 服务权限
     }
 
     // 注册
@@ -175,6 +177,21 @@ export default class Core {
     _createPluginInterfaceProxy(plugin) {
         return new Proxy(plugin.exports, {
             get: (target, prop) => {
+                if (prop === "registerComponent") {
+                    return (name, instance) => {
+                        this.components.set(name, instance)
+                        this.eventBus.emit("componentRegistered", name)
+                    }
+                }
+                if (prop === "getCoreService") {
+                    return serviceName => {
+                        // 安全访问其他插件服务
+                        if (!this._isServiceAllowed(plugin.name, serviceName)) {
+                            throw new Error(`Access to ${serviceName} is forbidden`)
+                        }
+                        return this.components.get(serviceName)
+                    }
+                }
                 if (typeof target[prop] === "function") {
                     return (...args) => {
                         this.logger.log(`[${plugin.name}] Calling ${prop}`)
@@ -290,6 +307,30 @@ export default class Core {
         stats[pluginName][`${type}s`]++
         this.performance.metrics.set("gpuResources", stats)
     }
+
+    // 获取组件
+    getComponent(name) {
+        if (!this.components.has(name)) {
+            throw new Error(`Component ${name} not registered`)
+        }
+        return this.components.get(name)
+    }
+
+    // 服务白名单验证
+    _isServiceAllowed(requester, serviceName) {
+        // 检查服务是否在白名单中
+        // const serviceMap = {
+        //     // eg：
+        //     renderer: ["renderer", "camera", "scene"], // 允许渲染器访问渲染器、相机和场景
+        // }
+        return this._servicePermissions.get(requester)?.includes(serviceName) || false;
+    }
+
+    // 新增服务权限配置方法
+    configureServicePermissions(pluginName, allowedServices) {
+        this._servicePermissions.set(pluginName, allowedServices)
+    }
+
 }
 
 // const core = new Core();
