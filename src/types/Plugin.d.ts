@@ -13,4 +13,9 @@ interface PluginManager {
     getPlugin(pluginName: string): PluginMeta | undefined;
 }
 
-export type { PluginMeta, PluginManager };
+interface Plugin {
+    init(): void;
+    destroy(): void;
+}
+
+export type { PluginMeta, PluginManager, Plugin};
