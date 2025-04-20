@@ -1,6 +1,6 @@
 import { PerspectiveCamera, OrthographicCamera } from 'three';
 import { BasePlugin } from './basePlugin';
-import EventBus from '@/eventBus/eventBus';
+import EventBus from '../eventBus/eventBus';
 
 export class CameraPlugin extends BasePlugin {
   private cameraType: 'perspective' | 'orthographic' = 'perspective';
@@ -35,7 +35,7 @@ export class CameraPlugin extends BasePlugin {
   }
 
   private setupViewportListeners() {
-    EventBus.on('viewport-resize', ({ width, height }) => {
+    EventBus.on('viewport-resize', ({ width, height }: { width: number; height: number }) => {
       this.aspectRatio = width / height;
       this.updateCameraParams();
     });

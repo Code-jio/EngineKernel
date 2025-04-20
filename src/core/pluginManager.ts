@@ -1,7 +1,7 @@
 import eventBus from "../eventBus/eventBus"
 import type { PluginInstance, CoreType, EventBus } from "../types/core"
-import type { PluginMeta } from "@/types/Plugin"
-import type { PluginManagerType } from "@/types/pluginManager"
+import type { PluginMeta } from "../types/Plugin"
+import type { PluginManagerType } from "../types/pluginManager"
 import { validateGLParams, validateShader } from "../utils/glValidator"
 
 // 插件管理器

@@ -8,7 +8,8 @@
             "./src/types"
         ],
         "types": [
-            "node"
+            "node",
+            "three"
         ],
         "moduleResolution": "node",
         "lib": [
@@ -18,7 +19,10 @@
         "skipLibCheck": true,
         "strict": true,
         "declaration": true,
-        "baseUrl": ".",
-        "paths": { "@/*": ["src/*"] }
+        "baseUrl": "src",
+    },
+    "paths": { 
+      "@/*": ["src/*"],
+      "three": ["node_modules/three"]
     }
 }

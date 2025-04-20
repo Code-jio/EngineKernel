@@ -7,7 +7,7 @@ const require = createRequire(import.meta.url);
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 export default {
-    entry: path.join(__dirname, "../src/index.js"),
+    entry: path.join(__dirname, "../src/index.ts"),
     output: {
         path: path.join(__dirname, "../dist"),
         filename: "my-library.js",
@@ -38,7 +38,7 @@ export default {
     resolve: {
         extensions: [".ts", ".js"],
         alias: {
-            '@': path.resolve(__dirname, 'src')
+            '@': path.resolve(__dirname, '../src')
         },
         fallback: {
             vm: require.resolve("vm-browserify"),

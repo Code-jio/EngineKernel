@@ -12,6 +12,7 @@ export default new Promise(async resolve => {
     resolve(
         merge(baseConfig, {
             mode: "development",
+            entry: './src/index.ts',
             devtool: "eval-source-map",
             devServer: {
                 static: {

@@ -10,7 +10,7 @@ export default merge(baseConfig, {
     experiments: {
         outputModule: true,
     },
-    entry: path.resolve(__dirname, "../src/index.js"),
+    entry: path.resolve(__dirname, "../src/index.ts"),
     output: {
         path: path.join(__dirname, "../dist"),
         filename: "my-library.min.js",
