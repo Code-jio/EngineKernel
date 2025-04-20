@@ -4,16 +4,21 @@
         "allowSyntheticDefaultImports": true, // 允许使用默认导入
         "typeRoots": [
             "./src/interface",
-            "./node_modules/@types"
+            "./node_modules/@types",
+            "./src/types"
         ],
         "types": [
             "node"
         ],
         "moduleResolution": "node",
         "lib": [
-            "es2015"
+            "es2015",
+            "dom"
         ],
+        "skipLibCheck": true,
         "strict": true,
-    "declaration": true
+        "declaration": true,
+        "baseUrl": ".",
+        "paths": { "@/*": ["src/*"] }
     }
 }

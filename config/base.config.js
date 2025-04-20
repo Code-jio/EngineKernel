@@ -38,7 +38,7 @@ export default {
     resolve: {
         extensions: [".ts", ".js"],
         alias: {
-            "@": path.resolve(__dirname, "../src"),
+            '@': path.resolve(__dirname, 'src')
         },
         fallback: {
             vm: require.resolve("vm-browserify"),

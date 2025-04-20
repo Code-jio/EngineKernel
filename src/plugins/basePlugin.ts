@@ -7,7 +7,7 @@ export class BasePlugin {
     status: 'unloaded' | 'loaded' | 'error';
     dependencies: string[];
     instance: any;
-
+    exports: any;
     constructor(meta: PluginMeta) {
         if (!meta.name || !meta.path) {
             throw new Error('Plugin metadata must contain name and path');

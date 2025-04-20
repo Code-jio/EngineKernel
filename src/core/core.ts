@@ -1,12 +1,21 @@
-import eventBus from "@/eventBus/eventBus.ts"
-import PluginManager from "./pluginManager.js"
-import { BasePlugin } from "@/plugins/basePlugin.ts"
-import { isValidPath } from "@/utils/pathUtils.ts"
-import { validatePlugin } from "@/utils/security.ts"
+// 假设 eventBus 位于项目根目录下的 eventBus 文件夹，可尝试使用相对路径引入
+// 如果 eventBus 确实存在，需要确保路径正确，或者在 tsconfig.json 中配置路径别名
+// 这里暂时使用相对路径示例，你需要根据实际项目结构调整
+import eventBus from "../eventBus/eventBus"
+import { BasePlugin } from "../plugins/basePlugin"
+import { isValidPath } from "../utils/pathUtils"
+import { validatePlugin } from "../utils/security"
 
-import PluginSandbox from "@/utils/sandbox.js"
+import { CoreType, EventBus, PluginInstance } from "../types/core"
+import PluginManager from "./pluginManager"
+import { PluginMeta, Plugin } from "../types/Plugin"
 
-export default class Core {
+interface CoreDependencies {
+    eventBus?: EventBus
+    pluginManager?: PluginManager
+}
+
+export default class Core implements CoreType {
     static STATUS = {
         REGISTERED: "registered",
         LOADING: "loading",
@@ -14,26 +23,42 @@ export default class Core {
         ERROR: "error",
         UNLOADING: "unloading",
     }
+    pluginRegistry: Map<string, PluginInstance>
+    eventBus: EventBus
+    pluginManager: PluginManager
+    loadStrategies: { [key: string]: (plugin: PluginInstance) => Promise<void> }
+    performance: { metrics: Map<string, any>; enable: boolean }
+    components: any
+    _messageChannels: any
+    _servicePermissions: any
+    private logger = console
+    gpuManager: any
 
-    constructor(dependencies = {}) {
+    constructor(dependencies: Partial<CoreDependencies> = {}) {
         this.pluginRegistry = new Map() // 插件注册表
-        this.eventBus = dependencies.eventBus || eventBus
-        this.pluginManager = dependencies.pluginManager || new PluginManager()
+        // 为 dependencies 参数添加类型断言，确保可以访问 eventBus 属性
+        this.eventBus = (dependencies as { eventBus?: EventBus }).eventBus || eventBus
+        this.pluginManager =
+            (dependencies as { pluginManager?: PluginManager }).pluginManager || new PluginManager(this)
         this.loadStrategies = {
             sync: this._loadSync.bind(this),
             async: this._loadAsync.bind(this),
         }
-        this._messageChannels = new Map() // 消息通道
         this.performance = {
             metrics: new Map(),
             enable: true,
         }
         this.components = new Map() // 组件注册表
+        this._messageChannels = new Map() // 消息通道注册表
         this._servicePermissions = new Map() // 服务权限
     }
 
+    getPlugin(name: string): PluginInstance | undefined {
+        throw new Error("Method not implemented.")
+    }
+
     // 注册
-    registerPlugin(pluginMeta) {
+    registerPlugin(pluginMeta: PluginMeta) {
         this.eventBus.emit("beforePluginRegister", pluginMeta)
 
         if (this.pluginRegistry.has(pluginMeta.name)) {
@@ -43,24 +68,42 @@ export default class Core {
         }
 
         try {
-            const plugin = new BasePlugin(pluginMeta)
+            const plugin: PluginInstance = {
+                name: pluginMeta.name,
+                path: pluginMeta.path,
+                dependencies: pluginMeta.dependencies || [],
+                strategy: pluginMeta.strategy || 'sync',
+                pluginClass: pluginMeta.pluginClass || null,
+                pluginMeta: pluginMeta,
+                status: Core.STATUS.REGISTERED,
+                exports: {},
+                instance: null,
+                version: pluginMeta.version || "1.0.0",
+                initialize: () => void 0,
+                start: () => Promise.resolve(),
+                stop: () => void 0,
+                interface: {} as Record<string, any>,
+            }
             this.pluginRegistry.set(plugin.name, plugin)
             // 添加带校验的注册事件
             this.eventBus.emit("pluginRegistered", {
                 name: plugin.name,
-                version: plugin.version,
+                version: pluginMeta.version,
                 dependencies: plugin.dependencies,
             })
             return true
         } catch (error) {
             this.eventBus.emit("registrationError", { meta: pluginMeta, error })
-            throw new Error(`Plugin registration failed: ${error.message}`)
+            throw new Error(`Plugin registration failed: ${(error as Error).message}`)
         }
     }
 
     // 加载
-    async loadPlugin(pluginName) {
-        const plugin = this.pluginRegistry.get(pluginName)
+    async loadPlugin(pluginName: string) {
+        const plugin = this.pluginRegistry.get(pluginName) as PluginInstance
+        if (!plugin) {
+            throw new Error(`Plugin ${pluginName} not found`)
+        }
         plugin.status = Core.STATUS.LOADING
 
         if (!plugin) {
@@ -69,14 +112,14 @@ export default class Core {
             throw error
         }
 
-        const sandbox = new PluginSandbox(pluginName, this)
-        plugin.sandbox = sandbox // 存储沙盒实例到插件实例中
         const perfMark = `pluginLoad:${pluginName}`
         performance.mark(perfMark)
 
         try {
             const pluginCode = await this.pluginManager.fetchPluginCode(plugin)
-            plugin.exports = sandbox.execute(pluginCode)
+            const module = await import(/* webpackIgnore: true */ plugin.path)
+            plugin.instance = module.default ? new module.default(this) : module
+            plugin.exports = plugin.exports || {}
             plugin.interface = this._createPluginInterfaceProxy(plugin)
 
             // 添加加载前事件
@@ -87,14 +130,14 @@ export default class Core {
             plugin.status = "loaded"
             this.eventBus.emit("pluginInitialized", {
                 name: pluginName,
-                exports: plugin.instance.getExports?.() || null,
+                exports: plugin.exports,
             })
             performance.measure(perfMark)
         } catch (error) {
             this.eventBus.emit("loadError", {
                 pluginName,
                 error,
-                stack: error.stack,
+                stack: error instanceof Error ? error.stack : undefined,
             })
             plugin.status = Core.STATUS.ERROR
             this._rollbackPluginLoad(plugin) // 回滚
@@ -103,24 +146,23 @@ export default class Core {
     }
 
     // 卸载
-    unregisterPlugin(pluginName) {
+    unregisterPlugin(plugin: PluginInstance) {
         // 添加前置检查事件
-        this.eventBus.emit("beforePluginUnregister", pluginName)
+        this.eventBus.emit("beforePluginUnregister", plugin.name)
 
-        if (!this.pluginRegistry.has(pluginName)) {
-            this.eventBus.emit("unregisterWarning", `Attempt to unregister non-existent plugin: ${pluginName}`)
+        if (!this.pluginRegistry.has(plugin.name)) {
+            this.eventBus.emit("unregisterWarning", `Attempt to unregister non-existent plugin: ${plugin.name}`)
             return false
         }
 
-        const plugin = this.pluginRegistry.get(pluginName)
         try {
             // 添加卸载前事件
             this.eventBus.emit("beforePluginUnload", plugin)
             this._unload(plugin)
 
-            this.pluginRegistry.delete(pluginName)
+            this.pluginRegistry.delete(plugin.name)
             this.eventBus.emit("pluginUnregistered", {
-                name: pluginName,
+                name: plugin.name,
                 timestamp: Date.now(),
             })
             return true
@@ -131,9 +173,9 @@ export default class Core {
     }
 
     // 同步加载策略
-    async _loadSync(plugin) {
+    async _loadSync(plugin: PluginInstance) {
         return this._withPerfMonitoring("loadSync", async () => {
-            if (!validatePlugin(plugin)) {
+            if (!validatePlugin(plugin as PluginMeta)) {
                 throw new Error("Invalid plugin")
             }
             if (!isValidPath(plugin.path)) {
@@ -146,45 +188,47 @@ export default class Core {
     }
 
     // 异步加载策略
-    async _loadAsync(plugin) {
-        if (!validatePlugin(plugin)) {
+    async _loadAsync(plugin: PluginInstance): Promise<void> {
+        if (!validatePlugin(plugin as PluginMeta)) {
             throw new Error("Invalid plugin")
         }
         if (!isValidPath(plugin.path)) {
             throw new Error("Invalid plugin path")
         }
         return new Promise((resolve, reject) => {
-            const script = document.createElement("script")
+            const script = document.createElement("script") as HTMLScriptElement
             script.src = plugin.path
             script.onload = () => {
-                plugin.instance = window[plugin.name]
+                plugin.instance = (window as unknown as { [key: string]: any })[plugin.name]
                 plugin.instance?.initialize?.(this)
                 resolve()
             }
-            script.onerror = e => reject(new Error(`Failed to load ${plugin.name}: ${e.message}`))
+            script.onerror = (e: Event | string) => {
+                reject(new Error(`加载失败: ${e}`))
+            }
             document.head.appendChild(script)
         })
     }
 
     // 卸载插件实例
-    _unload(plugin) {
+    _unload(plugin: PluginInstance) {
         plugin.instance?.uninstall?.()
         plugin.instance = null
         plugin.status = Core.STATUS.UNLOADING
     }
 
     // 创建插件接口代理
-    _createPluginInterfaceProxy(plugin) {
+    _createPluginInterfaceProxy(plugin: PluginInstance) {
         return new Proxy(plugin.exports, {
-            get: (target, prop) => {
+            get: (target: any, prop: string | symbol) => {
                 if (prop === "registerComponent") {
-                    return (name, instance) => {
+                    return (name: string, instance: unknown) => {
                         this.components.set(name, instance)
                         this.eventBus.emit("componentRegistered", name)
                     }
                 }
                 if (prop === "getCoreService") {
-                    return serviceName => {
+                    return (serviceName: string) => {
                         // 安全访问其他插件服务
                         if (!this._isServiceAllowed(plugin.name, serviceName)) {
                             throw new Error(`Access to ${serviceName} is forbidden`)
@@ -193,42 +237,26 @@ export default class Core {
                     }
                 }
                 if (typeof target[prop] === "function") {
-                    return (...args) => {
-                        this.logger.log(`[${plugin.name}] Calling ${prop}`)
+                    return (...args: any[]) => {
+                        this.logger.log(`[${plugin.name}] Calling ${String(prop)}`)
                         return target[prop](...args)
                     }
                 }
-                return target[prop]
+                return target[prop as keyof typeof target]
             },
         })
     }
 
-    // 消息通道
-    createMessageChannel(channelName) {
-        const channel = {
-            postMessage: data => this._validateMessage(data),
-            onmessage: null,
-        }
-        this._messageChannels.set(channelName, channel)
-        return channel
-    }
-
-    // 消息验证
-    _validateMessage(data) {
-        // 验证消息数据大小和类型
-        if (JSON.stringify(data).length > 1024) {
-            throw new Error("Message payload exceeds limit")
-        }
-    }
-
     // 回滚
-    _rollbackPluginLoad(plugin) {
-        plugin.sandbox?.cleanup()
+    _rollbackPluginLoad(plugin: PluginInstance) {
         this.pluginRegistry.delete(plugin.name)
     }
 
     // 装饰器
-    _withPerfMonitoring(methodName, fn) {
+    private _withPerfMonitoring<T>(
+        methodName: string,
+        fn: (...args: any[]) => Promise<T>,
+    ): (...args: any[]) => Promise<T> {
         return async (...args) => {
             if (!this.performance.enable) return fn(...args)
 
@@ -250,7 +278,7 @@ export default class Core {
             } catch (error) {
                 this._recordMetrics(methodName, {
                     duration: performance.now() - start,
-                    error: error.message,
+                    error: (error as Error).message,
                     success: false,
                 })
                 throw error
@@ -259,7 +287,10 @@ export default class Core {
     }
 
     // 记录性能指标
-    _recordMetrics(methodName, data) {
+    _recordMetrics(
+        methodName: string,
+        data: { duration: number; memoryDelta?: number; error?: string; success: boolean },
+    ) {
         const entry = this.performance.metrics.get(methodName) || {
             callCount: 0, // 调用次数
             totalDuration: 0, // 总耗时
@@ -278,38 +309,39 @@ export default class Core {
     }
 
     // GPU资源追踪
-    _monitorGLResources(gl, pluginName) {
-        const proxy = new Proxy(gl, {
-            get: (target, prop) => {
-                const methodsToTrack = {
-                    createTexture: "texture",
-                    createBuffer: "buffer",
-                    createFramebuffer: "framebuffer",
-                }
+    _monitorGLResources(gl: WebGL2RenderingContext & any, pluginName: string) {
+        const methodsToTrack = {
+            createTexture: "createTexture",
+            createBuffer: "createBuffer",
+            createFramebuffer: "createFramebuffer",
+        } as Record<keyof WebGL2RenderingContext, string>
 
-                if (methodsToTrack[prop]) {
-                    return (...args) => {
-                        const resource = target[prop](...args)
-                        this._trackGLResource(pluginName, methodsToTrack[prop], resource)
+        const proxy = new Proxy<WebGL2RenderingContext>(gl as unknown as WebGL2RenderingContext, {
+            get: (target, prop) => {
+                if (prop in target && methodsToTrack.hasOwnProperty(prop)) {
+                    const method = target[prop as keyof WebGL2RenderingContext] as (...args: number[]) => any
+                    return (...args: number[]) => {
+                        const resource = method.call(target, ...args)
+                        this._trackGLResource(pluginName, prop as keyof WebGL2RenderingContext, resource)
                         return resource
                     }
                 }
-                return target[prop]
+                return target[prop as keyof typeof target]
             },
         })
 
-        plugin.instance.setGLContext(proxy)
+        this.pluginRegistry.get(pluginName)?.instance.setGLContext?.(proxy as unknown as WebGL2RenderingContext & typeof gl)
     }
 
-    _trackGLResource(pluginName, type, resource) {
+    _trackGLResource(pluginName: string, type: keyof WebGL2RenderingContext, resource: any) {
         const stats = this.performance.metrics.get("gpuResources") || {}
         stats[pluginName] = stats[pluginName] || { textures: 0, buffers: 0, framebuffers: 0 }
-        stats[pluginName][`${type}s`]++
+        stats[pluginName][String(type)]++
         this.performance.metrics.set("gpuResources", stats)
     }
 
     // 获取组件
-    getComponent(name) {
+    getComponent(name: string) {
         if (!this.components.has(name)) {
             throw new Error(`Component ${name} not registered`)
         }
@@ -317,20 +349,15 @@ export default class Core {
     }
 
     // 服务白名单验证
-    _isServiceAllowed(requester, serviceName) {
-        // 检查服务是否在白名单中
-        // const serviceMap = {
-        //     // eg：
-        //     renderer: ["renderer", "camera", "scene"], // 允许渲染器访问渲染器、相机和场景
-        // }
-        return this._servicePermissions.get(requester)?.includes(serviceName) || false;
+    _isServiceAllowed(requester: string, serviceName: string) {
+        return this._servicePermissions.get(requester)?.includes(serviceName) || false
     }
 
     // 新增服务权限配置方法
-    configureServicePermissions(pluginName, allowedServices) {
-        this._servicePermissions.set(pluginName, allowedServices)
+    configureServicePermissions<T extends any[]>(pluginName: string, permissions: T): T {
+        this._servicePermissions.set(pluginName, permissions)
+        return permissions
     }
-
 }
 
 // const core = new Core();

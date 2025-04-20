@@ -1,3 +1,3 @@
-import type { EventBus } from "../types/core";
+import type { EventBus } from "./core";
 declare const eventBus: EventBus;
 export default eventBus;
