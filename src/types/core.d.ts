@@ -1,9 +1,11 @@
-import mitt from "mitt"
+import mitt, { Handler } from "mitt"
 import { PluginMeta } from "./Plugin"
 import { PluginManagerType } from "./pluginManager"
 
 type EventBus = ReturnType<typeof mitt> & {
-    once: (type: string, handler: Function) => void
+    on<T = unknown>(type: string, handler: Handler<T>): void;
+    once<T = unknown>(type: string, handler: Handler<T>): void;
+    off<T = unknown>(type: string, handler: Handler<T>): void;
 }
 
 interface BasePluginInterface {
@@ -47,6 +49,12 @@ interface CoreType {
     unregisterPlugin(plugin: PluginInstance): void
     getPlugin(name: string): PluginInstance | undefined
     configureServicePermissions<T extends any[]>(service: string, permissions: T): T
+}
+
+declare module '../types/core' {
+    interface EventTypeMap {
+        'viewport-resize': { width: number; height: number };
+    }
 }
 
 export type { PluginInstance, CoreType, EventBus }

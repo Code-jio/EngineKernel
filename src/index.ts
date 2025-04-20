@@ -11,13 +11,13 @@ import { BasePlugin } from "./plugins/basePlugin";
 // 为了解决找不到模块声明文件的问题，使用 @ts-ignore 注释临时忽略类型检查
 // 建议后续为 ./core/core.js 创建 .d.ts 声明文件以进行正确的类型检查
 // @ts-ignore
-import Core from "./core/core.js";
+import Core from "./core/core";
 
 /**
  * 从插件管理模块导入插件管理器实例
  * 该实例负责管理所有插件的加载、卸载和调用
  */
-import pluginManager from "./types/pluginManager.js";
+import pluginManager from "./core/pluginManager";
 
 /**
  * 从事件总线模块导入事件总线实例

@@ -35,7 +35,8 @@ export class CameraPlugin extends BasePlugin {
   }
 
   private setupViewportListeners() {
-    EventBus.on('viewport-resize', ({ width, height }: { width: number; height: number }) => {
+    EventBus.on<{ width: number; height: number }>('viewport-resize', (event) => {
+      const { width, height } = event as { width: number; height: number };
       this.aspectRatio = width / height;
       this.updateCameraParams();
     });

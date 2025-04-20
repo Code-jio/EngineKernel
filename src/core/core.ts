@@ -7,12 +7,14 @@ import { isValidPath } from "../utils/pathUtils"
 import { validatePlugin } from "../utils/security"
 
 import { CoreType, EventBus, PluginInstance } from "../types/core"
+import type { PluginManagerType } from "../types/pluginManager"
 import PluginManager from "./pluginManager"
 import { PluginMeta, Plugin } from "../types/Plugin"
 
+// 定义 Core 类的依赖项接口
 interface CoreDependencies {
     eventBus?: EventBus
-    pluginManager?: PluginManager
+    pluginManager?: PluginManagerType
 }
 
 export default class Core implements CoreType {
@@ -25,7 +27,7 @@ export default class Core implements CoreType {
     }
     pluginRegistry: Map<string, PluginInstance>
     eventBus: EventBus
-    pluginManager: PluginManager
+    pluginManager: PluginManagerType
     loadStrategies: { [key: string]: (plugin: PluginInstance) => Promise<void> }
     performance: { metrics: Map<string, any>; enable: boolean }
     components: any
@@ -39,7 +41,7 @@ export default class Core implements CoreType {
         // 为 dependencies 参数添加类型断言，确保可以访问 eventBus 属性
         this.eventBus = (dependencies as { eventBus?: EventBus }).eventBus || eventBus
         this.pluginManager =
-            (dependencies as { pluginManager?: PluginManager }).pluginManager || new PluginManager(this)
+            (dependencies as { pluginManager?: PluginManagerType }).pluginManager || new PluginManager(this)
         this.loadStrategies = {
             sync: this._loadSync.bind(this),
             async: this._loadAsync.bind(this),

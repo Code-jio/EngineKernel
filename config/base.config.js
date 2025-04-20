@@ -23,20 +23,24 @@ export default {
         rules: [
             {
                 test: /\.ts$/,
-                use: {
-                    loader: "ts-loader",
-                    options: {
-                        compilerOptions: {
-                            esModuleInterop: true,
+                use: [
+                    {
+                        loader: "ts-loader",
+                        options: {
+                            onlyCompileBundledFiles: true,
+                            compilerOptions: {
+                                esModuleInterop: true,
+                            },
                         },
                     },
-                },
-                exclude: /node_modules/,
+                ],
+                exclude: [/node_modules/],
+
             },
         ],
     },
     resolve: {
-        extensions: [".ts", ".js"],
+        extensions: [".js", ".ts"],
         alias: {
             '@': path.resolve(__dirname, '../src')
         },

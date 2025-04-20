@@ -1,28 +1,21 @@
 {
-    "compilerOptions": {
-        "esModuleInterop": true, // 允许使用import和export
-        "allowSyntheticDefaultImports": true, // 允许使用默认导入
-        "typeRoots": [
-            "./src/interface",
-            "./node_modules/@types",
-            "./src/types"
-        ],
-        "types": [
-            "node",
-            "three"
-        ],
-        "moduleResolution": "node",
-        "lib": [
-            "es2015",
-            "dom"
-        ],
-        "skipLibCheck": true,
-        "strict": true,
-        "declaration": true,
-        "baseUrl": "src",
-    },
-    "paths": { 
-      "@/*": ["src/*"],
-      "three": ["node_modules/three"]
-    }
+  "compilerOptions": {
+    "esModuleInterop": true, // 允许使用import和export
+    "allowSyntheticDefaultImports": true, // 允许使用默认导入
+    "typeRoots": ["./src/interface", "./node_modules/@types", "./src/types"],
+    "types": ["node", "three"],
+    // "module": "Node16",
+    "moduleResolution": "node",
+    "lib": ["es2015", "dom"],
+    "skipLibCheck": true,
+    "strict": true,
+    "declaration": true,
+    "declarationDir": "./dist/types",
+    "baseUrl": "src"
+  },
+  "paths": {
+    "@/*": ["src/*"],
+    "@/types/*": ["src/types/*"],
+    "three": ["node_modules/three/src/Three"]
+  }
 }

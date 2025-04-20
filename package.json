@@ -20,6 +20,7 @@
   "devDependencies": {
     "@types/joi": "^17.2.2",
     "@types/node": "^22.14.1",
+    "@types/three": "^0.164.1",
     "@types/webgl2": "^0.0.11",
     "@types/webpack-env": "^1.18.8",
     "detect-port": "^2.1.0",
@@ -36,16 +37,15 @@
     "typescript": "^5.8.3",
     "webpack": "^5.89.0",
     "webpack-cli": "^5.1.4",
-    "webpack-dev-server": "^4.15.1",
-    "@types/three": "^0.164.1"
+    "webpack-dev-server": "^4.15.1"
   },
   "dependencies": {
     "glsl-parser": "^2.0.1",
     "joi": "^17.13.3",
     "mitt": "^3.0.1",
     "path-browserify": "^1.0.1",
+    "three": "^0.164.1",
     "util": "^0.12.5",
-    "vm-browserify": "^1.1.2",
-    "three": "^0.164.1"
+    "vm-browserify": "^1.1.2"
   }
 }

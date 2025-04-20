@@ -23,7 +23,7 @@ export default class PluginManager implements PluginManagerType {
     private coreInterface: any
     // private coreInstance: CoreType
 
-    constructor(private core?: CoreType) {
+    constructor(core?: CoreType) {
         // 事件总线
         this.eventBus = eventBus
 
