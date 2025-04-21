@@ -1,4 +1,6 @@
 // 用于读取模型文件资源
+import BasePlugin from "plugins/basePlugin";
+import * as THREE from "three"
 
 
 /**
@@ -7,8 +9,10 @@
  * 2.支持serviceWorker静态资源缓存管理
  */
 
-export default class RessourceReader{
-    constructor(){
-
+export default class RessourceReader extends BasePlugin{
+    constructor(meta:any){
+        super(meta)
     }
+
+    
 }
