@@ -10,11 +10,11 @@ export default {
     entry: path.join(__dirname, "../src/index.ts"),
     output: {
         path: path.join(__dirname, "../dist"),
-        filename: "my-library.js",
+        filename: "engine-kernel.js",
         clean: true,
         publicPath: "/",
         library: {
-            name: "MyLibrary",
+            name: "EngineKernel",
             type: "umd",
         },
         globalObject: "this",
@@ -35,7 +35,6 @@ export default {
                     },
                 ],
                 exclude: [/node_modules/],
-
             },
         ],
     },

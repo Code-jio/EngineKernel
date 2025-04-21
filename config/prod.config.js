@@ -13,10 +13,10 @@ export default merge(baseConfig, {
     entry: path.resolve(__dirname, "../src/index.ts"),
     output: {
         path: path.join(__dirname, "../dist"),
-        filename: "my-library.min.js",
+        filename: "engine-kernel.min.js",
         publicPath: "/",
         library: {
-            name: "MyLibrary",
+            name: "EngineKernel",
             type: "umd",
             umdNamedDefine: true,
         },
