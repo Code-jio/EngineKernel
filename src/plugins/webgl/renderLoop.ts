@@ -1,6 +1,7 @@
 import BasePlugin from "plugins/basePlugin"
 import { Clock } from "three"
 import * as THREE from "three"
+import eventBus from "eventBus/eventBus"
 
 export default class renderLoop extends BasePlugin {
     private clock: THREE.Clock
@@ -13,7 +14,16 @@ export default class renderLoop extends BasePlugin {
 
     render() {
         this.taskList.forEach((callback: () => void) => {
+            eventBus.on("update", callback)
+
             callback()
+        })
+        return
+    }
+
+    initialize() {
+        requestAnimationFrame(() => {
+            this.render()
         })
     }
 }
