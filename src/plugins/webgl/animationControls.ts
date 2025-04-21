@@ -14,6 +14,7 @@ export default class AnimationControls extends BasePlugin {
     private duration: number
     private tracks: THREE.KeyframeTrack[]
     private isPlaying: boolean = false
+    private clock: THREE.Clock
 
     constructor(meta: any) {
         super(meta)
@@ -21,6 +22,7 @@ export default class AnimationControls extends BasePlugin {
         this.localRoot = meta.userData.gltf
         this.duration = meta.userData.duration
         this.tracks = meta.userData.tracks
+        this.clock = new THREE.Clock()
 
         this.mixer = new THREE.AnimationMixer(this.localRoot)
         this.clip = new THREE.AnimationClip(this.animationName, this.duration, this.tracks)
@@ -32,7 +34,7 @@ export default class AnimationControls extends BasePlugin {
 
     update() {
         eventBus.on("update", () => {
-            this.mixer.update(new THREE.Clock().getDelta())
+            this.mixer.update(this.clock.getDelta())
         })
     }
     

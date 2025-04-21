@@ -24,8 +24,14 @@ export class BasePlugin {
 
     // 添加方法参数类型
     async init(coreInterface: any): Promise<void> { }
-    async start(): Promise<void> { }
+    // 加载
+    async load(): Promise<void> { }
+    // 暂停
     async stop(): Promise<void> { }
+    // 卸载
+    async unload(): Promise<void> { 
+        this.status = 'unloaded';
+    }
 }
 
 export default BasePlugin;

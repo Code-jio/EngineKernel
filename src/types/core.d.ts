@@ -1,6 +1,7 @@
 import mitt, { Handler } from "mitt"
 import { PluginMeta } from "./Plugin"
 import { PluginManagerType } from "./pluginManager"
+import { Scene } from "three"
 
 type EventBus = ReturnType<typeof mitt> & {
     on<T = unknown>(type: string, handler: Handler<T>): void;
@@ -44,7 +45,9 @@ interface CoreType {
     }
     components: any;
     _servicePermissions: any;
-    
+    scene: Scene & {
+        skybox?: THREE.Mesh;
+    }
     registerPlugin(pluginMeta: PluginMeta): void
     unregisterPlugin(plugin: PluginInstance): void
     getPlugin(name: string): PluginInstance | undefined

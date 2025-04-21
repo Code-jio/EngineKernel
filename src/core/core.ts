@@ -10,6 +10,7 @@ import { CoreType, EventBus, PluginInstance } from "../types/core"
 import type { PluginManagerType } from "../types/pluginManager"
 import PluginManager from "./pluginManager"
 import { PluginMeta, Plugin } from "../types/Plugin"
+import * as THREE from "three"
 
 // 定义 Core 类的依赖项接口
 interface CoreDependencies {
@@ -35,6 +36,7 @@ export default class Core implements CoreType {
     _servicePermissions: any
     private logger = console
     gpuManager: any
+    scene: THREE.Scene & { skybox?: THREE.Mesh }
 
     constructor(dependencies: Partial<CoreDependencies> = {}) {
         this.pluginRegistry = new Map() // 插件注册表
@@ -53,6 +55,9 @@ export default class Core implements CoreType {
         this.components = new Map() // 组件注册表
         this._messageChannels = new Map() // 消息通道注册表
         this._servicePermissions = new Map() // 服务权限
+
+        // 初始化场景
+        this.scene = new THREE.Scene() as THREE.Scene & { skybox?: THREE.Mesh }
     }
 
     getPlugin(name: string): PluginInstance | undefined {
