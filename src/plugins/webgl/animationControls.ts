@@ -1,6 +1,7 @@
 import * as THREE from "three"
 import Stats from "three/examples/jsm/libs/stats.module"
 import BasePlugin from "plugins/basePlugin"
+import eventBus from "eventBus/eventBus"
 
 export default class AnimationControls extends BasePlugin {
     // private target: THREE.Scene
@@ -11,7 +12,8 @@ export default class AnimationControls extends BasePlugin {
     private animationName: string
     private localRoot: THREE.Object3D
     private duration: number
-    private tracks: []
+    private tracks: THREE.KeyframeTrack[]
+    private isPlaying: boolean = false
 
     constructor(meta: any) {
         super(meta)
@@ -28,5 +30,10 @@ export default class AnimationControls extends BasePlugin {
     // 后续功能扩展 动画播放，动画暂停，循环播放，动画状态重置，动画过渡
     // 上一帧，下一帧，动画关键帧轨道剪辑
 
+    update() {
+        eventBus.on("update", () => {
+            this.mixer.update(new THREE.Clock().getDelta())
+        })
+    }
     
 }
