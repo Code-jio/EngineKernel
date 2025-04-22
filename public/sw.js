@@ -5,12 +5,14 @@ const CACHE_POLICY = {
     cacheFirst: ["/static/", "/models/"],
 }
 
+// 安装事件
 ServiceWorkerGlobalScope.prototype.addEventListener("install", event => {
     event.waitUntil(
         caches.open(CACHE_NAME).then(cache => cache.addAll(["/static/base.glb", "/static/environment.hdr"])),
     )
 })
 
+// 激活事件
 ServiceWorkerGlobalScope.prototype.addEventListener("fetch", event => {
     const { request } = event
 
@@ -22,6 +24,7 @@ ServiceWorkerGlobalScope.prototype.addEventListener("fetch", event => {
     }
 })
 
+// 网络优先策略
 async function networkFirst(request) {
     try {
         return await fetch(request)
@@ -30,6 +33,7 @@ async function networkFirst(request) {
     }
 }
 
+// 缓存优先策略
 async function cacheFirst(request) {
     const cached = await caches.match(request)
     return cached || fetch(request)
