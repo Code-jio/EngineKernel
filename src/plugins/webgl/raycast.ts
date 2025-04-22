@@ -107,6 +107,6 @@ export default class Raycast extends BasePlugin {
         this.mouse = null
         this.camera = null
         this.scene = null
-        this.boundHandler = null
+        // this.boundHandler = null
     }
 }

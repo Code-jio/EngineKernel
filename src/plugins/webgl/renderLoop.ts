@@ -1,5 +1,4 @@
 import BasePlugin from "plugins/basePlugin"
-import { Clock } from "three"
 import * as THREE from "three"
 import eventBus from "eventBus/eventBus"
 

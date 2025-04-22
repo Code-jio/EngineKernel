@@ -9,16 +9,19 @@
 ## 🚀 核心优势
 
 ### 🧩 微内核架构
+
 - **核心系统** <80KB (gzip)
 - **冷启动时间** <50ms
 - **模块化设计**：Core/EventBus/PluginManager 三大基础模块
 
 ### 🔌 动态插件管理
+
 - **DAG依赖解析**：基于PluginMeta规范自动拓扑排序
 - **7态生命周期**：INSTALLED → RESOLVED → STARTING → ACTIVE → STOPPING → UNINSTALLED
 - **混合加载策略**：同步/异步双模式（默认3000ms超时保护）
 
 ### 🛡️ 安全沙箱系统
+
 ```mermaid
 graph TD
    沙箱引擎 --> 环境隔离层
@@ -27,10 +30,12 @@ graph TD
    iframe沙箱 --> 资源代理层
    CSP引擎 --> 动态策略生成器
 ```
+
 - **四层防护机制**：环境隔离 → 资源代理 → 策略注入 → 行为监控
 - **白名单管控**：通过validatePluginSource验证插件来源
 
 ### ⚡ 事件中枢系统
+
 ```typescript
 // eventBus.ts 类型化事件定义
 interface CoreEvent {
@@ -39,6 +44,7 @@ interface CoreEvent {
   SANDBOX_READY: DOMException | null
 }
 ```
+
 - **百万级吞吐**：支持1M+ events/min
 - **强类型事件**：基于TypeScript类型推导
 - **响应延迟**：99%事件 <5ms
@@ -46,11 +52,13 @@ interface CoreEvent {
 ## 🛠️ 快速集成
 
 ### 安装
+
 ```bash
 npm install enginekernel
 ```
 
 ### 初始化引擎
+
 ```javascript
 import EngineCore from 'enginekernel';
 import LoggerPlugin from './plugins/logger';
@@ -93,6 +101,7 @@ graph LR
 ## 🔧 插件开发
 
 ### 插件规范
+
 ```typescript
 // basePlugin.ts 基础接口
 export default abstract class BasePlugin {
@@ -108,6 +117,7 @@ export default abstract class BasePlugin {
 ```
 
 ### 示例插件
+
 ```javascript
 export default class NetworkMonitor extends BasePlugin {
   constructor(core) {
@@ -137,6 +147,7 @@ export default class NetworkMonitor extends BasePlugin {
 ## 🔒 安全规范
 
 ### CSP策略生成
+
 ```javascript
 // security.ts 动态策略生成
 function generateCSP(policies) {
@@ -148,6 +159,7 @@ function generateCSP(policies) {
 ```
 
 ### 插件验证
+
 ```typescript
 // PluginManager.ts 插件加载前校验
 private validatePlugin(meta: PluginMeta): boolean {
@@ -160,6 +172,7 @@ private validatePlugin(meta: PluginMeta): boolean {
 ```
 
 ## 📜 构建命令
+
 ```bash
 npm run build  # 生产构建（输出engine-core.min.js）
 npm run dev    # 开发模式（带HMR热更新）
@@ -169,13 +182,15 @@ npm run analyze # 包体积分析
 ## 📚 API 文档
 
 ### EngineCore 实例
-| 方法 | 参数 | 返回值 | 说明 |
-|------|------|--------|-----|
-| registerPlugin | PluginMeta | void | 注册新插件 |
-| unregisterPlugin | name: string | boolean | 卸载插件 |
-| getPlugin | name: string | BasePlugin | 获取插件实例 |
+
+| 方法             | 参数         | 返回值     | 说明         |
+| ---------------- | ------------ | ---------- | ------------ |
+| registerPlugin   | PluginMeta   | void       | 注册新插件   |
+| unregisterPlugin | name: string | boolean    | 卸载插件     |
+| getPlugin        | name: string | BasePlugin | 获取插件实例 |
 
 ### PluginMeta 结构
+
 ```typescript
 interface PluginMeta {
   name: string;
@@ -187,13 +202,21 @@ interface PluginMeta {
 ```
 
 ## 🤝 参与贡献
+
 1. 遵循 ESLint 规范
 2. 重要变更需更新类型定义（/types）
 3. 提交信息使用 Conventional Commits 格式
 4. 新功能需提供单元测试
 
+### 后续计划
+
+1. 重构核心系统
+2. 核心系统与各个插件分离
+3. 各插件权责重新划分
+
 ---
 
 📮 技术支持：
+
 - 问题跟踪：[GitHub Issues](https://github.com/yourname/engine-test/issues)
 - 技术讨论：[Discussions](https://github.com/yourname/engine-test/discussions)
