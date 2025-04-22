@@ -76,6 +76,8 @@ export default class Performance extends BasePlugin {
         this.stats.end()
     }
 
+    // 统计主场景顶点、面片数
+
     update() {
         this.stats.update()
 
