@@ -22,6 +22,7 @@ export default class LODPlugin extends BasePlugin {
     public initialize() {
         // 注册相机移动事件监听器
         eventBus.on("CAMERA_MOVE", this.updateLODLevels.bind(this))
+        eventBus.on('MODEL_LOADED', this.handleModelLoaded)
         this.updateLODLevels()
     }
 
@@ -39,6 +40,7 @@ export default class LODPlugin extends BasePlugin {
 
     public destroy() {
         eventBus.off("CAMERA_MOVE", this.updateLODLevels)
+        eventBus.off('MODEL_LOADED', this.handleModelLoaded)
         this.lodGroups.clear()
     }
 
@@ -65,5 +67,9 @@ export default class LODPlugin extends BasePlugin {
     // 触发LOD更新事件
     private triggerLODUpdatedEvent() {
         eventBus.emit("LOD_UPDATED", { lodGroups: this.lodGroups })
+    }
+
+    private handleModelLoaded = (model: THREE.Object3D) => {
+        this.addLODGroup(model.uuid, new THREE.LOD().addLevel(model, 0))
     }
 }

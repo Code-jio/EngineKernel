@@ -2,6 +2,7 @@ import { PerspectiveCamera, Scene, OrthographicCamera } from "three"
 import BasePlugin from "../basePlugin"
 import eventBus from "eventBus/eventBus"
 import * as THREE from "three"
+import { PipelineManager } from "core/pipelineManager"
 
 export default class BaseScene extends BasePlugin {
     private camera: PerspectiveCamera // 默认透视相机
@@ -10,6 +11,7 @@ export default class BaseScene extends BasePlugin {
     private scene: Scene
     private ambientLight: THREE.AmbientLight
     private renderer: THREE.WebGLRenderer
+    private pipelineManager: PipelineManager
 
     constructor(meta: any) {
         super({
@@ -27,10 +29,12 @@ export default class BaseScene extends BasePlugin {
             antialias: true,
             // alpha: true, // 背景透明
             precision: 'lowp', // 根据硬件情况酌情选择
-            powerPreference: 'high-performance',
+            powerPreference: 'lowp-performance',
         })
 
-
+        this.pipelineManager = new PipelineManager()
+    
+        this.initialize()
     }
 
     // 初始化设置
@@ -58,6 +62,7 @@ export default class BaseScene extends BasePlugin {
         this.renderer.dispose()
         this.scene.clear()
         this.ambientLight.dispose()
+        this.pipelineManager.destroy()
         // super.destroy()
     }
 }
