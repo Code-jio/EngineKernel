@@ -71,5 +71,6 @@ export default class LODPlugin extends BasePlugin {
 
     private handleModelLoaded = (model: THREE.Object3D) => {
         this.addLODGroup(model.uuid, new THREE.LOD().addLevel(model, 0))
+        // 针对各种模型的各种层级进行精细化管理（后续开发计划）
     }
 }

@@ -62,6 +62,13 @@ export default class RessourceReader extends BasePlugin {
                             payload: gltf,
                             resourcePath: path,
                         })
+                        // 触发二次缓存验证
+                        fetch(path)
+                            .then(response => {
+                                if (!response.ok) throw new Error('Network response error')
+                                return caches.open("engine-assets-v2").then(cache => cache.put(path, response))
+                            })
+                            .catch(() => caches.match(path))
                     },
                     event => {
                         const errorCode = this.normalizeErrorCode(event)
@@ -89,7 +96,7 @@ export default class RessourceReader extends BasePlugin {
 
     // 新增资源缓存方法
     async cacheResource(url: string) {
-        const cache = await caches.open("engine-assets-v1")
+        const cache = await caches.open("engine-assets-v2")
         await cache.add(url)
     }
 
