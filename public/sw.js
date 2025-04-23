@@ -2,42 +2,51 @@
 const CACHE_NAME = "engine-assets-v2"
 const CACHE_POLICY = {
     networkFirst: ["/api/"],
-    cacheFirst: ["/static/", "/models/"],
-}
+    cacheFirst: [
+        "/static/",
+        ({ url }) => url.pathname.includes('/runtime-assets/'),
+        url => /\/(models|map|skybox)\/.*\.(glb|gltf|fbx|obj|jpg|jpeg|png|webp|hdr)$/i
+    ],
+    staleWhileRevalidate: [({ url }) => url.pathname.startsWith("/api/")]
+};
+
+// 在fetch事件处理中新增动态缓存逻辑
+ServiceWorkerGlobalScope.addEventListener("fetch", event => {
+    const { request } = event;
+    
+    // 动态资源自动缓存（模型/贴图等）
+    if (request.url.match(/\.(glb|gltf|fbx|obj|jpg|jpeg|png|webp|hdr)$/i)) {
+        event.respondWith(
+            cacheFirst(request).then(response => {
+                if (!response) {
+                    return fetch(request).then(netRes => {
+                        caches.open(CACHE_NAME).then(cache => cache.put(request, netRes.clone()));
+                        return netRes;
+                    });
+                }
+                return response;
+            })
+        );
+    }
+});
 
 // 安装事件
-// 强制跳过等待阶段
 ServiceWorkerGlobalScope.skipWaiting()
 
 ServiceWorkerGlobalScope.addEventListener("install", event => {
     event.waitUntil(
-        caches
-            .open(CACHE_NAME)
-            .then(cache =>
-                cache.addAll([
-                    "/static/base.glb",
-                    "/static/environment.hdr",
-                    "/models/main_scene.glb",
-                    "/models/characters/",
-                    "/materials/pbr/",
-                    "/textures/compressed/",
-                ]),
-            ),
+        caches.open(CACHE_NAME).then(cache => cache.addAll(["/index.html", "/main.css", "/app.js", "/engine-core.js", "/three.min.js", "/webgl-engine-core.js"])),
     )
 })
 
-// 激活事件
-// 清理旧版本缓存
 ServiceWorkerGlobalScope.addEventListener("activate", event => {
     event.waitUntil(
         caches.keys().then(keys =>
             Promise.all(
-                // 修正 map 方法中箭头函数必须返回值的问题
                 keys.map(key => {
                     if (key !== CACHE_NAME) {
                         return caches.delete(key)
                     }
-                    // 当 key 等于 CACHE_NAME 时，返回一个已解决的 Promise
                     return Promise.resolve()
                 }),
             ),
@@ -48,18 +57,38 @@ ServiceWorkerGlobalScope.addEventListener("activate", event => {
 ServiceWorkerGlobalScope.addEventListener("fetch", event => {
     const { request } = event
 
-    // 网络优先策略
-    if (CACHE_POLICY.networkFirst.some(path => request.url.startsWith(path))) {
+    if (
+        CACHE_POLICY.networkFirst.some(rule => {
+            if (typeof rule === "function") return rule(request)
+            return request.url.startsWith(rule)
+        })
+    ) {
         event.respondWith(networkFirst(request))
-    } else {
+    } else if (
+        CACHE_POLICY.cacheFirst.some(rule => {
+            if (typeof rule === "function") return rule(request)
+            return request.url.startsWith(rule)
+        })
+    ) {
         event.respondWith(cacheFirst(request))
+    } else if (
+        CACHE_POLICY.staleWhileRevalidate.some(rule => {
+            if (typeof rule === "function") return rule(request)
+            return request.url.startsWith(rule)
+        })
+    ) {
+        event.respondWith(staleWhileRevalidate(request))
+    } else {
+        event.respondWith(fetch(request)) // 其他请求保持默认
     }
 })
 
 // 网络优先策略
 async function networkFirst(request) {
     try {
-        return await fetch(request)
+        const response = await fetch(request)
+        caches.open(CACHE_NAME).then(cache => cache.put(request, response.clone()))
+        return response
     } catch (error) {
         return caches.match(request)
     }
@@ -68,5 +97,15 @@ async function networkFirst(request) {
 // 缓存优先策略
 async function cacheFirst(request) {
     const cached = await caches.match(request)
-    return cached || fetch(request)
+    const response = await fetch(request)
+    caches.open(CACHE_NAME).then(cache => cache.put(request, response.clone()))
+    return cached || response
+}
+
+// 缓存优先并更新策略
+async function staleWhileRevalidate(request) {
+    const cached = await caches.match(request)
+    const response = await fetch(request)
+    caches.open(`${CACHE_NAME}-${new Date().toISOString().slice(0, 10)}`).then(cache => cache.put(request, response.clone()))
+    return cached || response
 }
