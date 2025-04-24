@@ -26,11 +26,12 @@ export default class RessourceReader extends BasePlugin {
         this.gltfLoader = new GLTFLoader()
     }
 
+    // 初始化线程池
     private initializeWorkerPool() {
         // 初始化3个Web Worker线程
-        for (let i = 0; i < 3; i++) {
-            this.workerPool.push(new Worker("/src/workers/resourceParser.worker.js"))
-        }
+        // for (let i = 0; i < 3; i++) {
+            // this.workerPool.push(new Worker("/src/workers/resourceParser.worker.js"))
+        // }
     }
 
     async initialize() {

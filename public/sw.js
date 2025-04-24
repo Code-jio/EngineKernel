@@ -4,38 +4,49 @@ const CACHE_POLICY = {
     networkFirst: ["/api/"],
     cacheFirst: [
         "/static/",
-        ({ url }) => url.pathname.includes('/runtime-assets/'),
-        url => /\/(models|map|skybox)\/.*\.(glb|gltf|fbx|obj|jpg|jpeg|png|webp|hdr)$/i
+        ({ url }) => url.pathname.includes("/runtime-assets/"),
+        url => /\/(models|map|skybox)\/.*\.(glb|gltf|fbx|obj|jpg|jpeg|png|webp|hdr)$/i,
     ],
-    staleWhileRevalidate: [({ url }) => url.pathname.startsWith("/api/")]
-};
+    staleWhileRevalidate: [({ url }) => url.pathname.startsWith("/api/")],
+}
 
 // 在fetch事件处理中新增动态缓存逻辑
 ServiceWorkerGlobalScope.addEventListener("fetch", event => {
-    const { request } = event;
-    
+    const { request } = event
+
     // 动态资源自动缓存（模型/贴图等）
-    if (request.url.match(/\.(glb|gltf|fbx|obj|jpg|jpeg|png|webp|hdr)$/i)) {
+    if (request.url.match(/\.(glb|gltf|jpg|jpeg|png|webp)$/i)) {
         event.respondWith(
             cacheFirst(request).then(response => {
                 if (!response) {
                     return fetch(request).then(netRes => {
-                        caches.open(CACHE_NAME).then(cache => cache.put(request, netRes.clone()));
-                        return netRes;
-                    });
+                        caches.open(CACHE_NAME).then(cache => cache.put(request, netRes.clone()))
+                        return netRes
+                    })
                 }
-                return response;
-            })
-        );
+                return response
+            }),
+        )
     }
-});
+})
 
 // 安装事件
 ServiceWorkerGlobalScope.skipWaiting()
 
 ServiceWorkerGlobalScope.addEventListener("install", event => {
     event.waitUntil(
-        caches.open(CACHE_NAME).then(cache => cache.addAll(["/index.html", "/main.css", "/app.js", "/engine-core.js", "/three.min.js", "/webgl-engine-core.js"])),
+        caches
+            .open(CACHE_NAME)
+            .then(cache =>
+                cache.addAll([
+                    "/index.html",
+                    "/main.css",
+                    "/app.js",
+                    "/engine-core.js",
+                    "/three.min.js",
+                    "/webgl-engine-core.js",
+                ]),
+            ),
     )
 })
 
@@ -106,6 +117,8 @@ async function cacheFirst(request) {
 async function staleWhileRevalidate(request) {
     const cached = await caches.match(request)
     const response = await fetch(request)
-    caches.open(`${CACHE_NAME}-${new Date().toISOString().slice(0, 10)}`).then(cache => cache.put(request, response.clone()))
+    caches
+        .open(`${CACHE_NAME}-${new Date().toISOString().slice(0, 10)}`)
+        .then(cache => cache.put(request, response.clone()))
     return cached || response
 }
