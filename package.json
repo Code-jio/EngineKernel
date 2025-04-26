@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "cross-env NODE_ENV=development webpack serve --config config/dev.config.js --mode development",
-    "build": "npm run build:types && cross-env NODE_ENV=production webpack --config config/prod.config.js --mode production",
+    "dev": "cross-env NODE_ENV=development webpack serve --config config/webpack.dev.config.js --mode development",
+    "build": "npm run build:types && cross-env NODE_ENV=production webpack --config config/webpack.prod.config.js --mode production",
     "build:types": "tsc --emitDeclarationOnly --outDir ./dist/types",
     "lint": "npx eslint .",
     "lint:fix": "npx eslint . --fix"

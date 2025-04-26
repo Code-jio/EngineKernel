@@ -1,5 +1,5 @@
 import { merge } from "webpack-merge"
-import baseConfig from "./base.config.js"
+import baseConfig from "./webpack.base.config.js"
 import path from "path"
 import { fileURLToPath } from "url"
 import TerserPlugin from 'terser-webpack-plugin';

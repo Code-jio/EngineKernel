@@ -47,9 +47,9 @@
         </div>
         <div id="viewport"></div>
 
-        <script src="https://localhost:3000/index"></script>
+        <script src="https://localhost:3000/engine-kernel.dev.js"></script>
         <script>
-            const engine = new EngineKernel({
+            const engine = new EngineKernel.Core({
                 container: "#viewport",
                 plugins: [
                     new EngineKernel.CameraPlugin({ name: "CameraPlugin", path: "/plugins/camera" }),
@@ -58,34 +58,51 @@
                         path: "/plugins/resource-reader",
                         basePath: "/assets/models",
                         url: "/assets/models",
-                        supportedFormats: ["gltf", "fbx"]
+                        supportedFormats: ["gltf", "fbx"],
                     }),
                     new EngineKernel.BaseScene({
                         name: "BaseScene",
                         path: "/plugins/scene",
                         container: "#viewport",
-                        config: {
-                            sceneType: "default",
-                            enableShadow: true,
+                        userData: {
+                            cameraConfig: {
+                                type: "perspective",
+                                fov: 45,
+                                near: 0.1,
+                                far: 1000,
+                                position: [0, 0, 5],
+                                lookAt: [0, 0, 0],
+                            },
                         },
-                    }),
-                    new EngineKernel.GLMonitor({
-                        name: "GLMonitor",
-                        path: "/plugins/gl-monitor",
-                        displayElement: "#fpsCounter",
-                        updateInterval: 1000,
                     }),
                 ],
             })
 
-            engine.on("scene-ready", () => {
+            console.log("EngineKernel 实例:", engine) // 打印 EngineKernel 实例
+
+            engine.eventBus.on("init-complete", () => {
+                console.log("引擎初始化完成")
+                const glMonitor = new EngineKernel.GLMonitor({
+                    name: "GLMonitor",
+                    path: "/plugins/gl-monitor",
+                    userData: {
+                        renderer: engine.getPlugin('BaseScene').renderer
+                    },
+                    displayElement: "#fpsCounter",
+                    updateInterval: 1000,
+                })
+                engine.registerPlugin(glMonitor)
+            })
+
+            engine.eventBus.on("scene-ready", () => {
                 console.log("场景初始化完成，当前场景对象:", engine.getService("SceneService").currentScene)
             })
 
             // 视口尺寸响应式处理
             new ResizeObserver(entries => {
                 const { width, height } = entries[0].contentRect
-                EventBus.emit("viewport-resize", { width, height })
+                // engine.eventBus.emit("viewport-resize", { width, height })
+                engine.getPlugin("BaseScene").handleResize()
             }).observe(document.getElementById("viewport"))
 
             // 相机切换控制

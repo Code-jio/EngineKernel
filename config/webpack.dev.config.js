@@ -1,6 +1,6 @@
 import detectPort from "detect-port"
 import path from "path"
-import baseConfig from "./base.config.js"
+import baseConfig from "./webpack.base.config.js"
 import { merge } from "webpack-merge"
 import { fileURLToPath } from "url"
 
@@ -14,6 +14,11 @@ export default new Promise(async resolve => {
             mode: "development",
             entry: path.resolve(__dirname, '../src/index.ts'),
             devtool: "source-map",
+            output: {
+                filename: 'engine-kernel.dev.js',
+                path: path.resolve(__dirname, '../dist'),
+                publicPath: '/',
+            },
             devServer: {
                 https: true,
                 client: {
@@ -24,12 +29,11 @@ export default new Promise(async resolve => {
                     },
                     logging: "warn",
                     reconnect: 5,
-                    progress: true,
                     webSocketTransport: 'ws',
                     // processEnv: { NODE_ENV: 'development' }
                 },
                 static: {
-                    directory: path.join(__dirname, "../src"),
+                    directory: path.join(__dirname, "../dist"),
                     watch: {
                         ignored: [/node_modules/, /dist/],
                         usePolling: true,

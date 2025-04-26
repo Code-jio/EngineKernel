@@ -9,7 +9,7 @@ export default {
     entry: path.join(__dirname, "../src/index.ts"),
     output: {
         path: path.join(__dirname, "../dist"),
-        filename: process.env.NODE_ENV === 'production' ? 'engine-kernel.min.js' : 'engine-kernel.dev.js',
+        filename: "engine-kernel.dev.js",
         clean: true,
         publicPath: "/",
         library: {
@@ -22,6 +22,7 @@ export default {
     optimization: {
         minimize: false,
     },
+    ignoreWarnings: [/Failed to parse source map/, /Critical dependency/, /Module not found:/],
     module: {
         rules: [
             {
@@ -31,7 +32,7 @@ export default {
                         loader: "ts-loader",
                         options: {
                             onlyCompileBundledFiles: true, // 只编译当前项目的文件
-                            compilerOptions: { 
+                            compilerOptions: {
                                 esModuleInterop: true, // 启用ES模块互操作
                             },
                         },
