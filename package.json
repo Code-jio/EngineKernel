@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "webpack serve --config config/dev.config.js --mode development",
-    "build": "npm run build:types && webpack --config config/prod.config.js --mode production",
+    "dev": "cross-env NODE_ENV=development webpack serve --config config/dev.config.js --mode development",
+    "build": "npm run build:types && cross-env NODE_ENV=production webpack --config config/prod.config.js --mode production",
     "build:types": "tsc --emitDeclarationOnly --outDir ./dist/types",
     "lint": "npx eslint .",
     "lint:fix": "npx eslint . --fix"
@@ -23,6 +23,7 @@
     "@types/three": "^0.164.1",
     "@types/webgl2": "^0.0.11",
     "@types/webpack-env": "^1.18.8",
+    "cross-env": "^7.0.3",
     "detect-port": "^2.1.0",
     "eslint": "^8.57.1",
     "eslint-config-airbnb-base": "^15.0.0",

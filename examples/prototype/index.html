@@ -1,78 +1,100 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EngineKernel 原型验证</title>
-    <style>
-        #viewport {
-            width: 80vw;
-            height: 45vw;
-            border: 1px solid #2c3e50;
-            margin: 20px auto;
-        }
-        .control-panel {
-            padding: 15px;
-            background: #f8f9fa;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        button {
-            padding: 8px 16px;
-            margin: 0 5px;
-            background: #3498db;
-            border: none;
-            color: white;
-            border-radius: 3px;
-            cursor: pointer;
-            transition: opacity 0.3s;
-        }
-        button:hover {
-            opacity: 0.8;
-        }
-        #fpsCounter {
-            display: inline-block;
-            padding: 5px 10px;
-            background: #2ecc71;
-            color: white;
-            border-radius: 3px;
-            margin-left: 15px;
-        }
-    </style>
-</head>
-<body>
-  <div class="control-panel">
-    <button id="switchPerspective">透视相机</button>
-    <button id="switchOrtho">正交相机</button>
-    <div id="fpsCounter"></div>
-  </div>
-  <div id="viewport"></div>
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>EngineKernel 原型验证</title>
+        <style>
+            #viewport {
+                width: 80vw;
+                height: 45vw;
+                border: 1px solid #2c3e50;
+                margin: 20px auto;
+            }
+            .control-panel {
+                padding: 15px;
+                background: #f8f9fa;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            }
+            button {
+                padding: 8px 16px;
+                margin: 0 5px;
+                background: #3498db;
+                border: none;
+                color: white;
+                border-radius: 3px;
+                cursor: pointer;
+                transition: opacity 0.3s;
+            }
+            button:hover {
+                opacity: 0.8;
+            }
+            #fpsCounter {
+                display: inline-block;
+                padding: 5px 10px;
+                background: #2ecc71;
+                color: white;
+                border-radius: 3px;
+                margin-left: 15px;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="control-panel">
+            <button id="switchPerspective">透视相机</button>
+            <button id="switchOrtho">正交相机</button>
+            <div id="fpsCounter"></div>
+        </div>
+        <div id="viewport"></div>
 
-  <script src="https://localhost:3000/engine-kernel.min.js"></script>
-  <script>
-    const engine = new EngineKernel({
-      container: '#viewport',
-      plugins: [
-        window.EngineKernel.CameraPlugin,
-        window.EngineKernel.GLMonitor({
-          displayElement: '#fpsCounter',
-          updateInterval: 1000
-        })
-      ]
-    });
+        <script src="https://localhost:3000/index"></script>
+        <script>
+            const engine = new EngineKernel({
+                container: "#viewport",
+                plugins: [
+                    new EngineKernel.CameraPlugin({ name: "CameraPlugin", path: "/plugins/camera" }),
+                    new EngineKernel.ResourceReaderPlugin({
+                        name: "ResourceReader",
+                        path: "/plugins/resource-reader",
+                        basePath: "/assets/models",
+                        url: "/assets/models",
+                        supportedFormats: ["gltf", "fbx"]
+                    }),
+                    new EngineKernel.BaseScene({
+                        name: "BaseScene",
+                        path: "/plugins/scene",
+                        container: "#viewport",
+                        config: {
+                            sceneType: "default",
+                            enableShadow: true,
+                        },
+                    }),
+                    new EngineKernel.GLMonitor({
+                        name: "GLMonitor",
+                        path: "/plugins/gl-monitor",
+                        displayElement: "#fpsCounter",
+                        updateInterval: 1000,
+                    }),
+                ],
+            })
 
-    // 视口尺寸响应式处理
-    new ResizeObserver(entries => {
-      const { width, height } = entries[0].contentRect;
-      EventBus.emit('viewport-resize', { width, height });
-    }).observe(document.getElementById('viewport'));
+            engine.on("scene-ready", () => {
+                console.log("场景初始化完成，当前场景对象:", engine.getService("SceneService").currentScene)
+            })
 
-    // 相机切换控制
-    document.getElementById('switchPerspective').onclick = () => {
-      engine.getService('CameraService').switchType('perspective');
-    };
-    document.getElementById('switchOrtho').onclick = () => {
-      engine.getService('CameraService').switchType('orthographic');
-    };
-  </script>
-</body>
+            // 视口尺寸响应式处理
+            new ResizeObserver(entries => {
+                const { width, height } = entries[0].contentRect
+                EventBus.emit("viewport-resize", { width, height })
+            }).observe(document.getElementById("viewport"))
+
+            // 相机切换控制
+            document.getElementById("switchPerspective").onclick = () => {
+                engine.getService("CameraService").switchType("perspective")
+            }
+            document.getElementById("switchOrtho").onclick = () => {
+                engine.getService("CameraService").switchType("orthographic")
+            }
+        </script>
+    </body>
 </html>

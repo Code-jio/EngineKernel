@@ -4,4 +4,5 @@ import pluginManager from "./core/pluginManager";
 import eventBus from "./eventBus/eventBus";
 
 export { Core, eventBus, pluginManager };
-export * from './plugins';
+
+export * from './plugins'; // 导出所有插件模块

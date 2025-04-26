@@ -12,26 +12,29 @@ export default new Promise(async resolve => {
     resolve(
         merge(baseConfig, {
             mode: "development",
-            entry: './src/index.ts',
-            devtool: "eval-source-map",
+            entry: path.resolve(__dirname, '../src/index.ts'),
+            devtool: "source-map",
             devServer: {
                 https: true,
-                static: {
-                    directory: path.join(__dirname, "../dist"),
-                    watch: true,
-                    serveIndex: true,
-                },
                 client: {
                     overlay: {
                         errors: true,
-                        warnings: false,
-                        runtimeErrors: false,
+                        warnings: true,
+                        runtimeErrors: true,
                     },
-                    logging: "none",
+                    logging: "warn",
+                    reconnect: 5,
+                    progress: true,
+                    webSocketTransport: 'ws',
+                    // processEnv: { NODE_ENV: 'development' }
                 },
                 static: {
-                    directory: path.join(__dirname, "../dist"),
-                    watch: true,
+                    directory: path.join(__dirname, "../src"),
+                    watch: {
+                        ignored: [/node_modules/, /dist/],
+                        usePolling: true,
+                        interval: 300,
+                    },
                     serveIndex: true,
                 },
                 // // 新增跨域配置
@@ -43,15 +46,22 @@ export default new Promise(async resolve => {
                 host: "0.0.0.0",
                 port,
                 open: true,
-                hot: true,
+                hot: true, // 启用完全热模块替换
+                liveReload: true, // 启用自动刷新
                 // 如果需要代理API，可添加以下配置（示例）
                 // proxy: {
                 //   '/api': {
                 //     target: 'http://your-api-server.com',
                 //     changeOrigin: true,
                 //     pathRewrite: { '^/api': '' }
-                //   }
                 // }
+                watchFiles: {
+                    paths: ['src/**/*.ts', 'src/**/*.tsx'], // 监听的文件路径
+                    options: {
+                        usePolling: true, // 使用轮询
+                        interval: 300, // 轮询间隔时间（毫秒）
+                    },
+                }
             },
         }),
     )

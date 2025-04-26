@@ -12,8 +12,8 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader"
  * 2.支持serviceWorker静态资源缓存管理
  */
 
-export class RessourceReader extends BasePlugin {
-    private url: string
+export class ResourceReaderPlugin extends BasePlugin {
+    private url: string = ""
     private taskQueue: Map<string, Promise<any>> = new Map()
     private workerPool: Worker[] = []
     private gltfLoader: GLTFLoader = new GLTFLoader()
@@ -21,9 +21,9 @@ export class RessourceReader extends BasePlugin {
 
     constructor(meta: any) {
         super(meta)
-        this.url = meta.userData.url
-        this.initializeWorkerPool()
+        this.url = meta?.userData?.url || ""
         this.gltfLoader = new GLTFLoader()
+        this.initializeWorkerPool()
     }
 
     // 初始化线程池
