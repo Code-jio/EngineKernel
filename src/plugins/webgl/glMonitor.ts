@@ -1,5 +1,5 @@
-import BasePlugin from "plugins/basePlugin"
-import eventBus from "eventBus/eventBus"
+import BasePlugin from '../basePlugin'
+import eventBus from '../../eventBus/eventBus'
 import * as THREE from "three"
 
 interface GLState {

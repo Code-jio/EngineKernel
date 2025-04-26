@@ -2,7 +2,7 @@ import { fileURLToPath } from "url"
 import path from "path"
 
 import { createRequire } from "node:module"
-const require = createRequire(import.meta.url);
+const require = createRequire(import.meta.url)
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -16,6 +16,7 @@ export default {
         library: {
             name: "EngineKernel",
             type: "umd",
+            umdNamedDefine: true,
         },
         globalObject: "this",
     },
@@ -41,7 +42,7 @@ export default {
     resolve: {
         extensions: [".js", ".ts"],
         alias: {
-            '@': path.resolve(__dirname, '../src')
+            "@": path.resolve(__dirname, "../src"),
         },
         fallback: {
             vm: require.resolve("vm-browserify"),

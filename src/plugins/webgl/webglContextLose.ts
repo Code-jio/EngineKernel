@@ -1,6 +1,5 @@
-// 响应webgl渲染上下文丢失的情况、内存溢出导致程序崩溃、渲染进程阻塞导致程序卡顿等情况，并进行相应的处理。
-import BasePlugin from "plugins/basePlugin";
-import eventBus from "eventBus/eventBus";
+import BasePlugin from '../basePlugin'
+import eventBus from '../../eventBus/eventBus'
 import WebGPURenderer from "three/examples/jsm/renderers/webgpu/WebGPURenderer";
 import * as THREE from "three";
 

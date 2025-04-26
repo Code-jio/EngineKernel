@@ -1,6 +1,6 @@
 import * as THREE from "three"
-import BasePlugin from "plugins/basePlugin"
-import eventBus from "eventBus/eventBus"
+import BasePlugin from '../basePlugin'
+import eventBus from '../../eventBus/eventBus'
 import { GLTF } from "three/examples/jsm/loaders/GLTFLoader" // 导入GLTF类型，用于类型
 
 export default class SceneManager extends BasePlugin {

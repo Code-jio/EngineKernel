@@ -1,8 +1,8 @@
 // 轨道控制器插件
 import * as THREE from "three"
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js"
-import BasePlugin from "plugins/basePlugin"
-import eventBus from "eventBus/eventBus"
+import BasePlugin from '../basePlugin'
+import eventBus from '../../eventBus/eventBus'
 import type { WebGLRenderer } from "three"
 
 export type OrbitControlPluginOptions = {

@@ -1,10 +1,10 @@
 // 增强后的资源读取插件
-import BasePlugin from "plugins/basePlugin"
+import BasePlugin from '../basePlugin'
+import eventBus from '../../eventBus/eventBus'
 import * as THREE from "three"
 import path from "path"
 import fs from "fs"
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader"
-import eventBus from "eventBus/eventBus"
 
 /**
  * 功能要求：

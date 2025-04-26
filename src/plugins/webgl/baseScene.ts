@@ -1,8 +1,8 @@
 import { PerspectiveCamera, Scene, OrthographicCamera } from "three"
 import BasePlugin from "../basePlugin"
-import eventBus from "eventBus/eventBus"
+import eventBus from '../../eventBus/eventBus'
 import * as THREE from "three"
-import { PipelineManager } from "core/pipelineManager"
+import { PipelineManager } from '../../core/pipelineManager'
 
 export default class BaseScene extends BasePlugin {
     private camera: PerspectiveCamera // 默认透视相机

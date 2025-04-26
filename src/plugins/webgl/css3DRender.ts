@@ -1,7 +1,7 @@
 import * as THREE from "three"
 import { CSS3DRenderer, CSS3DObject } from "three/examples/jsm/renderers/CSS3DRenderer"
-import BasePlugin from "plugins/basePlugin"
-import eventBus from "eventBus/eventBus"
+import BasePlugin from '../basePlugin'
+import eventBus from '../../eventBus/eventBus'
 
 interface CSS3DPluginConfig {
     component: HTMLElement | string // Vue/React组件实例或CSS选择器

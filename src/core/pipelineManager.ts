@@ -1,5 +1,5 @@
 // 模型加载流程管理器核心类
-import eventBus from 'eventBus/eventBus';
+import eventBus from '../eventBus/eventBus';
 
 export class PipelineManager {
   private stages: { [key: string]: Function[] } = {

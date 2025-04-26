@@ -1,6 +1,6 @@
 import * as THREE from "three"
-import BasePlugin from "plugins/basePlugin"
-import eventBus from "eventBus/eventBus"
+import BasePlugin from '../basePlugin'
+import eventBus from '../../eventBus/eventBus'
 
 export default class SkyBox extends BasePlugin {
     private cubeTextureLoader: THREE.CubeTextureLoader
