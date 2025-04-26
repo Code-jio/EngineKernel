@@ -47,13 +47,13 @@
   </div>
   <div id="viewport"></div>
 
-  <script src="../../dist/engine-kernel.min.js"></script>
+  <script src="http://localhost:3000/engine-kernel.min.js"></script>
   <script>
     const engine = new EngineKernel({
       container: '#viewport',
       plugins: [
         window.EngineKernel.CameraPlugin,
-        GLMonitor({
+        window.EngineKernel.GLMonitor({
           displayElement: '#fpsCounter',
           updateInterval: 1000
         })

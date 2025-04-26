@@ -15,6 +15,7 @@ export default new Promise(async resolve => {
             entry: './src/index.ts',
             devtool: "eval-source-map",
             devServer: {
+                https: true,
                 static: {
                     directory: path.join(__dirname, "../dist"),
                     watch: true,

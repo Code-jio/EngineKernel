@@ -18,7 +18,7 @@ interface GLState {
     extensionsSupported: { timerQuery: boolean; memoryInfo: boolean }
 }
 
-class GLContextMonitorPlugin extends BasePlugin {
+export default class GLContextMonitorPlugin extends BasePlugin {
     private gl: WebGL2RenderingContext
     private state: GLState = {
         programCount: 0,
@@ -282,5 +282,3 @@ class GLContextMonitorPlugin extends BasePlugin {
     //     eventBus.off("render-loop-begin", this.boundUpdateStats)
     // }
 }
-
-export default GLContextMonitorPlugin
