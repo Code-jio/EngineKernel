@@ -3,7 +3,7 @@ import Stats from "three/examples/jsm/libs/stats.module"
 import BasePlugin from '../basePlugin'
 import eventBus from '../../eventBus/eventBus'
 
-export default class AnimationControls extends BasePlugin {
+export class AnimationControls extends BasePlugin {
     // private target: THREE.Scene
     private mixer: THREE.AnimationMixer
     private action: THREE.AnimationAction

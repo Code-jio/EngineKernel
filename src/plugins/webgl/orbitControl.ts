@@ -9,7 +9,7 @@ export type OrbitControlPluginOptions = {
     damping?: number
 }
 
-export default class orbitControls extends BasePlugin {
+export class orbitControls extends BasePlugin {
     private control: OrbitControls
     private camera: THREE.PerspectiveCamera
     private dom: HTMLElement

@@ -18,7 +18,7 @@ interface GLState {
     extensionsSupported: { timerQuery: boolean; memoryInfo: boolean }
 }
 
-export default class GLContextMonitorPlugin extends BasePlugin {
+export class GLMonitor extends BasePlugin {
     private gl: WebGL2RenderingContext
     private state: GLState = {
         programCount: 0,

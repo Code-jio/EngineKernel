@@ -4,7 +4,7 @@ import eventBus from '../../eventBus/eventBus'
 import * as THREE from "three"
 import { PipelineManager } from '../../core/pipelineManager'
 
-export default class BaseScene extends BasePlugin {
+export class BaseScene extends BasePlugin {
     private camera: PerspectiveCamera // 默认透视相机
     private aspectRatio = window.innerWidth / window.innerHeight
     private cameraType: "perspective" | "orthographic" = "perspective"

@@ -2,7 +2,7 @@ import * as THREE from "three"
 import BasePlugin from '../basePlugin'
 import eventBus from '../../eventBus/eventBus'
 
-export default class Raycast extends BasePlugin {
+export class Raycast extends BasePlugin {
     private raycaster: THREE.Raycaster | null
     private mouse: THREE.Vector2 | null
     private camera: THREE.Camera | null

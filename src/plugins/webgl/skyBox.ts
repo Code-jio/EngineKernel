@@ -2,7 +2,7 @@ import * as THREE from "three"
 import BasePlugin from '../basePlugin'
 import eventBus from '../../eventBus/eventBus'
 
-export default class SkyBox extends BasePlugin {
+export class SkyBox extends BasePlugin {
     private cubeTextureLoader: THREE.CubeTextureLoader
     private scene: THREE.Scene
     private camera: THREE.PerspectiveCamera

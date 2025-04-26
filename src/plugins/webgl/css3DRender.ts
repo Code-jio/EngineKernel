@@ -10,7 +10,7 @@ interface CSS3DPluginConfig {
     scale?: number
 }
 
-export default class CSS3DRenderPlugin extends BasePlugin {
+export class CSS3DRenderPlugin extends BasePlugin {
     private renderer: CSS3DRenderer
     private object?: CSS3DObject
     private camera: THREE.Camera

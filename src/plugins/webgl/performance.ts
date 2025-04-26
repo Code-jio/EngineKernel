@@ -3,7 +3,7 @@ import Stats from "three/examples/jsm/libs/stats.module"
 import BasePlugin from '../basePlugin'
 import eventBus from '../../eventBus/eventBus'
 
-export default class Performance extends BasePlugin {
+export class Performance extends BasePlugin {
     private dom: HTMLDivElement
     private stats: Stats
     private fps: number = 0

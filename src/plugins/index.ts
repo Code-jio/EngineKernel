@@ -1,22 +1,17 @@
 // 核心插件导出
+export { BasePlugin } from './basePlugin';
+export { AnimationControls } from './webgl/animationControls';
+export { CameraPlugin } from './webgl/cameraPlugin';
+export { GLMonitor } from './webgl/glMonitor';
+export { LODPlugin } from './webgl/lod';
+export { orbitControls } from './webgl/orbitControl';
+export { Performance } from './webgl/performance';
+export { Raycast } from './webgl/raycast';
+export { RenderLoop } from './webgl/renderLoop';
+export { RessourceReader } from './webgl/resourceReaderPlugin';
+export { SkyBox } from './webgl/skyBox';
+export { WebGLContextLose } from './webgl/webglContextLose';
 
-export * from './basePlugin';
 
-export * from './webgl/animationControls';
-export * from './webgl/baseScene';
-export * from './webgl/cameraPlugin';
-// export * from './webgl/css3DRender';  
-export * from './webgl/glMonitor';
-export * from './webgl/lod';
-export * from './webgl/orbitControl';
-export * from './webgl/performance';
-export * from './webgl/raycast';
-export * from './webgl/renderLoop';
-export * from './webgl/resourceReaderPlugin';
-// export * from './webgl/scene-manager';
-export * from './webgl/skyBox';
-// export * from './webgl/light'; // 待添加
-export * from './webgl/webglContextLose';
-
-export { default as CSS3DRender } from './webgl/css3DRender';
-export { default as SceneManager } from './webgl/scene-manager';
+export { CSS3DRenderPlugin } from './webgl/css3DRender';
+export { SceneManager } from './webgl/scene-manager';

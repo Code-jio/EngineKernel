@@ -4,7 +4,7 @@ import eventBus from '../../eventBus/eventBus'
 import * as THREE from "three"
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls"
 
-export default class LODPlugin extends BasePlugin {
+export class LODPlugin extends BasePlugin {
     private lodGroups: Map<string, THREE.LOD> = new Map()
     private camera: THREE.PerspectiveCamera
     private scene: THREE.Scene

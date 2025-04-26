@@ -2,7 +2,7 @@ import BasePlugin from '../basePlugin'
 import eventBus from '../../eventBus/eventBus'
 import * as THREE from "three"
 
-export default class RenderLoop extends BasePlugin {
+export class RenderLoop extends BasePlugin {
     private clock: THREE.Clock
     private taskList: (() => void)[] = []
     private animationID: number

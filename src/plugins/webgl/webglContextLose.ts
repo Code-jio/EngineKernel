@@ -3,7 +3,7 @@ import eventBus from '../../eventBus/eventBus'
 import WebGPURenderer from "three/examples/jsm/renderers/webgpu/WebGPURenderer";
 import * as THREE from "three";
 
-export default class WebGLContextLose extends BasePlugin {
+export class WebGLContextLose extends BasePlugin {
     private renderer: WebGPURenderer;
     private scene: THREE.Scene;
     private camera: THREE.Camera;

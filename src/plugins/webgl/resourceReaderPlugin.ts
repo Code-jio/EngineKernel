@@ -12,7 +12,7 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader"
  * 2.支持serviceWorker静态资源缓存管理
  */
 
-export default class RessourceReader extends BasePlugin {
+export class RessourceReader extends BasePlugin {
     private url: string
     private taskQueue: Map<string, Promise<any>> = new Map()
     private workerPool: Worker[] = []

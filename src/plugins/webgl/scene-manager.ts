@@ -3,7 +3,7 @@ import BasePlugin from '../basePlugin'
 import eventBus from '../../eventBus/eventBus'
 import { GLTF } from "three/examples/jsm/loaders/GLTFLoader" // 导入GLTF类型，用于类型
 
-export default class SceneManager extends BasePlugin {
+export class SceneManager extends BasePlugin {
     private sceneGraph = new Map<string, THREE.Object3D>()
     private activeScene?: THREE.Scene
 
