@@ -19,9 +19,6 @@ export default {
         },
         globalObject: "this",
     },
-    optimization: {
-        minimize: false,
-    },
     ignoreWarnings: [/Failed to parse source map/, /Critical dependency/, /Module not found:/],
     module: {
         rules: [

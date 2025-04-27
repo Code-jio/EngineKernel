@@ -2,11 +2,11 @@
 const CACHE_NAME = "engine-assets-v2"
 const CACHE_POLICY = {
     networkFirst: ["/api/"],
-    cacheFirst: [
-        "/static/",
-        ({ url }) => url.pathname.includes("/runtime-assets/"),
-        url => /\/(models|map|skybox)\/.*\.(glb|gltf|fbx|obj|jpg|jpeg|png|webp|hdr)$/i,
-    ],
+    // cacheFirst: [
+    //     "/static/",
+    //     ({ url }) => url.pathname.includes("/runtime-assets/"),
+    //     url => /\/(models|map|skybox)\/.*\.(glb|gltf|fbx|obj|jpg|jpeg|png|webp|hdr)$/i,
+    // ],
     staleWhileRevalidate: [({ url }) => url.pathname.startsWith("/api/")],
 }
 
@@ -39,12 +39,8 @@ ServiceWorkerGlobalScope.addEventListener("install", event => {
             .open(CACHE_NAME)
             .then(cache =>
                 cache.addAll([
-                    "/index.html",
-                    "/main.css",
-                    "/app.js",
-                    "/engine-core.js",
-                    "/three.min.js",
-                    "/webgl-engine-core.js",
+                    "/model/",
+                    "/skyBox/"
                 ]),
             ),
     )

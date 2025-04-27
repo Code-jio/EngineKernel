@@ -7,7 +7,7 @@ import { fileURLToPath } from "url"
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 export default new Promise(async resolve => {
-    const port = await detectPort(3000)
+    const port = await detectPort(8080)
 
     resolve(
         merge(baseConfig, {
@@ -20,12 +20,12 @@ export default new Promise(async resolve => {
                 publicPath: '/',
             },
             devServer: {
-                https: true,
+                // https: true,
                 client: {
                     overlay: {
-                        errors: true,
-                        warnings: true,
-                        runtimeErrors: true,
+                        errors: false,
+                        warnings: false,
+                        runtimeErrors: false,
                     },
                     logging: "warn",
                     reconnect: 5,

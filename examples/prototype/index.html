@@ -47,19 +47,20 @@
         </div>
         <div id="viewport"></div>
 
-        <script src="https://localhost:3000/engine-kernel.dev.js"></script>
+        <!-- <script src="./dev.js"></script> -->
+        <script src="http://localhost:8080/engine-kernel.dev.js"></script>
         <script>
             const engine = new EngineKernel.Core({
                 container: "#viewport",
                 plugins: [
                     new EngineKernel.CameraPlugin({ name: "CameraPlugin", path: "/plugins/camera" }),
-                    new EngineKernel.ResourceReaderPlugin({
-                        name: "ResourceReader",
-                        path: "/plugins/resource-reader",
-                        basePath: "/assets/models",
-                        url: "/assets/models",
-                        supportedFormats: ["gltf", "fbx"],
-                    }),
+                    // new EngineKernel.ResourceReaderPlugin({
+                    //     name: "ResourceReader",
+                    //     path: "/plugins/resource-reader",
+                    //     basePath: "/assets/models",
+                    //     url: "/assets/models",
+                    //     supportedFormats: ["gltf", "fbx"],
+                    // }),
                     new EngineKernel.BaseScene({
                         name: "BaseScene",
                         path: "/plugins/scene",
@@ -75,6 +76,7 @@
                             },
                         },
                     }),
+                    // new EngineKernel.PluginManager()
                 ],
             })
 
@@ -91,19 +93,13 @@
                     displayElement: "#fpsCounter",
                     updateInterval: 1000,
                 })
-                engine.registerPlugin(glMonitor)
+                debugger
+                engine.registerPlugin("GLMonitor")
             })
 
             engine.eventBus.on("scene-ready", () => {
                 console.log("场景初始化完成，当前场景对象:", engine.getService("SceneService").currentScene)
             })
-
-            // 视口尺寸响应式处理
-            new ResizeObserver(entries => {
-                const { width, height } = entries[0].contentRect
-                // engine.eventBus.emit("viewport-resize", { width, height })
-                engine.getPlugin("BaseScene").handleResize()
-            }).observe(document.getElementById("viewport"))
 
             // 相机切换控制
             document.getElementById("switchPerspective").onclick = () => {

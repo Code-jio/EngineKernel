@@ -5,7 +5,7 @@ import * as THREE from "three"
 import { PipelineManager } from "../../core/pipelineManager"
 
 export class BaseScene extends BasePlugin {
-    private camera: PerspectiveCamera // 默认透视相机
+    camera: PerspectiveCamera // 默认透视相机
     private aspectRatio = window.innerWidth / window.innerHeight
     private cameraType: "perspective" | "orthographic" = "perspective"
     private scene: Scene
@@ -59,7 +59,7 @@ export class BaseScene extends BasePlugin {
 
         this.renderer.setPixelRatio(window.devicePixelRatio) // 设置设备像素比 作用：防止高分屏下模糊
         this.renderer.setSize(window.innerWidth, window.innerHeight) // 设置渲染器尺寸
-        window.addEventListener("resize", this.handleResize)
+        window.addEventListener("resize", this.handleResize.bind(this))
         eventBus.emit("scene-ready", { scene: this.scene, camera: this.camera })
     }
 

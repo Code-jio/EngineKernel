@@ -16,6 +16,7 @@ import * as THREE from "three"
 interface CoreDependencies {
     eventBus?: EventBus
     pluginManager?: PluginManagerType
+    plugins?:[]
 }
 
 export default class Core implements CoreType {
@@ -44,6 +45,7 @@ export default class Core implements CoreType {
         this.eventBus = (dependencies as { eventBus?: EventBus }).eventBus || eventBus
         this.pluginManager =
             (dependencies as { pluginManager?: PluginManagerType }).pluginManager || new PluginManager(this)
+
         this.loadStrategies = {
             sync: this._loadSync.bind(this),
             async: this._loadAsync.bind(this),
@@ -58,10 +60,23 @@ export default class Core implements CoreType {
 
         // 初始化场景
         this.scene = new THREE.Scene() as THREE.Scene & { skybox?: THREE.Mesh }
+
+        console.log(dependencies,"依赖")
+
+        dependencies.plugins?.forEach((plugin)=>{
+            // this.pluginManager.loadPlugin(plugin)
+        })
+        this.init()
+    }
+    
+    init(){
+        this.eventBus.emit("init-complete") // 初始化事件
     }
 
     getPlugin(name: string): PluginInstance | undefined {
-        throw new Error("Method not implemented.")
+        // throw new Error("Method not implemented.")
+
+        return 
     }
 
     // 注册
@@ -73,6 +88,7 @@ export default class Core implements CoreType {
             this.eventBus.emit("registrationError", { meta: pluginMeta, error })
             throw error
         }
+        console.log(this.pluginRegistry,"123")
 
         try {
             const plugin: PluginInstance = {
@@ -103,6 +119,7 @@ export default class Core implements CoreType {
             this.eventBus.emit("registrationError", { meta: pluginMeta, error })
             throw new Error(`Plugin registration failed: ${(error as Error).message}`)
         }
+
     }
 
     // 加载
