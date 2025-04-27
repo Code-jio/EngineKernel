@@ -1,6 +1,6 @@
 import { PluginMeta } from '../types/Plugin';
-
-export class BasePlugin {
+import * as THREE from "three"
+class BasePlugin {
     name: string;
     path: string;
     strategy: 'sync' | 'async';
@@ -34,4 +34,4 @@ export class BasePlugin {
     }
 }
 
-export default BasePlugin;
+export {THREE, BasePlugin};

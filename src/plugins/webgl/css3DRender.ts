@@ -1,6 +1,5 @@
-import * as THREE from "three"
+import { THREE, BasePlugin } from "../basePlugin"
 import { CSS3DRenderer, CSS3DObject } from "three/examples/jsm/renderers/CSS3DRenderer"
-import BasePlugin from '../basePlugin'
 import eventBus from '../../eventBus/eventBus'
 
 interface CSS3DPluginConfig {

@@ -1,15 +1,14 @@
-import { PerspectiveCamera, OrthographicCamera } from 'three';
-import { BasePlugin } from '../basePlugin';
+import { THREE, BasePlugin } from "../basePlugin"
 import EventBus from '../../eventBus/eventBus';
 
 export class CameraPlugin extends BasePlugin {
   private cameraType: 'perspective' | 'orthographic' = 'perspective';
-  private activeCamera: PerspectiveCamera | OrthographicCamera;
+  private activeCamera: THREE.PerspectiveCamera | THREE.OrthographicCamera;
   private aspectRatio = window.innerWidth / window.innerHeight
 
   constructor(meta: any) {
     super(meta);
-    this.activeCamera = new PerspectiveCamera(45, this.aspectRatio, 0.1, 1000);
+    this.activeCamera = new THREE.PerspectiveCamera(45, this.aspectRatio, 0.1, 1000);
   }
 
   async init(coreInterface: any) {
@@ -40,14 +39,14 @@ export class CameraPlugin extends BasePlugin {
 
   private updateCameraParams() {
     if (this.cameraType === 'perspective') {
-      (this.activeCamera as PerspectiveCamera).aspect = this.aspectRatio;
+      (this.activeCamera as THREE.PerspectiveCamera).aspect = this.aspectRatio;
     } else {
       const halfWidth = 100;
       const halfHeight = 100 / this.aspectRatio;
-      (this.activeCamera as OrthographicCamera).left = -halfWidth;
-      (this.activeCamera as OrthographicCamera).right = halfWidth;
-      (this.activeCamera as OrthographicCamera).top = halfHeight;
-      (this.activeCamera as OrthographicCamera).bottom = -halfHeight;
+      (this.activeCamera as THREE.OrthographicCamera).left = -halfWidth;
+      (this.activeCamera as THREE.OrthographicCamera).right = halfWidth;
+      (this.activeCamera as THREE.OrthographicCamera).top = halfHeight;
+      (this.activeCamera as THREE.OrthographicCamera).bottom = -halfHeight;
     }
     this.activeCamera.updateProjectionMatrix();
   }

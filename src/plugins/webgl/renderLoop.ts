@@ -1,6 +1,5 @@
-import BasePlugin from '../basePlugin'
+import { THREE, BasePlugin } from "../basePlugin"
 import eventBus from '../../eventBus/eventBus'
-import * as THREE from "three"
 
 export class RenderLoop extends BasePlugin {
     private clock: THREE.Clock

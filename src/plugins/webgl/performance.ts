@@ -1,6 +1,5 @@
-import * as THREE from "three"
+import { THREE, BasePlugin } from "../basePlugin"
 import Stats from "three/examples/jsm/libs/stats.module"
-import BasePlugin from '../basePlugin'
 import eventBus from '../../eventBus/eventBus'
 
 export class Performance extends BasePlugin {

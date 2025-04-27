@@ -58,13 +58,13 @@
                 container: "#viewport",
                 plugins: [
                     new EngineKernel.CameraPlugin({ name: "CameraPlugin", path: "/plugins/camera" }),
-                    // new EngineKernel.ResourceReaderPlugin({
-                    //     name: "ResourceReader",
-                    //     path: "/plugins/resource-reader",
-                    //     basePath: "/assets/models",
-                    //     url: "/assets/models",
-                    //     supportedFormats: ["gltf", "fbx"],
-                    // }),
+                    new EngineKernel.ResourceReaderPlugin({
+                        name: "ResourceReader",
+                        path: "/plugins/resource-reader",
+                        basePath: "/assets/models",
+                        url: "/assets/models",
+                        supportedFormats: ["gltf", "fbx"],
+                    }),
                     new EngineKernel.BaseScene({
                         name: "BaseScene",
                         path: "/plugins/scene",

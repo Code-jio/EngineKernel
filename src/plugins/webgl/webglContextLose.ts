@@ -1,7 +1,6 @@
-import BasePlugin from '../basePlugin'
+import { THREE, BasePlugin } from "../basePlugin"
 import eventBus from '../../eventBus/eventBus'
 import WebGPURenderer from "three/examples/jsm/renderers/webgpu/WebGPURenderer";
-import * as THREE from "three";
 
 export class WebGLContextLose extends BasePlugin {
     private renderer: WebGPURenderer;

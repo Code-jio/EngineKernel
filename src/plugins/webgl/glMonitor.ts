@@ -1,6 +1,5 @@
-import BasePlugin from '../basePlugin'
-import eventBus from '../../eventBus/eventBus'
-import * as THREE from "three"
+import { THREE, BasePlugin } from "../basePlugin"
+import eventBus from "../../eventBus/eventBus"
 
 interface GLState {
     programCount: number
@@ -33,7 +32,7 @@ export class GLMonitor extends BasePlugin {
         drawElementsCallCount: 0,
         drawArraysCallCount: 0,
         gpuMemoryUsage: 0,
-        extensionsSupported: { timerQuery: false, memoryInfo: false }
+        extensionsSupported: { timerQuery: false, memoryInfo: false },
     }
 
     private originalMethods: { [key: string]: Function } = {}
@@ -47,13 +46,13 @@ export class GLMonitor extends BasePlugin {
             throw new Error("Invalid WebGLRenderer instance")
         }
         this.renderer = meta.userData.renderer
-        
+
         if (this.renderer instanceof THREE.WebGLRenderer) {
             this.gl = this.renderer.getContext() as WebGL2RenderingContext
             if (!this.gl) {
                 throw new Error("Failed to get WebGL2 context")
             }
-            this.detectExtensions();
+            this.detectExtensions()
         } else {
             throw new Error("GLContextMonitorPlugin requires a WebGL2 renderer")
         }
@@ -64,9 +63,9 @@ export class GLMonitor extends BasePlugin {
 
     private detectExtensions() {
         this.state.extensionsSupported = {
-            timerQuery: !!this.gl.getExtension('EXT_disjoint_timer_query'),
-            memoryInfo: !!this.gl.getExtension('WEBGL_memory_info')
-        };
+            timerQuery: !!this.gl.getExtension("EXT_disjoint_timer_query"),
+            memoryInfo: !!this.gl.getExtension("WEBGL_memory_info"),
+        }
     }
 
     private _getBytesPerPixel(format: number, type: number): number {
@@ -175,9 +174,16 @@ export class GLMonitor extends BasePlugin {
 
         // Proxy texImage2D to estimate GPU memory usage
         this.originalMethods.texImage2D = this.gl.texImage2D
-        this.gl.texImage2D = (target: number, level: number, internalformat: number, format: number, type: number, ...args: any[]) => {
+        this.gl.texImage2D = (
+            target: number,
+            level: number,
+            internalformat: number,
+            format: number,
+            type: number,
+            ...args: any[]
+        ) => {
             const bytesPerPixel = this._getBytesPerPixel(format, type)
-            const source = args.length > 0 ? args[0] : null;
+            const source = args.length > 0 ? args[0] : null
             let memoryUsage = 0
             if (source) {
                 const width = source.width
@@ -185,22 +191,22 @@ export class GLMonitor extends BasePlugin {
                 memoryUsage = width * height * bytesPerPixel
             }
             this.state.gpuMemoryUsage += memoryUsage
-            this.originalMethods.texImage2D.call(
-                this.gl,
-                target,
-                level,
-                internalformat,
-                format,
-                type,
-                ...args,
-            )
+            this.originalMethods.texImage2D.call(this.gl, target, level, internalformat, format, type, ...args)
         }
 
         // Proxy texSubImage2D to update GPU memory usage
         this.originalMethods.texSubImage2D = this.gl.texSubImage2D
-        this.gl.texSubImage2D = (target: number, level: number, xoffset: number, yoffset: number, format: number, type: number, ...args: any[]) => {
+        this.gl.texSubImage2D = (
+            target: number,
+            level: number,
+            xoffset: number,
+            yoffset: number,
+            format: number,
+            type: number,
+            ...args: any[]
+        ) => {
             const bytesPerPixel = this._getBytesPerPixel(format, type)
-            const source = args.length > 0 ? args[0] : null;
+            const source = args.length > 0 ? args[0] : null
             let memoryUsage = 0
             if (source) {
                 const width = source.width
@@ -208,16 +214,7 @@ export class GLMonitor extends BasePlugin {
                 memoryUsage = width * height * bytesPerPixel
             }
             this.state.gpuMemoryUsage += memoryUsage
-            this.originalMethods.texSubImage2D.call(
-                this.gl,
-                target,
-                level,
-                xoffset,
-                yoffset,
-                format,
-                type,
-                ...args,
-            )
+            this.originalMethods.texSubImage2D.call(this.gl, target, level, xoffset, yoffset, format, type, ...args)
         }
     }
 
@@ -244,8 +241,8 @@ export class GLMonitor extends BasePlugin {
         this.state.textureCreationError = false
 
         if (this.state.extensionsSupported.memoryInfo) {
-            const memoryInfo = this.gl.getExtension('WEBGL_memory_info');
-            this.state.gpuMemoryUsage = memoryInfo.getMemoryUsage();
+            const memoryInfo = this.gl.getExtension("WEBGL_memory_info")
+            this.state.gpuMemoryUsage = memoryInfo.getMemoryUsage()
         }
 
         const errorIndicator =

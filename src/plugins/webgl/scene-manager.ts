@@ -1,5 +1,4 @@
-import * as THREE from "three"
-import BasePlugin from '../basePlugin'
+import { THREE, BasePlugin } from "../basePlugin"
 import eventBus from '../../eventBus/eventBus'
 import { GLTF } from "three/examples/jsm/loaders/GLTFLoader" // 导入GLTF类型，用于类型
 

@@ -1,5 +1,4 @@
-import * as THREE from "three"
-import BasePlugin from '../basePlugin'
+import { THREE, BasePlugin } from "../basePlugin"
 import eventBus from '../../eventBus/eventBus'
 
 export class SkyBox extends BasePlugin {
