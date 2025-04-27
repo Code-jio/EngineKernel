@@ -1,37 +1,35 @@
-import { PluginMeta } from '../types/Plugin';
+import { PluginMeta } from "../types/Plugin"
 import * as THREE from "three"
 class BasePlugin {
-    name: string;
-    path: string;
-    strategy: 'sync' | 'async';
-    status: 'unloaded' | 'loaded' | 'error';
-    dependencies: string[];
-    instance: any;
-    exports: any;
-    constructor(meta: PluginMeta) {
-        if (!meta.name || !meta.path) {
-            throw new Error('Plugin metadata must contain name and path');
-        }
+    readonly name: string
+    readonly path: string
+    readonly strategy: "sync" | "async"
+    readonly dependencies: string[]
 
-        // 初始化类型属性
-        this.name = meta.name;
-        this.path = meta.path;
-        this.strategy = meta.strategy || 'sync';
-        this.status = 'unloaded';
-        this.dependencies = meta.dependencies || [];
-        this.instance = null;
+    status: "unloaded" | "loaded" | "error"
+    instance: any
+    exports: any
+
+    constructor(meta: PluginMeta) {
+        // 初始化不可变元数据
+        this.name = meta.name
+        this.path = meta.path
+        this.strategy = meta.strategy || "sync"
+        this.dependencies = meta.dependencies || []
+        // 初始化运行时状态
+        this.status = "unloaded"
     }
 
     // 添加方法参数类型
-    async init(coreInterface: any): Promise<void> { }
+    async init(coreInterface: any): Promise<void> {}
     // 加载
-    async load(): Promise<void> { }
+    async load(): Promise<void> {}
     // 暂停
-    async stop(): Promise<void> { }
+    async stop(): Promise<void> {}
     // 卸载
-    async unload(): Promise<void> { 
-        this.status = 'unloaded';
+    async unload(): Promise<void> {
+        this.status = "unloaded"
     }
 }
 
-export {THREE, BasePlugin};
+export { THREE, BasePlugin }

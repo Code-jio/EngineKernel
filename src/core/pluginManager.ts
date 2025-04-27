@@ -15,7 +15,6 @@ export default class PluginManager implements PluginManagerType {
                 version: string
                 status: "registered" | "loaded" | "initialized" | "activated"
                 dependencies: string[]
-
             }
         }
     >()
@@ -32,23 +31,21 @@ export default class PluginManager implements PluginManagerType {
     }
 
     // 注册插件
-    registerPlugin(pluginMeta: PluginMeta): void {
-        if (this.hasPlugin(pluginMeta.name)) {
-            throw new Error(`Plugin ${pluginMeta.name} already exists`)
+    registerPlugin(plugin: PluginInstance): void {
+        if (this.hasPlugin(plugin.name)) {
+            throw new Error(`Plugin ${plugin.name} already exists`)
         }
 
-        const plugin = new (pluginMeta.pluginClass as any)()
-        this.registry.set(pluginMeta.name, {
+        this.registry.set(plugin.name, {
             instance: plugin,
             metadata: {
-                name: pluginMeta.name,
-                version: pluginMeta.version as string,
-                status: "registered",
-                dependencies: pluginMeta.dependencies ?? [],
-       
+                name: plugin.name,
+                version: plugin.version,
+                status: "registered", // 初始状态为注册
+                dependencies: plugin.dependencies || [], // 依赖项
             },
         })
-        plugin.init(this.coreInterface)
+        // plugin.init(this.coreInterface) // 初始化插件
     }
 
     // 加载插件
@@ -111,6 +108,5 @@ export default class PluginManager implements PluginManagerType {
     // 注销插件
     unregisterPlugin(plugin: PluginInstance): void {
         this.registry.delete(plugin.name)
-
     }
 }

@@ -2,12 +2,13 @@ import { PluginInstance } from "./core";
 // 插件元数据接口 : 
 interface PluginMeta {
     name: string;
-    pluginClass: new () => PluginInstance;
+    pluginClass: new (params:{ [key: string]: any }) => PluginInstance;
     path: string;
     strategy?: 'sync' | 'async';
     dependencies?: string[];
     version?: string;
-    metadata?: {
+    userData?: { [key: string]: any }; // 初始化参数
+    metaData?: {
         author?: string;
         description?: string;
     };

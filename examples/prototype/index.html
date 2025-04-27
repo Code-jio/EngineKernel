@@ -4,7 +4,7 @@
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>EngineKernel 原型验证</title>
-        <link rel="stylesheet" href="./index.css">
+        <link rel="stylesheet" href="./index.css" />
     </head>
     <body>
         <div class="control-panel">
@@ -20,34 +20,51 @@
             const engine = new EngineKernel.Core({
                 container: "#viewport",
                 plugins: [
-                    new EngineKernel.CameraPlugin({ name: "CameraPlugin", path: "/plugins/camera" }),
-                    new EngineKernel.ResourceReaderPlugin({
-                        name: "ResourceReader",
-                        path: "/plugins/resource-reader",
+                    {
+                        name: "CameraPlugin",
+                        path: "/plugins/camera",
+                        pluginClass: EngineKernel.CameraPlugin,
+                        userData: {
+                            cameraConfig: {
+                                type: "perspective",
+                                fov: 45,
+                                near: 0.1,
+                                far: 1000,
+                                position: [0, 0, 5],
+                                lookAt: [0, 0, 0],
+                            },
+                        },
+                    },
+                    {
+                        name: "ResourceReaderPlugin",
+                        path: "/plugins/ResourceReaderPlugin",
                         basePath: "/assets/models",
                         url: "/assets/models",
                         supportedFormats: ["gltf", "fbx"],
-                    }),
-                    EngineKernel.PluginManager,
+                        pluginClass: EngineKernel.ResourceReaderPlugin,
+                        userData: {
+                            
+                        },
+                    },
+                    {
+                        name: "BaseScene",
+                        path: "/plugins/scene",
+                        container: "#viewport",
+                        pluginClass: EngineKernel.BaseScene,
+                        userData: {
+                            cameraConfig: {
+                                type: "perspective",
+                                fov: 45,
+                                near: 0.1,
+                                far: 1000,
+                                position: [0, 0, 5],
+                                lookAt: [0, 0, 0],
+                            },
+                        },
+                    },
                 ],
             })
-
-            const scene = new EngineKernel.BaseScene({
-                name: "BaseScene",
-                path: "/plugins/scene",
-                container: "#viewport",
-                userData: {
-                    cameraConfig: {
-                        type: "perspective",
-                        fov: 45,
-                        near: 0.1,
-                        far: 1000,
-                        position: [0, 0, 5],
-                        lookAt: [0, 0, 0],
-                    },
-                },
-            })
-            engine.registerPlugin(scene)
+            
 
             console.log("EngineKernel 实例:", engine) // 打印 EngineKernel 实例
 

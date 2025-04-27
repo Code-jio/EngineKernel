@@ -19,18 +19,16 @@ interface BasePluginInterface {
 interface PluginInstance extends BasePluginInterface {
     status: string
     exports: Record<string, unknown>
-    interface: Record<string, unknown>
     path: string
     name: string
     version: string
     dependencies: string[]
-    instance:PluginMeta
+    instance: any
     strategy: 'sync' | 'async'
     metadata?: PluginMeta['metadata'];
-    pluginClass: new () => PluginInstance;
+    pluginClass: new (params:{ [key: string]: any }) => PluginInstance;
     initialize(core: CoreType): void
     getExports?(): Record<string, unknown>
-    instance: any;
 }
 
 interface CoreType {

@@ -8,6 +8,7 @@ import type { PluginManagerType } from "../types/pluginManager"
 import PluginManager from "./pluginManager"
 import { PluginMeta, Plugin } from "../types/Plugin"
 import * as THREE from "three"
+import { debug } from "console"
 
 // 定义 Core 类的依赖项接口
 interface CoreDependencies {
@@ -37,13 +38,13 @@ export default class Core implements CoreType {
 
     constructor(dependencies: CoreDependencies) {
         // 为 dependencies 参数添加类型断言，确保可以访问 eventBus 属性
-        this.eventBus = (dependencies as { eventBus?: EventBus }).eventBus || eventBus
-        this.pluginManager = (dependencies as { pluginManager: PluginManagerType }).pluginManager
-
+        this.eventBus = eventBus
+        this.pluginManager = new PluginManager()
         this.loadStrategies = {
             sync: this._loadSync.bind(this),
             async: this._loadAsync.bind(this),
         }
+
         this.performance = {
             metrics: new Map(),
             enable: true,
@@ -57,10 +58,19 @@ export default class Core implements CoreType {
 
         console.log(dependencies, "依赖")
 
-        this._startAsyncInit()
+        this._startAsyncInit(dependencies)
     }
 
-    private async _startAsyncInit() {
+    private async _startAsyncInit(dependencies: CoreDependencies) {
+        if (dependencies.plugins) {
+            for (const pluginMeta of dependencies.plugins) {
+                if (pluginMeta) {
+                    debugger
+                    this.registerPlugin(pluginMeta)
+                }
+            }
+        }
+
         await this.init()
     }
 
@@ -68,7 +78,7 @@ export default class Core implements CoreType {
         console.log("Core initialized", this)
         await this.loadCoreServices()
         await this.initializePlugins()
-        this.eventBus.emit("init-complete", { e: "123" })
+        this.eventBus.emit("init-complete")
     }
 
     private async loadCoreServices() {
@@ -88,28 +98,31 @@ export default class Core implements CoreType {
         this.eventBus.emit("beforePluginRegister", pluginMeta)
 
         if (this.pluginManager.hasPlugin(pluginMeta.name)) {
-            const error = new Error(`Plugin ${pluginMeta.name} already registered`)
-            this.eventBus.emit("registrationError", { meta: pluginMeta, error })
+            const error = new Error(`插件 ${pluginMeta.name} 已经注册了`)
+            this.eventBus.emit("插件注册出错", { meta: pluginMeta, error })
             throw error
         }
-        console.log(this.pluginManager, "123")
-
         try {
-            const plugin: PluginInstance = {
+            // 强制校验插件类定义
+            if (!pluginMeta.pluginClass) {
+                console.error("插件类未定义")
+            }
+            if (typeof pluginMeta.pluginClass !== "function") {
+                console.error(`插件类必须是一个构造函数。收到的类型: ${typeof pluginMeta.pluginClass}`)
+            }
+            if (!(pluginMeta.pluginClass.prototype instanceof BasePlugin)) {
+                console.error("插件类必须继承自BasePlugin")
+            }
+
+            const plugin: PluginInstance = new pluginMeta.pluginClass({
                 name: pluginMeta.name,
                 path: pluginMeta.path,
                 dependencies: pluginMeta.dependencies || [],
                 strategy: pluginMeta.strategy || "sync",
-                pluginClass: pluginMeta.pluginClass || null,
-                status: Core.STATUS.REGISTERED,
-                exports: {},
-                instance: pluginMeta,
-                version: pluginMeta.version || "1.0.0",
-                initialize: () => void 0,
-                start: () => Promise.resolve(),
-                stop: () => void 0,
-                interface: {} as Record<string, any>,
-            }
+                userData: pluginMeta.userData,
+            })
+            plugin.status = Core.STATUS.REGISTERED
+
             this.pluginManager.registerPlugin(plugin)
             // 添加带校验的注册事件
             this.eventBus.emit("pluginRegistered", {
@@ -121,7 +134,7 @@ export default class Core implements CoreType {
             return true
         } catch (error) {
             this.eventBus.emit("registrationError", { meta: pluginMeta, error })
-            throw new Error(`Plugin registration failed: ${(error as Error).message}`)
+            console.error("Plugin registration failed", { meta: pluginMeta, error })
         }
     }
 
@@ -129,12 +142,14 @@ export default class Core implements CoreType {
     async loadPlugin(pluginName: string) {
         const plugin = this.pluginManager.getPlugin(pluginName)
         if (!plugin) {
-            throw new Error(`Plugin ${pluginName} not found`)
+            // throw new Error(`Plugin ${pluginName} not found`)
+            console.error(`插件 ${pluginName} 未找到`)
+            return false
         }
         plugin.status = Core.STATUS.LOADING
 
         if (!plugin) {
-            const error = new Error(`Plugin ${pluginName} not registered`)
+            const error = new Error(`插件 ${pluginName} 未注册`)
             this.eventBus.emit("loadError", { pluginName, error })
             throw error
         }
@@ -147,7 +162,7 @@ export default class Core implements CoreType {
             const module = await import(/* webpackIgnore: true */ plugin.path)
             plugin.instance = module.default ? new module.default(this) : module
             plugin.exports = plugin.exports || {}
-            plugin.interface = this._createPluginInterfaceProxy(plugin)
+            // plugin.interface = this._createPluginInterfaceProxy(plugin) // 创建插件接口代理
 
             // 添加加载前事件
             this.eventBus.emit("beforePluginLoad", pluginName)
@@ -203,10 +218,10 @@ export default class Core implements CoreType {
     async _loadSync(plugin: PluginInstance) {
         return this._withPerfMonitoring("loadSync", async () => {
             if (!validatePlugin(plugin as PluginMeta)) {
-                throw new Error("Invalid plugin")
+                console.error("Invalid plugin", { plugin })
             }
             if (!isValidPath(plugin.path)) {
-                throw new Error("Invalid plugin path")
+                console.error("Invalid plugin path", { plugin })
             }
             const module = await import(/* webpackIgnore: true */ plugin.path)
             plugin.instance = module.default ? new module.default(this) : module
@@ -217,10 +232,10 @@ export default class Core implements CoreType {
     // 异步加载策略
     async _loadAsync(plugin: PluginInstance): Promise<void> {
         if (!validatePlugin(plugin as PluginMeta)) {
-            throw new Error("Invalid plugin")
+            console.error("Invalid plugin", { plugin })
         }
         if (!isValidPath(plugin.path)) {
-            throw new Error("Invalid plugin path")
+            console.error("Invalid plugin path", { plugin })
         }
         return new Promise((resolve, reject) => {
             const script = document.createElement("script") as HTMLScriptElement
@@ -372,7 +387,7 @@ export default class Core implements CoreType {
     // 获取组件
     getComponent(name: string) {
         if (!this.components.has(name)) {
-            throw new Error(`Component ${name} not registered`)
+            console.warn(`Component ${name} not found`)
         }
         return this.components.get(name)
     }
