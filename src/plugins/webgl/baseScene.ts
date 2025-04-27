@@ -1,20 +1,17 @@
-import { PerspectiveCamera, Scene, OrthographicCamera } from "three"
+import * as THREE from "three"
 import BasePlugin from "../basePlugin"
 import eventBus from "../../eventBus/eventBus"
-import * as THREE from "three"
 import { PipelineManager } from "../../core/pipelineManager"
 
 export class BaseScene extends BasePlugin {
-    camera: PerspectiveCamera // 默认透视相机
+    private camera: THREE.PerspectiveCamera | THREE.OrthographicCamera // 默认透视相机
     private aspectRatio = window.innerWidth / window.innerHeight
-    private cameraType: "perspective" | "orthographic" = "perspective"
-    private scene: Scene
+    private scene: THREE.Scene
     private ambientLight: THREE.AmbientLight
     private renderer: THREE.WebGLRenderer
     private pipelineManager: PipelineManager
 
     constructor(meta: any) {
-        console.log("meta", meta)
         super(meta)
         const cameraOption = meta.userData.cameraConfig || {
             type: "perspective",
@@ -25,11 +22,23 @@ export class BaseScene extends BasePlugin {
             position: [0, 0, 5],
         }
 
-        this.camera = new PerspectiveCamera(cameraOption.fov, this.aspectRatio, cameraOption.near, cameraOption.far)
-        this.camera.position.set(...(cameraOption.position as [number, number, number]))
-        this.camera.lookAt(...(cameraOption.lookAt as [number, number, number]))
+        if (cameraOption.type == "perspective") {
+            this.camera = new THREE.PerspectiveCamera(cameraOption.fov, this.aspectRatio, cameraOption.near, cameraOption.far)
+            this.camera.position.set(...(cameraOption.position as [number, number, number]))
+            this.camera.lookAt(...(cameraOption.lookAt as [number, number, number]))
+        } else {
+            this.camera = new THREE.OrthographicCamera(
+                window.innerWidth / -2, 
+                window.innerWidth / 2, 
+                window.innerHeight / 2, 
+                window.innerHeight / -2, 
+                1, 
+                1000
+            )
+            this.camera.updateProjectionMatrix()
+        }
 
-        this.scene = new Scene()
+        this.scene = new THREE.Scene()
         this.scene.background = new THREE.Color(meta.userData.backgroundColor || 0xffffff)
 
         this.ambientLight = new THREE.AmbientLight(0x404040)
@@ -64,9 +73,11 @@ export class BaseScene extends BasePlugin {
     }
 
     handleResize() {
-        this.camera.aspect = window.innerWidth / window.innerHeight
-        this.camera.updateProjectionMatrix()
-        this.renderer.setSize(window.innerWidth, window.innerHeight)
+        if (this.camera instanceof THREE.PerspectiveCamera) {
+            this.camera.aspect = window.innerWidth / window.innerHeight
+            this.camera.updateProjectionMatrix()
+            this.renderer.setSize(window.innerWidth, window.innerHeight)
+        }  
     }
 
     destroy() {

@@ -1,5 +1,4 @@
 import * as THREE from "three"
-import Stats from "three/examples/jsm/libs/stats.module"
 import BasePlugin from '../basePlugin'
 import eventBus from '../../eventBus/eventBus'
 
@@ -23,6 +22,7 @@ export class AnimationControls extends BasePlugin {
         this.duration = meta.userData.duration
         this.tracks = meta.userData.tracks
         this.clock = new THREE.Clock()
+        this.isPlaying = false
 
         this.mixer = new THREE.AnimationMixer(this.localRoot)
         this.clip = new THREE.AnimationClip(this.animationName, this.duration, this.tracks)
