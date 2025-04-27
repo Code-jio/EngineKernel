@@ -65,7 +65,6 @@ export default class Core implements CoreType {
         if (dependencies.plugins) {
             for (const pluginMeta of dependencies.plugins) {
                 if (pluginMeta) {
-                    debugger
                     this.registerPlugin(pluginMeta)
                 }
             }
@@ -134,7 +133,7 @@ export default class Core implements CoreType {
             return true
         } catch (error) {
             this.eventBus.emit("registrationError", { meta: pluginMeta, error })
-            console.error("Plugin registration failed", { meta: pluginMeta, error })
+            console.error("插件注册失败", { meta: pluginMeta, error })
         }
     }
 
@@ -218,10 +217,10 @@ export default class Core implements CoreType {
     async _loadSync(plugin: PluginInstance) {
         return this._withPerfMonitoring("loadSync", async () => {
             if (!validatePlugin(plugin as PluginMeta)) {
-                console.error("Invalid plugin", { plugin })
+                console.error("非法插件", { plugin })
             }
             if (!isValidPath(plugin.path)) {
-                console.error("Invalid plugin path", { plugin })
+                console.error("不正确的插件路径", { plugin })
             }
             const module = await import(/* webpackIgnore: true */ plugin.path)
             plugin.instance = module.default ? new module.default(this) : module
@@ -232,10 +231,10 @@ export default class Core implements CoreType {
     // 异步加载策略
     async _loadAsync(plugin: PluginInstance): Promise<void> {
         if (!validatePlugin(plugin as PluginMeta)) {
-            console.error("Invalid plugin", { plugin })
+            console.error("非法插件", { plugin })
         }
         if (!isValidPath(plugin.path)) {
-            console.error("Invalid plugin path", { plugin })
+            console.error("不正确的插件路径", { plugin })
         }
         return new Promise((resolve, reject) => {
             const script = document.createElement("script") as HTMLScriptElement
@@ -273,7 +272,7 @@ export default class Core implements CoreType {
                     return (serviceName: string) => {
                         // 安全访问其他插件服务
                         if (!this._isServiceAllowed(plugin.name, serviceName)) {
-                            throw new Error(`Access to ${serviceName} is forbidden`)
+                            throw new Error(`不允许访问 ${serviceName}`) // 被禁止访问
                         }
                         return this.components.get(serviceName)
                     }

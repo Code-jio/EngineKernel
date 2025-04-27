@@ -9,7 +9,8 @@ export class BaseScene extends BasePlugin {
     private ambientLight: THREE.AmbientLight
     private renderer: THREE.WebGLRenderer
     private pipelineManager: PipelineManager
-
+    private directionalLight: THREE.DirectionalLight
+    
     constructor(meta: any) {
         super(meta)
         const cameraOption = meta.userData.cameraConfig || {
@@ -19,6 +20,30 @@ export class BaseScene extends BasePlugin {
             far: 100000,
             lookAt: [0, 0, 0],
             position: [0, 0, 5],
+        }
+
+        const rendererOption = meta.userData.rendererConfig || {
+            container: document.querySelector("#container") as HTMLCanvasElement || null,
+            backgroundColor: 0xffffff,
+            antialias: true,
+            alpha: true,
+            precision: "highp",
+            powerPreference: "high-performance",
+        }
+
+        if (!rendererOption.container) {
+            const canvas = document.createElement('canvas');
+            canvas.id = 'container';
+            document.body.appendChild(canvas);
+            rendererOption.container = canvas;
+
+            // 全屏显示
+            canvas.style.width = '100%';
+            canvas.style.height = '100%';
+            canvas.style.position = 'fixed';
+            canvas.style.top = '0';
+            canvas.style.left = '0';
+            canvas.style.zIndex = '-1';
         }
 
         if (cameraOption.type == "perspective") {
@@ -38,15 +63,24 @@ export class BaseScene extends BasePlugin {
         }
 
         this.scene = new THREE.Scene()
-        this.scene.background = new THREE.Color(meta.userData.backgroundColor || 0xffffff)
 
-        this.ambientLight = new THREE.AmbientLight(0x404040)
+
+        
+        this.ambientLight = new THREE.AmbientLight(0xffffff, 0.7) // 环境光(颜色, 强度) 不影响阴影(自发光)
+        this.directionalLight = new THREE.DirectionalLight(0xffffff, 1) // 平行光(颜色, 强度) 影响阴影(自发光)
+        this.directionalLight.position.set(1000, 1000, 1000) // 设置平行光位置
+
+        this.scene.add(this.directionalLight)
+
+
+        this.scene.add(this.ambientLight)
+        
         this.renderer = new THREE.WebGLRenderer({
-            canvas: meta.userData.canvasDom,
-            antialias: true,
-            // alpha: true,
-            precision: "highp",
-            powerPreference: "high-performance",
+            canvas: rendererOption.container, // 渲染器的容器
+            antialias: rendererOption.antialias, // 抗锯齿
+            alpha: rendererOption.alpha || false, // 透明
+            precision: rendererOption.precision, // 精度
+            powerPreference: rendererOption.powerPreference, // 性能
         })
 
         // 将renderer实例存入meta供其他插件使用
@@ -68,7 +102,11 @@ export class BaseScene extends BasePlugin {
         this.renderer.setPixelRatio(window.devicePixelRatio) // 设置设备像素比 作用：防止高分屏下模糊
         this.renderer.setSize(window.innerWidth, window.innerHeight) // 设置渲染器尺寸
         window.addEventListener("resize", this.handleResize.bind(this))
+
         eventBus.emit("scene-ready", { scene: this.scene, camera: this.camera })
+        eventBus.on("update", () => {
+            this.renderer.render(this.scene, this.camera) // 渲染场景
+        })
     }
 
     handleResize() {
@@ -87,4 +125,6 @@ export class BaseScene extends BasePlugin {
         this.pipelineManager.destroy()
         // super.destroy()
     }
+
+    update(){ }
 }

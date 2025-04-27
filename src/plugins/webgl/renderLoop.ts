@@ -7,7 +7,7 @@ export class RenderLoop extends BasePlugin {
     private animationID: number
 
     constructor(meta: any) {
-        super(meta)
+        super(meta) 
         this.taskList = []
         this.clock = new THREE.Clock()
         this.animationID = 0
@@ -16,10 +16,6 @@ export class RenderLoop extends BasePlugin {
     initialize() {
         const render = () => {
             eventBus.emit("update") // 触发更新事件
-            // // 执行任务
-            // this.taskList.forEach((task) => { 
-            //     task()
-            // })
             this.animationID = requestAnimationFrame(render); // 需要持续循环
         };
         this.animationID = requestAnimationFrame(render);
