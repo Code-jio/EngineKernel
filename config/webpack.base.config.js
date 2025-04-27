@@ -42,7 +42,7 @@ export default {
     resolve: {
         extensions: [".js", ".ts"],
         alias: {
-            "@": path.resolve(__dirname, "../src"),
+            '@': path.resolve(__dirname, '../src').replace(/\\/g, '/') // 统一POSIX路径格式
         },
         fallback: {
             vm: require.resolve("vm-browserify"),

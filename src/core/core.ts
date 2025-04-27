@@ -1,6 +1,3 @@
-// 假设 eventBus 位于项目根目录下的 eventBus 文件夹，可尝试使用相对路径引入
-// 如果 eventBus 确实存在，需要确保路径正确，或者在 tsconfig.json 中配置路径别名
-// 这里暂时使用相对路径示例，你需要根据实际项目结构调整
 import eventBus from "../eventBus/eventBus"
 import { BasePlugin } from "../plugins/basePlugin"
 import { isValidPath } from "../utils/pathUtils"
@@ -16,7 +13,7 @@ import * as THREE from "three"
 interface CoreDependencies {
     eventBus?: EventBus
     pluginManager?: PluginManagerType
-    plugins?:[]
+    plugins?: []
 }
 
 export default class Core implements CoreType {
@@ -61,22 +58,35 @@ export default class Core implements CoreType {
         // 初始化场景
         this.scene = new THREE.Scene() as THREE.Scene & { skybox?: THREE.Mesh }
 
-        console.log(dependencies,"依赖")
+        console.log(dependencies, "依赖")
 
-        dependencies.plugins?.forEach((plugin)=>{
-            // this.pluginManager.loadPlugin(plugin)
+        dependencies.plugins?.forEach(async plugin => {
+            await this.pluginManager.loadPlugin(plugin)
         })
-        this.init()
+        this._startAsyncInit()
     }
-    
-    init(){
-        this.eventBus.emit("init-complete") // 初始化事件
+
+    private async _startAsyncInit() {
+        await this.init()
+    }
+
+    private async init() {
+        console.log("Core initialized", this)
+        await this.loadCoreServices()
+        await this.initializePlugins()
+        this.eventBus.emit("init-complete", { e: "123" })
+    }
+
+    private async loadCoreServices() {
+        // 核心服务加载逻辑
+    }
+
+    private async initializePlugins() {
+        // 插件初始化逻辑
     }
 
     getPlugin(name: string): PluginInstance | undefined {
-        // throw new Error("Method not implemented.")
-
-        return 
+        return this.pluginRegistry.get(name)
     }
 
     // 注册
@@ -88,19 +98,18 @@ export default class Core implements CoreType {
             this.eventBus.emit("registrationError", { meta: pluginMeta, error })
             throw error
         }
-        console.log(this.pluginRegistry,"123")
+        console.log(this.pluginRegistry, "123")
 
         try {
             const plugin: PluginInstance = {
                 name: pluginMeta.name,
                 path: pluginMeta.path,
                 dependencies: pluginMeta.dependencies || [],
-                strategy: pluginMeta.strategy || 'sync',
+                strategy: pluginMeta.strategy || "sync",
                 pluginClass: pluginMeta.pluginClass || null,
-                pluginMeta: pluginMeta,
                 status: Core.STATUS.REGISTERED,
                 exports: {},
-                instance: null,
+                instance: pluginMeta,
                 version: pluginMeta.version || "1.0.0",
                 initialize: () => void 0,
                 start: () => Promise.resolve(),
@@ -113,13 +122,13 @@ export default class Core implements CoreType {
                 name: plugin.name,
                 version: pluginMeta.version,
                 dependencies: plugin.dependencies,
+                instaance:plugin
             })
             return true
         } catch (error) {
             this.eventBus.emit("registrationError", { meta: pluginMeta, error })
             throw new Error(`Plugin registration failed: ${(error as Error).message}`)
         }
-
     }
 
     // 加载
@@ -207,7 +216,7 @@ export default class Core implements CoreType {
             }
             const module = await import(/* webpackIgnore: true */ plugin.path)
             plugin.instance = module.default ? new module.default(this) : module
-            plugin.instance.initialize?.()
+            // plugin.instance.initialize?.() // 初始化插件
         })()
     }
 
@@ -224,7 +233,7 @@ export default class Core implements CoreType {
             script.src = plugin.path
             script.onload = () => {
                 plugin.instance = (window as unknown as { [key: string]: any })[plugin.name]
-                plugin.instance?.initialize?.(this)
+                // plugin.instance?.initialize?.(this)
                 resolve()
             }
             script.onerror = (e: Event | string) => {
@@ -236,9 +245,9 @@ export default class Core implements CoreType {
 
     // 卸载插件实例
     _unload(plugin: PluginInstance) {
-        plugin.instance?.uninstall?.()
-        plugin.instance = null
-        plugin.status = Core.STATUS.UNLOADING
+        // plugin.instance?.uninstall?.()
+        // plugin.instance = null
+        // plugin.status = Core.STATUS.UNLOADING
     }
 
     // 创建插件接口代理
@@ -354,7 +363,9 @@ export default class Core implements CoreType {
             },
         })
 
-        this.pluginRegistry.get(pluginName)?.instance.setGLContext?.(proxy as unknown as WebGL2RenderingContext & typeof gl)
+        // this.pluginRegistry
+        //     .get(pluginName)
+        //     ?.instance.setGLContext?.(proxy as unknown as WebGL2RenderingContext & typeof gl) // 设置代理上下文
     }
 
     _trackGLResource(pluginName: string, type: keyof WebGL2RenderingContext, resource: any) {

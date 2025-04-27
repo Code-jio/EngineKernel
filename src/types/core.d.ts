@@ -24,7 +24,7 @@ interface PluginInstance extends BasePluginInterface {
     name: string
     version: string
     dependencies: string[]
-    pluginMeta: PluginMeta
+    instance:PluginMeta
     strategy: 'sync' | 'async'
     metadata?: PluginMeta['metadata'];
     pluginClass: new () => PluginInstance;

@@ -65,52 +65,50 @@
                         url: "/assets/models",
                         supportedFormats: ["gltf", "fbx"],
                     }),
-                    new EngineKernel.BaseScene({
-                        name: "BaseScene",
-                        path: "/plugins/scene",
-                        container: "#viewport",
-                        userData: {
-                            cameraConfig: {
-                                type: "perspective",
-                                fov: 45,
-                                near: 0.1,
-                                far: 1000,
-                                position: [0, 0, 5],
-                                lookAt: [0, 0, 0],
-                            },
-                        },
-                    }),
-                    // new EngineKernel.PluginManager()
                 ],
             })
+
+            const scene = new EngineKernel.BaseScene({
+                name: "BaseScene",
+                path: "/plugins/scene",
+                container: "#viewport",
+                userData: {
+                    cameraConfig: {
+                        type: "perspective",
+                        fov: 45,
+                        near: 0.1,
+                        far: 1000,
+                        position: [0, 0, 5],
+                        lookAt: [0, 0, 0],
+                    },
+                },
+            })
+            engine.registerPlugin(scene)
 
             console.log("EngineKernel 实例:", engine) // 打印 EngineKernel 实例
 
             engine.eventBus.on("init-complete", () => {
-                console.log("引擎初始化完成")
-                const glMonitor = new EngineKernel.GLMonitor({
-                    name: "GLMonitor",
-                    path: "/plugins/gl-monitor",
-                    userData: {
-                        renderer: engine.getPlugin('BaseScene').renderer
-                    },
-                    displayElement: "#fpsCounter",
-                    updateInterval: 1000,
-                })
-                debugger
-                engine.registerPlugin("GLMonitor")
-            })
+                console.log("场景初始化完成，当前场景对象:", engine.getPlugin("BaseScene"))
 
-            engine.eventBus.on("scene-ready", () => {
-                console.log("场景初始化完成，当前场景对象:", engine.getService("SceneService").currentScene)
+                console.log("场景初始化完成，当前场景对象:", engine.getPlugin("BaseScene").currentScene)
+                // const glMonitor = new EngineKernel.GLMonitor({
+                //     name: "GLMonitor",
+                //     path: "/plugins/gl-monitor",
+                //     userData: {
+                //         renderer: engine.getPlugin('BaseScene').renderer
+                //     },
+                //     displayElement: "#fpsCounter",
+                //     updateInterval: 1000,
+                // })
+                // engine.registerPlugin(glMonitor)
             })
 
             // 相机切换控制
             document.getElementById("switchPerspective").onclick = () => {
-                engine.getService("CameraService").switchType("perspective")
+                engine.getPlugin("CameraService").switchType("perspective")
             }
             document.getElementById("switchOrtho").onclick = () => {
-                engine.getService("CameraService").switchType("orthographic")
+                engine.getPlugin("CameraService").switchType("orthographic")
             }
         </script>
     </body>

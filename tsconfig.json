@@ -14,8 +14,8 @@
     "baseUrl": "src"
   },
   "paths": {
-    "@/*": ["src/*"],
-    "@/types/*": ["src/types/*"],
+    "@/core/*": ["./src/core/*"],
+    "@/*": ["./src/*"], // 补全相对路径基准点
     "three": ["node_modules/three/src/Three"]
   }
 }
