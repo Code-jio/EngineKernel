@@ -12,7 +12,7 @@ import * as THREE from "three"
 // 定义 Core 类的依赖项接口
 interface CoreDependencies {
     eventBus?: EventBus
-    pluginManager?: PluginManagerType
+    pluginManager: PluginManagerType
     plugins?: []
 }
 
@@ -24,7 +24,6 @@ export default class Core implements CoreType {
         ERROR: "error",
         UNLOADING: "unloading",
     }
-    pluginRegistry: Map<string, PluginInstance>
     eventBus: EventBus
     pluginManager: PluginManagerType
     loadStrategies: { [key: string]: (plugin: PluginInstance) => Promise<void> }
@@ -36,12 +35,10 @@ export default class Core implements CoreType {
     gpuManager: any
     scene: THREE.Scene & { skybox?: THREE.Mesh }
 
-    constructor(dependencies: Partial<CoreDependencies> = {}) {
-        this.pluginRegistry = new Map() // 插件注册表
+    constructor(dependencies: CoreDependencies) {
         // 为 dependencies 参数添加类型断言，确保可以访问 eventBus 属性
         this.eventBus = (dependencies as { eventBus?: EventBus }).eventBus || eventBus
-        this.pluginManager =
-            (dependencies as { pluginManager?: PluginManagerType }).pluginManager || new PluginManager(this)
+        this.pluginManager = (dependencies as { pluginManager: PluginManagerType }).pluginManager
 
         this.loadStrategies = {
             sync: this._loadSync.bind(this),
@@ -60,9 +57,6 @@ export default class Core implements CoreType {
 
         console.log(dependencies, "依赖")
 
-        dependencies.plugins?.forEach(async plugin => {
-            await this.pluginManager.loadPlugin(plugin)
-        })
         this._startAsyncInit()
     }
 
@@ -86,19 +80,19 @@ export default class Core implements CoreType {
     }
 
     getPlugin(name: string): PluginInstance | undefined {
-        return this.pluginRegistry.get(name)
+        return this.pluginManager.getPlugin(name)
     }
 
     // 注册
     registerPlugin(pluginMeta: PluginMeta) {
         this.eventBus.emit("beforePluginRegister", pluginMeta)
 
-        if (this.pluginRegistry.has(pluginMeta.name)) {
+        if (this.pluginManager.hasPlugin(pluginMeta.name)) {
             const error = new Error(`Plugin ${pluginMeta.name} already registered`)
             this.eventBus.emit("registrationError", { meta: pluginMeta, error })
             throw error
         }
-        console.log(this.pluginRegistry, "123")
+        console.log(this.pluginManager, "123")
 
         try {
             const plugin: PluginInstance = {
@@ -116,13 +110,13 @@ export default class Core implements CoreType {
                 stop: () => void 0,
                 interface: {} as Record<string, any>,
             }
-            this.pluginRegistry.set(plugin.name, plugin)
+            this.pluginManager.registerPlugin(plugin)
             // 添加带校验的注册事件
             this.eventBus.emit("pluginRegistered", {
                 name: plugin.name,
                 version: pluginMeta.version,
                 dependencies: plugin.dependencies,
-                instaance:plugin
+                instaance: plugin,
             })
             return true
         } catch (error) {
@@ -133,7 +127,7 @@ export default class Core implements CoreType {
 
     // 加载
     async loadPlugin(pluginName: string) {
-        const plugin = this.pluginRegistry.get(pluginName) as PluginInstance
+        const plugin = this.pluginManager.getPlugin(pluginName)
         if (!plugin) {
             throw new Error(`Plugin ${pluginName} not found`)
         }
@@ -183,7 +177,7 @@ export default class Core implements CoreType {
         // 添加前置检查事件
         this.eventBus.emit("beforePluginUnregister", plugin.name)
 
-        if (!this.pluginRegistry.has(plugin.name)) {
+        if (!this.pluginManager.hasPlugin(plugin.name)) {
             this.eventBus.emit("unregisterWarning", `Attempt to unregister non-existent plugin: ${plugin.name}`)
             return false
         }
@@ -193,7 +187,7 @@ export default class Core implements CoreType {
             this.eventBus.emit("beforePluginUnload", plugin)
             this._unload(plugin)
 
-            this.pluginRegistry.delete(plugin.name)
+            this.pluginManager.unregisterPlugin(plugin)
             this.eventBus.emit("pluginUnregistered", {
                 name: plugin.name,
                 timestamp: Date.now(),
@@ -282,7 +276,7 @@ export default class Core implements CoreType {
 
     // 回滚
     _rollbackPluginLoad(plugin: PluginInstance) {
-        this.pluginRegistry.delete(plugin.name)
+        this.pluginManager.unregisterPlugin(plugin)
     }
 
     // 装饰器

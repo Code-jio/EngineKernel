@@ -34,7 +34,6 @@ interface PluginInstance extends BasePluginInterface {
 }
 
 interface CoreType {
-    pluginRegistry: Map<string, PluginInstance>
     eventBus: EventBus
     pluginManager: PluginManagerType
     loadStrategies: { [key: string]: (plugin: PluginInstance) => Promise<void> }
@@ -43,7 +42,7 @@ interface CoreType {
         metrics: Map<string, { startTime: number; endTime: number }>
         enable: boolean
     }
-    components: any;
+    components: Map<string, any>
     _servicePermissions: any;
     scene: Scene & {
         skybox?: THREE.Mesh;

@@ -6,7 +6,6 @@ import { validateGLParams, validateShader } from "../utils/glValidator"
 
 // 插件管理器
 export default class PluginManager implements PluginManagerType {
-    static instance: PluginManager // 单例
     private registry = new Map<
         string,
         {
@@ -14,8 +13,9 @@ export default class PluginManager implements PluginManagerType {
             metadata: {
                 name: string
                 version: string
-                status: "registered" | "running" | "stopped"
+                status: "registered" | "loaded" | "initialized" | "activated"
                 dependencies: string[]
+
             }
         }
     >()
@@ -23,7 +23,7 @@ export default class PluginManager implements PluginManagerType {
     private coreInterface: any
     // private coreInstance: CoreType
 
-    constructor(core?: CoreType) {
+    constructor() {
         // 事件总线
         this.eventBus = eventBus
 
@@ -31,15 +31,12 @@ export default class PluginManager implements PluginManagerType {
         this.coreInterface = {}
     }
 
-    static getInstance(core?: CoreType) {
-        if (!PluginManager.instance) {
-            PluginManager.instance = new PluginManager(core)
-        }
-        return PluginManager.instance
-    }
-
     // 注册插件
     registerPlugin(pluginMeta: PluginMeta): void {
+        if (this.hasPlugin(pluginMeta.name)) {
+            throw new Error(`Plugin ${pluginMeta.name} already exists`)
+        }
+
         const plugin = new (pluginMeta.pluginClass as any)()
         this.registry.set(pluginMeta.name, {
             instance: plugin,
@@ -48,6 +45,7 @@ export default class PluginManager implements PluginManagerType {
                 version: pluginMeta.version as string,
                 status: "registered",
                 dependencies: pluginMeta.dependencies ?? [],
+       
             },
         })
         plugin.init(this.coreInterface)
@@ -61,13 +59,13 @@ export default class PluginManager implements PluginManagerType {
             throw new Error(`Plugin ${name} not found`)
         }
 
-        if (plugin.metadata.status === "running") {
-            console.warn(`Plugin ${name} is already running`)
+        if (plugin.metadata.status === "activated") {
+            console.warn(`Plugin ${name} is already activated`)
             return
         }
 
         await plugin.instance.start()
-        plugin.metadata.status = "running"
+        plugin.metadata.status = "activated"
     }
 
     // 卸载插件
@@ -78,13 +76,13 @@ export default class PluginManager implements PluginManagerType {
             throw new Error(`Plugin ${name} not found`)
         }
 
-        if (plugin.metadata.status !== "running") {
-            console.warn(`Plugin ${name} is not running`)
+        if (plugin.metadata.status !== "activated") {
+            console.warn(`Plugin ${name} is not activated`)
             return
         }
 
         plugin.instance.stop()
-        plugin.metadata.status = "stopped"
+        plugin.metadata.status = "registered"
     }
 
     // 获取插件实例
@@ -101,11 +99,18 @@ export default class PluginManager implements PluginManagerType {
     // 启动所有插件
     async startAll() {
         for (const [name, { instance }] of Array.from(this.registry.entries())) {
-            await instance.start()
-            const plugin = this.registry.get(name)
-            if (plugin) {
-                plugin.metadata.status = "running"
-            }
+            await this.loadPlugin(name)
         }
+    }
+
+    // 检查插件是否存在
+    hasPlugin(name: string): boolean {
+        return this.registry.has(name)
+    }
+
+    // 注销插件
+    unregisterPlugin(plugin: PluginInstance): void {
+        this.registry.delete(plugin.name)
+
     }
 }
