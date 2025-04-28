@@ -42,9 +42,7 @@ interface CoreType {
     }
     components: Map<string, any>
     _servicePermissions: any;
-    scene: Scene & {
-        skybox?: THREE.Mesh;
-    }
+
     registerPlugin(pluginMeta: PluginMeta): void
     unregisterPlugin(plugin: PluginInstance): void
     getPlugin(name: string): PluginInstance | undefined
