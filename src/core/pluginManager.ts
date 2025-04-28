@@ -1,5 +1,4 @@
-import eventBus from "../eventBus/eventBus"
-import type { PluginInstance, CoreType, EventBus } from "../types/core"
+import type { PluginInstance } from "../types/core"
 import type { PluginMeta } from "../types/Plugin"
 import type { PluginManagerType } from "../types/pluginManager"
 import { validateGLParams, validateShader } from "../utils/glValidator"
@@ -18,17 +17,7 @@ export default class PluginManager implements PluginManagerType {
             }
         }
     >()
-    private eventBus: EventBus
-    private coreInterface: any
-    // private coreInstance: CoreType
-
-    constructor() {
-        // 事件总线
-        this.eventBus = eventBus
-
-        // 核心接口
-        this.coreInterface = {}
-    }
+    constructor() {}
 
     // 注册插件
     registerPlugin(plugin: PluginInstance): void {
@@ -45,7 +34,6 @@ export default class PluginManager implements PluginManagerType {
                 dependencies: plugin.dependencies || [], // 依赖项
             },
         })
-        // plugin.init(this.coreInterface) // 初始化插件
     }
 
     // 加载插件

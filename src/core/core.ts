@@ -33,7 +33,6 @@ export default class Core implements CoreType {
     // scene: THREE.Scene & { skybox?: THREE.Mesh }
 
     constructor(InitParams: InitParams) {
-        // 为 dependencies 参数添加类型断言，确保可以访问 eventBus 属性
         this.eventBus = eventBus
         this.pluginManager = new PluginManager()
         this.loadStrategies = {

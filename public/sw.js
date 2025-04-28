@@ -2,11 +2,12 @@
 const CACHE_NAME = "engine-assets-v2"
 const CACHE_POLICY = {
     networkFirst: ["/api/"],
-    // cacheFirst: [
-    //     "/static/",
-    //     ({ url }) => url.pathname.includes("/runtime-assets/"),
-    //     url => /\/(models|map|skybox)\/.*\.(glb|gltf|fbx|obj|jpg|jpeg|png|webp|hdr)$/i,
-    // ],
+    cacheFirst: [
+        "/static/",
+        "/model",
+        ({ url }) => url.pathname.includes("/runtime-assets/"),
+        url => /\/(models|map|skybox)\/.*\.(glb|gltf|fbx|obj|jpg|jpeg|png|webp|hdr)$/i,
+    ],
     staleWhileRevalidate: [({ url }) => url.pathname.startsWith("/api/")],
 }
 

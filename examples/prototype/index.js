@@ -66,10 +66,6 @@ const engine = new EngineKernel.Core({
     userData: {},
 })
 
-console.log("EngineKernel 实例:", engine) // 打印 EngineKernel 实例
-console.log("场景初始化完成，当前场景对象:", engine.getPlugin("BaseScene"))
-
-
 let baseScene = engine.getPlugin("BaseScene")
 
 engine.registerPlugin({
