@@ -98,7 +98,7 @@ export default class Core implements CoreType {
 
         if (this.pluginManager.hasPlugin(pluginMeta.name)) {
             const error = new Error(`插件 ${pluginMeta.name} 已经注册了`)
-            this.eventBus.emit("插件注册出错", { meta: pluginMeta, error })
+            this.eventBus.emit("PluginRegisterError", { meta: pluginMeta, error })
             throw error
         }
         try {
