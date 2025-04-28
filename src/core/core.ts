@@ -7,14 +7,12 @@ import { CoreType, EventBus, PluginInstance } from "../types/core"
 import type { PluginManagerType } from "../types/pluginManager"
 import PluginManager from "./pluginManager"
 import { PluginMeta, Plugin } from "../types/Plugin"
-import * as THREE from "three"
-import { debug } from "console"
 
 // 定义 Core 类的依赖项接口
 interface CoreDependencies {
     eventBus?: EventBus
     pluginManager: PluginManagerType
-    plugins?: []
+    plugins: []
 }
 
 export default class Core implements CoreType {
@@ -34,7 +32,7 @@ export default class Core implements CoreType {
     _servicePermissions: any
     private logger = console
     gpuManager: any
-    scene: THREE.Scene & { skybox?: THREE.Mesh }
+    // scene: THREE.Scene & { skybox?: THREE.Mesh }
 
     constructor(dependencies: CoreDependencies) {
         // 为 dependencies 参数添加类型断言，确保可以访问 eventBus 属性
@@ -52,11 +50,6 @@ export default class Core implements CoreType {
         this.components = new Map() // 组件注册表
         this._messageChannels = new Map() // 消息通道注册表
         this._servicePermissions = new Map() // 服务权限
-
-        // 初始化场景
-        this.scene = new THREE.Scene() as THREE.Scene & { skybox?: THREE.Mesh }
-
-        console.log(dependencies, "依赖")
 
         this._startAsyncInit(dependencies)
     }
@@ -99,7 +92,7 @@ export default class Core implements CoreType {
         if (this.pluginManager.hasPlugin(pluginMeta.name)) {
             const error = new Error(`插件 ${pluginMeta.name} 已经注册了`)
             this.eventBus.emit("PluginRegisterError", { meta: pluginMeta, error })
-            throw error
+            console.error(`插件 ${pluginMeta.name} 已经注册了`, error)
         }
         try {
             // 强制校验插件类定义
@@ -130,10 +123,11 @@ export default class Core implements CoreType {
                 dependencies: plugin.dependencies,
                 instaance: plugin,
             })
-            return true
+            return this
         } catch (error) {
             this.eventBus.emit("registrationError", { meta: pluginMeta, error })
             console.error("插件注册失败", { meta: pluginMeta, error })
+            return this
         }
     }
 
