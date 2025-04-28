@@ -33,4 +33,6 @@ export class RenderLoop extends BasePlugin {
         cancelAnimationFrame(this.animationID);
         this.taskList = [];
     }
+
+    // 后续扩展 按需渲染
 }

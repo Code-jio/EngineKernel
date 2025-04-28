@@ -15,10 +15,10 @@ export class orbitControls extends BasePlugin {
     
     constructor(meta:any) {
         super(meta)
-        if (!meta?.userData?.renderer?.domElement) {
-            throw new Error("缺少renderer.domElement")
+        if (!meta?.userData?.domElement) {
+            throw new Error("缺少domElement")
         }
-        this.dom = meta.userData.renderer.domElement
+        this.dom = meta.userData.domElement
         this.camera = meta.userData.camera as THREE.PerspectiveCamera
         this.control = new OrbitControls(this.camera, this.dom)
         this.control.enableDamping = true

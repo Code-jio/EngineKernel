@@ -24,12 +24,12 @@ export class BaseScene extends BasePlugin {
 
         const rendererOption = meta.userData.rendererConfig || {
             container: document.querySelector("#container") as HTMLCanvasElement || null,
-            backgroundColor: 0xffffff,
             antialias: true,
-            alpha: true,
+            alpha: false,
             precision: "highp",
             powerPreference: "high-performance",
         }
+
 
         if (!rendererOption.container) {
             const canvas = document.createElement('canvas');
@@ -63,6 +63,7 @@ export class BaseScene extends BasePlugin {
         }
 
         this.scene = new THREE.Scene()
+        this.scene.background = new THREE.Color(0xffffff)
 
 
         
@@ -71,8 +72,6 @@ export class BaseScene extends BasePlugin {
         this.directionalLight.position.set(1000, 1000, 1000) // 设置平行光位置
 
         this.scene.add(this.directionalLight)
-
-
         this.scene.add(this.ambientLight)
         
         this.renderer = new THREE.WebGLRenderer({
