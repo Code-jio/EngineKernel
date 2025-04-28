@@ -2,7 +2,6 @@
 import { THREE, BasePlugin } from "../basePlugin"
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js"
 import eventBus from '../../eventBus/eventBus'
-import type { WebGLRenderer } from "three"
 
 export type OrbitControlPluginOptions = {
     damping?: number

@@ -1,7 +1,6 @@
 import mitt, { Handler } from "mitt"
 import { PluginMeta } from "./Plugin"
 import { PluginManagerType } from "./pluginManager"
-import { Scene } from "three"
 
 type EventBus = ReturnType<typeof mitt> & {
     on<T = unknown>(type: string, handler: Handler<T>): void;
