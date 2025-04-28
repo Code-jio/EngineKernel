@@ -7,11 +7,6 @@
         <link rel="stylesheet" href="./index.css" />
     </head>
     <body>
-        <div class="control-panel">
-            <button id="switchPerspective">透视相机</button>
-            <button id="switchOrtho">正交相机</button>
-            <div id="fpsCounter"></div>
-        </div>
         <canvas id="container"></canvas>
 
         <!-- <script src="./dev.js"></script> -->
@@ -84,6 +79,8 @@
             })
             
             console.log("EngineKernel 实例:", engine) // 打印 EngineKernel 实例
+            console.log("场景初始化完成，当前场景对象:", engine.getPlugin("BaseScene"))
+            let baseScene = engine.getPlugin("BaseScene")
 
             // 注册渲染循环插件
             engine.registerPlugin({
@@ -93,8 +90,17 @@
                 userData: {},
             })
 
+            engine.registerPlugin({
+                name:"orbitControl",
+                path:"/plugin/webgl/renderLoop",
+                pluginClass:EngineKernel.orbitControls,
+                userData:{
+                    camera:baseScene.camera,
+                    domElement:baseScene.renderer.domElement
+                } 
+            })
+
             engine.eventBus.on("init-complete", () => {
-                console.log("场景初始化完成，当前场景对象:", engine.getPlugin("BaseScene"))
                 let gltfLoader = engine.getPlugin('ResourceReaderPlugin').gltfLoader;
 
                 gltfLoader.load('./model/Horse.glb', (gltf) => {
@@ -105,7 +111,6 @@
                     // 调试模型材质
                     gltf.scene.traverse(child => {
                         if (child.material) {
-                            console.log('模型材质:', child.material);
                             child.material.needsUpdate = true;
                         }
                     });
@@ -118,13 +123,6 @@
                 engine.getPlugin("RenderLoopPlugin").initialize()
             })
 
-            // 相机切换控制
-            document.getElementById("switchPerspective").onclick = () => {
-                engine.getPlugin("CameraService").switchType("perspective")
-            }
-            document.getElementById("switchOrtho").onclick = () => {
-                engine.getPlugin("CameraService").switchType("orthographic")
-            }
         </script>
     </body>
 </html>
