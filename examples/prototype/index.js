@@ -1,6 +1,5 @@
 const engine = new EngineKernel.Core({
-    container: "#viewport",
-    plugins: [
+    pluginsParams: [
         {
             name: "CameraPlugin",
             path: "/plugins/camera",
@@ -30,7 +29,6 @@ const engine = new EngineKernel.Core({
         {
             name: "BaseScene",
             path: "/plugins/scene",
-            container: "#viewport",
             pluginClass: EngineKernel.BaseScene,
             userData: {
                 rendererConfig: {

@@ -9,10 +9,8 @@ import PluginManager from "./pluginManager"
 import { PluginMeta, Plugin } from "../types/Plugin"
 
 // 定义 Core 类的依赖项接口
-interface CoreDependencies {
-    eventBus?: EventBus
-    pluginManager: PluginManagerType
-    plugins: []
+interface InitParams {
+    pluginsParams: []
 }
 
 export default class Core implements CoreType {
@@ -34,7 +32,7 @@ export default class Core implements CoreType {
     gpuManager: any
     // scene: THREE.Scene & { skybox?: THREE.Mesh }
 
-    constructor(dependencies: CoreDependencies) {
+    constructor(InitParams: InitParams) {
         // 为 dependencies 参数添加类型断言，确保可以访问 eventBus 属性
         this.eventBus = eventBus
         this.pluginManager = new PluginManager()
@@ -51,14 +49,14 @@ export default class Core implements CoreType {
         this._messageChannels = new Map() // 消息通道注册表
         this._servicePermissions = new Map() // 服务权限
 
-        this._startAsyncInit(dependencies)
+        this._startAsyncInit(InitParams)
     }
 
-    private async _startAsyncInit(dependencies: CoreDependencies) {
-        if (dependencies.plugins) {
-            for (const pluginMeta of dependencies.plugins) {
-                if (pluginMeta) {
-                    this.registerPlugin(pluginMeta)
+    private async _startAsyncInit(InitParams: InitParams) {
+        if (InitParams.pluginsParams) {
+            for (const params of InitParams.pluginsParams) {
+                if (params) {
+                    this.registerPlugin(params)
                 }
             }
         }
