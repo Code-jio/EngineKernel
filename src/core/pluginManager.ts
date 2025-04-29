@@ -13,17 +13,23 @@ export default class PluginManager implements PluginManagerType {
                 name: string
                 version: string
                 status: "registered" | "loaded" | "initialized" | "activated"
-                dependencies: string[]
+                dependencies: string[] // 依赖项
             }
         }
     >()
     constructor() {}
+
+    // 检查插件是否存在
+    hasPlugin(name: string): boolean {
+        return this.registry.has(name)
+    }
 
     // 注册插件
     registerPlugin(plugin: PluginInstance): void {
         if (this.hasPlugin(plugin.name)) {
             throw new Error(`Plugin ${plugin.name} already exists`)
         }
+        this._checkDependencies(plugin)
 
         this.registry.set(plugin.name, {
             instance: plugin,
@@ -84,17 +90,22 @@ export default class PluginManager implements PluginManagerType {
     // 启动所有插件
     async startAll() {
         for (const [name, { instance }] of Array.from(this.registry.entries())) {
+            this._checkDependencies(instance)
             await this.loadPlugin(name)
         }
-    }
-
-    // 检查插件是否存在
-    hasPlugin(name: string): boolean {
-        return this.registry.has(name)
     }
 
     // 注销插件
     unregisterPlugin(plugin: PluginInstance): void {
         this.registry.delete(plugin.name)
+    }
+
+    // 检查依赖项
+    private _checkDependencies(plugin: PluginInstance): void {
+        for (const dep of plugin.dependencies) {
+            if (!this.hasPlugin(dep)) {
+                throw new Error(`Missing required dependency: ${dep}`)
+            }
+        }
     }
 }
