@@ -20,13 +20,14 @@ export class orbitControls extends BasePlugin {
         this.dom = meta.userData.domElement
         this.camera = meta.userData.camera as THREE.PerspectiveCamera
         this.control = new OrbitControls(this.camera, this.dom)
-        this.control.enableDamping = true
+        this.control.enableDamping = false
         this.control.addEventListener("change", () => eventBus.emit("camera-moved"))
+        // this.update()
     }
 
     public update() {
         if (!this.control) return
-        eventBus.once("update", () => {
+        eventBus.on("update", () => {
             this.control.update()
         })
     }
