@@ -78,7 +78,8 @@ engine.register({
     } 
 })
 
-engine.eventBus.on("init-complete", () => {
+engine.on("init-complete", () => {
+    console.log("init-complete")    
     let gltfLoader = engine.getPlugin('ResourceReaderPlugin').gltfLoader;
 
     gltfLoader.load('./model/Horse.glb', (gltf) => {

@@ -31,6 +31,9 @@ interface PluginInstance extends BasePluginInterface {
 }
 
 interface CoreType {
+    registry: Map<string, PluginInstance>;
+    listeners: Map<string, Function>;
+    
     loadStrategies: { [key: string]: (plugin: PluginInstance) => Promise<void> }
     _messageChannels: Map<string, any>
     performance: {

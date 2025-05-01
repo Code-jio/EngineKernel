@@ -106,6 +106,7 @@ export class BaseScene extends BasePlugin {
         eventBus.on("update", () => {
             this.renderer.render(this.scene, this.camera) // 渲染场景
         })
+        // eventBus.emit('init-complete', { status: 'ready' })
     }
 
     handleResize() {

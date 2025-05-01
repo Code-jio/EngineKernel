@@ -26,7 +26,7 @@ export default class PluginManager implements PluginManagerType {
     // 注册插件
     registerPlugin(plugin: PluginInstance): void {
         // this._checkDependencies(plugin)
-
+        // debugger
         this.registry.set(plugin.name, {
             instance: plugin,
             metadata: {
@@ -36,6 +36,8 @@ export default class PluginManager implements PluginManagerType {
                 dependencies: plugin.dependencies || [], // 依赖项
             },
         })
+
+        // console.log(`Plugin ${plugin.name} registered on ${this.registry}`)
     }
 
     // 加载插件

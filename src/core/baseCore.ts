@@ -3,7 +3,7 @@ import { BasePlugin } from "../plugins/basePlugin"
 import { isValidPath } from "../utils/pathUtils"
 import { validatePlugin } from "../utils/security"
 
-import { PluginInstance } from "../types/core"
+import { CoreType, PluginInstance } from "../types/core"
 import PluginManager from "./pluginManager"
 import { PluginMeta, Plugin } from "../types/Plugin"
 
@@ -32,6 +32,7 @@ class BaseCore {
     private logger = console
 
     gpuManager: any
+    
     constructor(InitParams: InitParams) {
         this.loadStrategies = {
             sync: this._loadSync.bind(this),
@@ -46,18 +47,8 @@ class BaseCore {
         this._messageChannels = new Map() // 消息通道注册表
         this._servicePermissions = new Map() // 服务权限
         // super();
-        this.initializeEventSystem()
-        this.initializePluginManager();
-        this._startAsyncInit(InitParams).catch(e => {
-            console.error('初始化失败', e)
-          })
-    }
-
-    private initializeEventSystem() {
         this.listeners = new Map<string, Array<Function>>()
-    }
 
-    private initializePluginManager() {
         this.registry = new Map<
             string,
             {
@@ -70,27 +61,31 @@ class BaseCore {
                 }
             }
         >()
+        this._startAsyncInit(InitParams)
     }
 
     private async _startAsyncInit(InitParams: InitParams) {
         if (InitParams.pluginsParams) {
             for (const params of InitParams.pluginsParams) {
                 if (params) {
-                    this.registerPlugin(params)
+                    this.register(params)
                 }
             }
         }
 
-        await this.init()
+        await this._initPlugins()
     }
 
-    private async init() {
+    private async _initPlugins() {
+        let that: CoreType = this as any
+        const plugins = Array.from(this.registry.values())
+        await Promise.all(plugins.map(p => p.instance.initialize?.(that)))
         this.emit("init-complete")
     }
 
     getPlugin(name: string): any {
         // return this.getPlugin(name)
-        return this.registry.get(name)
+        return this.registry.get(name)?.instance
     }
 
     // 注册
@@ -114,6 +109,17 @@ class BaseCore {
                 console.error("插件类必须继承自BasePlugin")
             }
 
+            // 添加路径校验逻辑
+            if (!isValidPath(pluginMeta.path)) {
+                throw new Error(`Invalid plugin path: ${pluginMeta.path}`)
+            }
+
+            // 记录详细注册日志
+            this.logger.debug(`Registering plugin: ${pluginMeta.name}`, {
+                path: pluginMeta.path,
+                dependencies: pluginMeta.dependencies
+            });
+
             const plugin: PluginInstance = new pluginMeta.pluginClass({
                 name: pluginMeta.name,
                 path: pluginMeta.path,
@@ -134,7 +140,11 @@ class BaseCore {
             return this
         } catch (error) {
             this.emit("registrationError", { meta: pluginMeta, error })
-            console.error("插件注册失败", { meta: pluginMeta, error })
+            console.error("插件注册失败", {
+                name: pluginMeta.name,
+                path: pluginMeta.path,
+                error: error instanceof Error ? error.message : error
+            })
             return this
         }
     }
@@ -327,4 +337,4 @@ applyMixins(BaseCore, [
 ])
 
 // 增强类型导出
-export default BaseCore as typeof BaseCore & PluginManager & EventDispatcher;
+export default BaseCore as typeof BaseCore & PluginManager & EventDispatcher
