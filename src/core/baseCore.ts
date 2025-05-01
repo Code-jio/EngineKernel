@@ -3,21 +3,20 @@ import { BasePlugin } from "../plugins/basePlugin"
 import { isValidPath } from "../utils/pathUtils"
 import { validatePlugin } from "../utils/security"
 
-import { CoreType, EventBus, PluginInstance } from "../types/core"
-import type { PluginManagerType } from "../types/pluginManager"
+import { PluginInstance } from "../types/core"
 import PluginManager from "./pluginManager"
 import { PluginMeta, Plugin } from "../types/Plugin"
 
 import { EventDispatcher } from "../eventBus/eventDispatch"
 import { applyMixins } from "../decorators/mixinGuards"
 
-
 // 定义 Core 类的依赖项接口
 interface InitParams {
     pluginsParams: []
 }
-interface Core extends PluginManager, EventDispatcher {}
-class Core implements CoreType {
+
+// 基础核心类声明
+class BaseCore {
     static STATUS = {
         REGISTERED: "registered",
         LOADING: "loading",
@@ -25,18 +24,15 @@ class Core implements CoreType {
         ERROR: "error",
         UNLOADING: "unloading",
     }
-    
     loadStrategies: { [key: string]: (plugin: PluginInstance) => Promise<void> }
     performance: { metrics: Map<string, any>; enable: boolean }
     components: any
     _messageChannels: any
     _servicePermissions: any
     private logger = console
-    gpuManager: any
-    // scene: THREE.Scene & { skybox?: THREE.Mesh }
 
+    gpuManager: any
     constructor(InitParams: InitParams) {
-        // super();
         this.loadStrategies = {
             sync: this._loadSync.bind(this),
             async: this._loadAsync.bind(this),
@@ -49,15 +45,31 @@ class Core implements CoreType {
         this.components = new Map() // 组件注册表
         this._messageChannels = new Map() // 消息通道注册表
         this._servicePermissions = new Map() // 服务权限
+        // super();
+        this.initializeEventSystem()
+        this.initializePluginManager();
+        this._startAsyncInit(InitParams).catch(e => {
+            console.error('初始化失败', e)
+          })
+    }
 
-        this.registry = new Map(); // 混入模式下的初始化方法
-        this.listeners = new Map(); // 混入模式下的初始化方法
+    private initializeEventSystem() {
+        this.listeners = new Map<string, Array<Function>>()
+    }
 
-        // this.initializeEventSystem(); // 事件总线初始化
-        // this.initializePluginManager(); // 插件管理器配置
-
-
-        this._startAsyncInit(InitParams)
+    private initializePluginManager() {
+        this.registry = new Map<
+            string,
+            {
+                instance: PluginInstance
+                metadata: {
+                    name: string
+                    version: string
+                    status: "registered" | "loaded" | "initialized" | "activated"
+                    dependencies: string[] // 依赖项
+                }
+            }
+        >()
     }
 
     private async _startAsyncInit(InitParams: InitParams) {
@@ -76,13 +88,9 @@ class Core implements CoreType {
         this.emit("init-complete")
     }
 
-    // // 事件总线初始化逻辑
-    // private initializeEventSystem() { /* 事件总线初始化逻辑 */ }
-    // // 插件管理器配置
-    // private initializePluginManager() { /* 插件管理器配置 */ }
-
-    getPlugin(name: string): PluginInstance | undefined {
-        return this.getPlugin(name)
+    getPlugin(name: string): any {
+        // return this.getPlugin(name)
+        return this.registry.get(name)
     }
 
     // 注册
@@ -113,7 +121,7 @@ class Core implements CoreType {
                 strategy: pluginMeta.strategy || "sync",
                 userData: pluginMeta.userData,
             })
-            plugin.status = Core.STATUS.REGISTERED
+            plugin.status = BaseCore.STATUS.REGISTERED
 
             this.registerPlugin(plugin)
             // 添加带校验的注册事件
@@ -252,41 +260,6 @@ class Core implements CoreType {
         // plugin.status = Core.STATUS.UNLOADING
     }
 
-    // // 创建插件接口代理
-    // _createPluginInterfaceProxy(plugin: PluginInstance) {
-    //     return new Proxy(plugin.exports, {
-    //         get: (target: any, prop: string | symbol) => {
-    //             if (prop === "registerComponent") {
-    //                 return (name: string, instance: unknown) => {
-    //                     this.components.set(name, instance)
-    //                     this.emit("componentRegistered", name)
-    //                 }
-    //             }
-    //             if (prop === "getCoreService") {
-    //                 return (serviceName: string) => {
-    //                     // 安全访问其他插件服务
-    //                     if (!this._isServiceAllowed(plugin.name, serviceName)) {
-    //                         throw new Error(`不允许访问 ${serviceName}`) // 被禁止访问
-    //                     }
-    //                     return this.components.get(serviceName)
-    //                 }
-    //             }
-    //             if (typeof target[prop] === "function") {
-    //                 return (...args: any[]) => {
-    //                     this.logger.log(`[${plugin.name}] Calling ${String(prop)}`)
-    //                     return target[prop](...args)
-    //                 }
-    //             }
-    //             return target[prop as keyof typeof target]
-    //         },
-    //     })
-    // }
-
-    // // 回滚
-    // _rollbackPluginLoad(plugin: PluginInstance) {
-    //     this.unregisterPlugin(plugin)
-    // }
-
     // 装饰器
     private _withPerfMonitoring<T>(
         methodName: string,
@@ -342,65 +315,16 @@ class Core implements CoreType {
         this.performance.metrics.set(methodName, entry)
         this.emit("performanceMetrics", { methodName, ...data })
     }
-
-    // // GPU资源追踪
-    // _monitorGLResources(gl: WebGL2RenderingContext & any, pluginName: string) {
-    //     const methodsToTrack = {
-    //         createTexture: "createTexture",
-    //         createBuffer: "createBuffer",
-    //         createFramebuffer: "createFramebuffer",
-    //     } as Record<keyof WebGL2RenderingContext, string>
-
-    //     const proxy = new Proxy<WebGL2RenderingContext>(gl as unknown as WebGL2RenderingContext, {
-    //         get: (target, prop) => {
-    //             if (prop in target && methodsToTrack.hasOwnProperty(prop)) {
-    //                 const method = target[prop as keyof WebGL2RenderingContext] as (...args: number[]) => any
-    //                 return (...args: number[]) => {
-    //                     const resource = method.call(target, ...args)
-    //                     this._trackGLResource(pluginName, prop as keyof WebGL2RenderingContext, resource)
-    //                     return resource
-    //                 }
-    //             }
-    //             return target[prop as keyof typeof target]
-    //         },
-    //     })
-
-    //     // this.pluginRegistry
-    //     //     .get(pluginName)
-    //     //     ?.instance.setGLContext?.(proxy as unknown as WebGL2RenderingContext & typeof gl) // 设置代理上下文
-    // }
-
-    // // 记录GPU资源
-    // _trackGLResource(pluginName: string, type: keyof WebGL2RenderingContext, resource: any) {
-    //     const stats = this.performance.metrics.get("gpuResources") || {}
-    //     stats[pluginName] = stats[pluginName] || { textures: 0, buffers: 0, framebuffers: 0 }
-    //     stats[pluginName][String(type)]++
-    //     this.performance.metrics.set("gpuResources", stats)
-    // }
-
-    // // 获取组件
-    // getComponent(name: string) {
-    //     if (!this.components.has(name)) {
-    //         console.warn(`Component ${name} not found`)
-    //     }
-    //     return this.components.get(name)
-    // }
-
-    // // 服务白名单验证
-    // _isServiceAllowed(requester: string, serviceName: string) {
-    //     return this._servicePermissions.get(requester)?.includes(serviceName) || false
-    // }
-
-    // // 新增服务权限配置方法
-    // configureServicePermissions<T extends any[]>(pluginName: string, permissions: T): T {
-    //     this._servicePermissions.set(pluginName, permissions)
-    //     return permissions
-    // }
 }
 
-applyMixins(Core, [
-    EventDispatcher, // 事件分发器优先混入
-    PluginManager    // 插件管理器后加载
-]);
+// 类型合并声明
+interface BaseCore extends PluginManager, EventDispatcher {}
 
-export default Core;
+// 调整后的混入顺序
+applyMixins(BaseCore, [
+    EventDispatcher, // 事件分发器优先混入
+    PluginManager, // 插件管理器后加载
+])
+
+// 增强类型导出
+export default BaseCore as typeof BaseCore & PluginManager & EventDispatcher;

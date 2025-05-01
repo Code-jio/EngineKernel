@@ -5,7 +5,7 @@ import { validateGLParams, validateShader } from "../utils/glValidator"
 
 // 插件管理器
 export default class PluginManager implements PluginManagerType {
-    private registry = new Map<
+    public registry = new Map<
         string,
         {
             instance: PluginInstance
@@ -17,7 +17,6 @@ export default class PluginManager implements PluginManagerType {
             }
         }
     >()
-    constructor() {}
 
     // 检查插件是否存在
     hasPlugin(name: string): boolean {
@@ -26,7 +25,7 @@ export default class PluginManager implements PluginManagerType {
 
     // 注册插件
     registerPlugin(plugin: PluginInstance): void {
-        this._checkDependencies(plugin)
+        // this._checkDependencies(plugin)
 
         this.registry.set(plugin.name, {
             instance: plugin,
@@ -87,7 +86,7 @@ export default class PluginManager implements PluginManagerType {
     // 启动所有插件
     async startAll() {
         for (const [name, { instance }] of Array.from(this.registry.entries())) {
-            this._checkDependencies(instance)
+            // this._checkDependencies(instance)
             await this.loadPlugin(name)
         }
     }
@@ -97,12 +96,12 @@ export default class PluginManager implements PluginManagerType {
         this.registry.delete(plugin.name)
     }
 
-    // 检查依赖项
-    private _checkDependencies(plugin: PluginInstance): void {
-        for (const dep of plugin.dependencies) {
-            if (!this.hasPlugin(dep)) {
-                throw new Error(`Missing required dependency: ${dep}`)
-            }
-        }
-    }
+    // // 检查依赖项
+    // private _checkDependencies(plugin: PluginInstance): void {
+    //     for (const dep of plugin.dependencies) {
+    //         if (!this.hasPlugin(dep)) {
+    //             throw new Error(`Missing required dependency: ${dep}`)
+    //         }
+    //     }
+    // }
 }

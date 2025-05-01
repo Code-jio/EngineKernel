@@ -1,4 +1,4 @@
-const engine = new EngineKernel.Core({
+const engine = new EngineKernel.BaseCore({
     pluginsParams: [
         {
             name: "CameraPlugin",
@@ -58,7 +58,7 @@ const engine = new EngineKernel.Core({
             },
         },
     ],
-}).registerPlugin({
+}).register({
     name: "RenderLoopPlugin",
     path: "/plugins/webgl/renderLoop",
     pluginClass: EngineKernel.RenderLoop,
@@ -66,8 +66,9 @@ const engine = new EngineKernel.Core({
 })
 
 let baseScene = engine.getPlugin("BaseScene")
+console.log(baseScene)
 
-engine.registerPlugin({
+engine.register({
     name:"orbitControl",
     path:"/plugin/webgl/renderLoop",
     pluginClass:EngineKernel.orbitControls,

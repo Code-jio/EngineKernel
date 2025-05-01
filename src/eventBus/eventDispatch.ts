@@ -12,14 +12,11 @@ export interface EventListener<E extends BaseEvent = Event> {
 }
 
 export class EventDispatcher {
-    private listeners: Map<string, Array<Function>> = new Map()
+    listeners: Map<string, Array<Function>> = new Map()
 
-    private throttleSymbol = Symbol.for("throttle")
-    private throttleTimers: WeakSet<Function> = new WeakSet()
-
-    private antiShakeSymbol = Symbol.for("antiShake")
-    private antiShakeTimers: WeakMap<Function, number> = new WeakMap()
-
+    constructor() { 
+        this.listeners = new Map()
+    }
     /**
      * 订阅一个事件
      * @param type 事件类型
@@ -32,13 +29,10 @@ export class EventDispatcher {
         if (!listeners.has(type)) {
             listeners.set(type, [])
         }
-
         const array = listeners.get(type)!
-
         if (array.includes(listener)) {
             return
         }
-
         array.push(listener)
     }
 
@@ -71,20 +65,6 @@ export class EventDispatcher {
 
         const array = listeners.get(type)!
 
-        if (listener[this.throttleSymbol]) {
-            if (array.includes(listener[this.throttleSymbol])) {
-                array.splice(array.indexOf(listener[this.throttleSymbol]), 1)
-                delete listener[this.throttleSymbol]
-            }
-        }
-
-        if (listener[this.antiShakeSymbol]) {
-            if (array.includes(listener[this.antiShakeSymbol])) {
-                array.splice(array.indexOf(listener[this.antiShakeSymbol]), 1)
-                delete listener[this.antiShakeSymbol]
-            }
-        }
-
         if (array.includes(listener)) {
             array.splice(array.indexOf(listener), 1)
         }
@@ -111,6 +91,7 @@ export class EventDispatcher {
      * @returns
      */
     dispatchEvent<C extends BaseEvent>(event: C): void {
+        if (!event?.type) throw new Error('事件对象缺少type属性')
         const type = event.type
         const listeners = this.listeners
         if (listeners.has(type)) {
@@ -213,7 +194,6 @@ export class EventDispatcher {
         if (!this.listeners.has(type)) {
             return
         }
-
         this.listeners.get(type)!.pop()
     }
 
@@ -222,82 +202,5 @@ export class EventDispatcher {
      */
     clear(): void {
         this.listeners.clear()
-    }
-
-    /**
-     * 当前派发器是否使用
-     * @returns true or false
-     */
-    useful(): boolean {
-        return Boolean([...this.listeners.keys()].length)
-    }
-
-    /**
-     * 事件以节流模式触发
-     * @param type 订阅的事件
-     * @param listener 触发函数
-     * @param time 节流时间
-     * @returns
-     */
-    onThrottle<C extends BaseEvent>(type: C["type"], listener: EventListener<C>, time = 1000 / 60) {
-        if (listener[this.throttleSymbol]) {
-            console.warn(
-                `EventDispatcher: this listener has already been decorated with throttle in type ${type}.`,
-                listener,
-            )
-            return
-        }
-
-        const throttleDecorator = function (this: EventDispatcher, event: C) {
-            if (this.throttleTimers.has(listener)) {
-                return
-            }
-
-            window.setTimeout(() => {
-                listener.call(this, event)
-                this.throttleTimers.delete(listener)
-            }, time)
-
-            this.throttleTimers.add(listener)
-        }
-
-        listener[this.throttleSymbol] = throttleDecorator
-
-        this.addEventListener(type, throttleDecorator)
-    }
-
-    /**
-     * 事件以防抖模式触发
-     * @param type 订阅的事件
-     * @param listener 触发函数
-     * @param time 防抖时间
-     * @returns
-     */
-    onAntiShake<C extends BaseEvent>(type: C["type"], listener: EventListener<C>, time = 1000 / 60) {
-        if (listener[this.antiShakeSymbol]) {
-            console.warn(
-                `EventDispatcher: this listener has already been decorated with anti-shake in type ${type}.`,
-                listener,
-            )
-            return
-        }
-
-        const antiShakeDecorator = function (this: EventDispatcher, event: C) {
-            if (this.antiShakeTimers.has(listener)) {
-                clearTimeout(this.antiShakeTimers.get(listener))
-            }
-
-            this.antiShakeTimers.set(
-                listener,
-                window.setTimeout(() => {
-                    listener.call(this, event)
-                    this.antiShakeTimers.delete(listener)
-                }, time),
-            )
-        }
-
-        listener[this.antiShakeSymbol] = antiShakeDecorator
-
-        this.addEventListener(type, antiShakeDecorator)
     }
 }

@@ -31,8 +31,6 @@ interface PluginInstance extends BasePluginInterface {
 }
 
 interface CoreType {
-    eventBus: EventBus
-    pluginManager: PluginManagerType
     loadStrategies: { [key: string]: (plugin: PluginInstance) => Promise<void> }
     _messageChannels: Map<string, any>
     performance: {
@@ -42,10 +40,10 @@ interface CoreType {
     components: Map<string, any>
     _servicePermissions: any;
 
-    registerPlugin(pluginMeta: PluginMeta): void
+    register(pluginMeta: PluginMeta): void
     unregisterPlugin(plugin: PluginInstance): void
     getPlugin(name: string): PluginInstance | undefined
-    configureServicePermissions<T extends any[]>(service: string, permissions: T): T
+    // configureServicePermissions<T extends any[]>(service: string, permissions: T): T
 }
 
 declare module '../types/core' {
