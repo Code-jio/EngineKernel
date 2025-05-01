@@ -26,9 +26,6 @@ export default class PluginManager implements PluginManagerType {
 
     // 注册插件
     registerPlugin(plugin: PluginInstance): void {
-        if (this.hasPlugin(plugin.name)) {
-            throw new Error(`Plugin ${plugin.name} already exists`)
-        }
         this._checkDependencies(plugin)
 
         this.registry.set(plugin.name, {

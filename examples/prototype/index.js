@@ -18,7 +18,6 @@ const engine = new EngineKernel.Core({
         {
             name: "ResourceReaderPlugin",
             path: "/plugins/ResourceReaderPlugin",
-            basePath: "/assets/models",
             url: "/assets/models",
             supportedFormats: ["gltf", "fbx"],
             pluginClass: EngineKernel.ResourceReaderPlugin,

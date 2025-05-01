@@ -9,6 +9,7 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader"
  * 功能要求：
  * 1.实现资源读取的异步任务队列（防止线程阻塞）
  * 2.支持serviceWorker静态资源缓存管理
+ * 3.参数输入仅给一个文件路径，根据该文件路径下各个文件夹名称不同，分成各个不同的加载任务，形成一个加载队列
  */
 
 export class ResourceReaderPlugin extends BasePlugin {
