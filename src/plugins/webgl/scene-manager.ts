@@ -2,6 +2,7 @@ import { THREE, BasePlugin } from "../basePlugin"
 import eventBus from '../../eventBus/eventBus'
 import { GLTF } from "three/examples/jsm/loaders/GLTFLoader" // 导入GLTF类型，用于类型
 
+// 该插件承担多场景同屏显示，主次场景切换等任务，并作为首要插件加载，管理场景事务
 export class SceneManager extends BasePlugin {
     private sceneGraph = new Map<string, THREE.Object3D>()
     private activeScene?: THREE.Scene

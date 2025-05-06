@@ -16,7 +16,7 @@ export class ResourceReaderPlugin extends BasePlugin {
     private url: string = ""
     private taskQueue: Map<string, Promise<any>> = new Map()
     private workerPool: Worker[] = []
-    private gltfLoader: GLTFLoader = new GLTFLoader()
+    private gltfLoader: GLTFLoader = new GLTFLoader() // 后续不仅仅是涉及模型的加载，还会涉及到天空盒、地图数据的加载
     private totalTasks = 0
 
     constructor(meta: any) {

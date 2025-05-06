@@ -1,4 +1,5 @@
 // 模型加载流程管理器核心类
+// 后续转变为插件：考虑好所负职责、资源加载插件区分
 import eventBus from '../eventBus/eventBus';
 
 export class PipelineManager {

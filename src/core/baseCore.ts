@@ -24,14 +24,14 @@ class BaseCore {
         ERROR: "error",
         UNLOADING: "unloading",
     }
-    loadStrategies: { [key: string]: (plugin: PluginInstance) => Promise<void> }
-    performance: { metrics: Map<string, any>; enable: boolean }
-    components: any
-    _messageChannels: any
-    _servicePermissions: any
+    loadStrategies: { [key: string]: (plugin: PluginInstance) => Promise<void> } // 加载策略
+    performance: { metrics: Map<string, any>; enable: boolean } // 后续转为性能表现的插件
+    components: any // 
+    _messageChannels: any // 
+    _servicePermissions: any // 
     private logger = console
 
-    gpuManager: any
+    gpuManager: any // 后续移除，转变成对应插件
     
     constructor(InitParams: InitParams) {
         this.loadStrategies = {
@@ -56,7 +56,7 @@ class BaseCore {
                 metadata: {
                     name: string
                     version: string
-                    status: "registered" | "loaded" | "initialized" | "activated"
+                    status: "registered" | "loaded" | "initialized" | "activated" // 注册 | 加载 | 初始化 | 运行中
                     dependencies: string[] // 依赖项
                 }
             }
