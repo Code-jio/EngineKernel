@@ -1,5 +1,5 @@
 import { THREE, BasePlugin } from "../basePlugin"
-import eventBus from '../../eventBus/eventBus'
+import eventBus from "../../eventBus/eventBus"
 
 export class AnimationControls extends BasePlugin {
     // private target: THREE.Scene
@@ -30,11 +30,53 @@ export class AnimationControls extends BasePlugin {
 
     // 后续功能扩展 动画播放，动画暂停，循环播放，动画状态重置，动画过渡
     // 上一帧，下一帧，动画关键帧轨道剪辑
+    nextFrame() {}
+    // 下一帧
+    prevFrame() {}
+
+    reset() {}
+
+    pause() {}
+
+    play(options: Object | null) {
+        // 
+        let defaultOptions = {
+            timeScale: 1,
+            weight: 1,
+            time: 0,
+            repetitions: THREE.LoopRepeat,
+            clampWhenFinished: false,
+            startAt: 0,
+        }
+        if (options) {
+            options = Object.assign(options, defaultOptions)
+        } else {
+            options = defaultOptions
+        }
+    
+        this.action.enabled = true 
+
+
+    }
+
+    stop() {
+        // this.action.stop()
+    }
+
+
+
+    isRunning() {
+        return this.action.isRunning() && this.action.isScheduled()
+    }
 
     update() {
         eventBus.on("update", () => {
             this.mixer.update(this.clock.getDelta())
         })
     }
-    
 }
+
+// 这个插件开发目的：服务于每一个模型动画
+// 在所有模型加载之初，检查是否存在模型动画，如果存在，直接初始化好一个模型动画资源池
+// 并且动画资源池内的各个动画直接与对应模型相关联
+// 
