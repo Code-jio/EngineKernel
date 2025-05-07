@@ -1,113 +1,183 @@
 // 增强后的资源读取插件
 import { THREE, BasePlugin } from "../basePlugin"
 import eventBus from '../../eventBus/eventBus'
-import path from "path"
-import fs from "fs"
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader"
+import { Workbox } from "workbox-window"
+import Strategy from "workbox-strategies"
+
+const fetchResource = async (path: string) => {
+    try {
+        const response = await fetch(path, {
+            headers: {
+                'Accept': 'application/json'
+            }
+        });
+        if (!response.ok) {
+            throw new Error(`Failed to fetch resource: ${response.statusText}`);
+        }
+        const contentType = response.headers.get('Content-Type');
+        if (!contentType || !contentType.includes('application/json')) {
+            throw new Error(`Invalid content type: ${contentType}`);
+        }
+        return await response.json();
+    } catch (error) {
+        console.error('Error fetching resource:', error);
+        throw error;
+    }
+};
+
+const validateResourcePath = (path: string) => {
+    if (!path) {
+        throw new Error('Resource path is required');
+    }
+    return path;
+};
 
 /**
- * 功能要求：
+ * 预期功能要求：
  * 1.实现资源读取的异步任务队列（防止线程阻塞）
- * 2.支持serviceWorker静态资源缓存管理
+ * 2.使用workBox完成资源缓存管理
  * 3.参数输入仅给一个文件路径，根据该文件路径下各个文件夹名称不同，分成各个不同的加载任务，形成一个加载队列
+ * 4.加载队列中的任务完成后，将加载的资源通过eventBus进行发布，在主文件中进行订阅，进行资源的加载
+ * 5.后续还会涉及到天空盒、地图数据的加载，需要对资源读取插件进行扩展
  */
 
 export class ResourceReaderPlugin extends BasePlugin {
-    private url: string = ""
+    private url: string = "" // 资源文件路径(主文件入口)
     private taskQueue: Map<string, Promise<any>> = new Map()
-    private workerPool: Worker[] = []
     private gltfLoader: GLTFLoader = new GLTFLoader() // 后续不仅仅是涉及模型的加载，还会涉及到天空盒、地图数据的加载
     private totalTasks = 0
+    private maxConcurrent = 4
+    private activeTasks = 0
+    private cache = new Map<string, any>()
 
     constructor(meta: any) {
         super(meta)
-        this.url = meta?.userData?.url || ""
+        this.url = meta?.userData?.url || "";
+        validateResourcePath(this.url);
         this.gltfLoader = new GLTFLoader()
-        this.initializeWorkerPool()
+        this.loadFromDirectory(this.url)
     }
 
-    // 初始化线程池
-    private initializeWorkerPool() {
-        // 初始化3个Web Worker线程
-        // for (let i = 0; i < 3; i++) {
-            // this.workerPool.push(new Worker("/src/workers/resourceParser.worker.js"))
-        // }
-    }
-
-    async initialize() {
-        if ("serviceWorker" in navigator) {
-            navigator.serviceWorker
-                .register("./public/sw.js")
-                .then(registration => {
-                    eventBus.emit("SERVICE_WORKER_READY")
-                })
-                .catch(error => {
-                    eventBus.emit("SERVICE_WORKER_ERROR", error)
-                })
+    // 从目录加载资源
+    async loadFromDirectory(dirPath: string) {
+        try {
+            const files = await fetchResource(dirPath)
+            files.forEach((file: any) => {
+                const filePath = encodeURI(`${dirPath}/${file}`)
+                const fileType = this.getFileType(file)
+                this.addTask(() => this.loadResource(filePath, fileType))
+            })
+            await this.processQueue()
+        } catch (error) {
+            console.error('Error loading directory:', error);
+            eventBus.emit('LOAD_ERROR', error);
         }
     }
 
-    async parseResources() {
-        // 任务队列调度逻辑
-        this.totalTasks = this.taskQueue.size
-        this.taskQueue.forEach((task, key) => {
-            task.then(result => {
-                const { data, path } = result
-                if (!path) throw new Error("Invalid resource path")
-                this.gltfLoader.parse(
-                    result.data,
-                    result.path,
-                    gltf => {
-                        eventBus.emit("GLTF_READY", {
-                            type: "MODEL_LOADED",
-                            payload: gltf,
-                            resourcePath: path,
-                        })
-                        // 触发二次缓存验证
-                        fetch(path)
-                            .then(response => {
-                                if (!response.ok) throw new Error('Network response error')
-                                return caches.open("engine-assets-v2").then(cache => cache.put(path, response))
-                            })
-                            .catch(() => caches.match(path))
-                    },
-                    event => {
-                        const errorCode = this.normalizeErrorCode(event)
-                        eventBus.emit("GLTF_ERROR", {
-                            type: "MODEL_ERROR",
-                            payload: { errorCode, path },
-                        })
-
-                        console.log("加载失败", event)
-                    },
-                )
-                eventBus.emit("RESOURCE_PROGRESS", {
-                    progress: this.calculateProgress(),
-                })
-            }).catch(error => {
-                eventBus.emit("RESOURCE_ERROR", error)
-            })
-        })
+    // 添加任务
+    private addTask(task: () => Promise<any>) {
+        this.taskQueue.set(task.name, task())
+        this.totalTasks++
+        this.processQueue()
     }
 
-    private calculateProgress(): number {
-        // 计算加载进度
-        return this.taskQueue.size > 0 ? ((this.totalTasks - this.taskQueue.size) / this.totalTasks) * 100 : 0
+    // 处理任务队列
+    private async processQueue() {
+        if (this.activeTasks >= this.maxConcurrent) return
+        this.activeTasks++
+        const task = this.taskQueue.values().next().value
+        if (task) {
+            try {
+                const result = await task;
+                this.cache.set(result.name, result)
+                this.activeTasks--
+                this.totalTasks--
+                this.processQueue()
+            } catch (error) {
+                console.error('Error processing task:', error)
+                this.activeTasks--
+                this.totalTasks--
+                this.processQueue()
+            }
+        }
     }
 
-    // 新增资源缓存方法
-    async cacheResource(url: string) {
-        const cache = await caches.open("engine-assets-v2")
-        await cache.add(url)
+    private async loadResource(filePath: string, fileType: string) {
+        if (this.cache.has(filePath)) {
+            const cachedResponse = await caches.open('my-cache').then(cache => cache.match(filePath));
+            if (cachedResponse) {
+                const contentType = cachedResponse.headers.get('Content-Type');
+                if (contentType && contentType.includes('application/json')) {
+                    return cachedResponse.json();
+                }
+            }
+        }
+        const response = await fetch(filePath);
+        if (!response.ok) {
+            throw new Error(`Failed to fetch resource: ${response.statusText}`);
+        }
+        const contentType = response.headers.get('Content-Type');
+        if (!contentType || !contentType.includes('application/json')) {
+            throw new Error(`Invalid content type: ${contentType}`);
+        }
+        const blob = await response.blob();
+        const objectURL = URL.createObjectURL(blob);
+        return new Promise((resolve, reject) => {
+            switch (fileType) {
+                case 'gltf':
+                    this.gltfLoader.load(objectURL, (gltf) => {
+                        eventBus.emit('GLTF_READY', gltf);
+                        resolve(gltf);
+                    }, undefined, (error) => {
+                        eventBus.emit('LOAD_ERROR', error);
+                        reject(error);
+                    });
+                    break;
+                case 'texture':
+                    const textureLoader = new THREE.TextureLoader();
+                    textureLoader.load(objectURL, (texture) => {
+                        eventBus.emit('TEXTURE_READY', texture);
+                        resolve(texture);
+                    }, undefined, (error) => {
+                        eventBus.emit('LOAD_ERROR', error);
+                        reject(error);
+                    });
+                    break;
+                case 'skybox':
+                    const cubeTextureLoader = new THREE.CubeTextureLoader();
+                    cubeTextureLoader.load([filePath], (cubeTexture) => {
+                        eventBus.emit('SKYBOX_READY', cubeTexture);
+                        resolve(cubeTexture);
+                    }, undefined, (error) => {
+                        eventBus.emit('LOAD_ERROR', error);
+                        reject(error);
+                    });
+                    break;
+                default:
+                    reject(new Error(`Unsupported file type: ${fileType}`));
+            }
+        });
     }
 
-    normalizeErrorCode(event: any): string {
-        if (event instanceof Error) {
-            return event.message
-        } else if (typeof event === "string") {
-            return event
-        } else {
-            return "Unknown error"
+    // 根据文件扩展名获取资源类型
+    private getFileType(file: string) {
+        const extension = file.split('.').pop();
+        switch (extension) {
+            case 'gltf':
+            case 'glb':
+                return 'gltf';
+            case 'jpeg':
+            case 'bmp':
+            case 'jpg':
+            case 'png':
+                return 'texture';
+            case 'dds':
+                return 'texture';
+            case 'skybox':
+                return 'skybox';
+            default:
+                throw new Error(`Unsupported file type: ${extension}`);
         }
     }
 }

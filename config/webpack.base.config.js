@@ -48,6 +48,7 @@ export default {
             vm: require.resolve("vm-browserify"),
             util: require.resolve("util/"),
             path: require.resolve("path-browserify"),
+            fs: false,
         },
     },
     plugins: [],

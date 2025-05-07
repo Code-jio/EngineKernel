@@ -3,7 +3,7 @@ const engine = new EngineKernel.BaseCore({
         {
             name: "ResourceReaderPlugin",
             path: "/plugins/ResourceReaderPlugin",
-            url: "/assets/models",
+            url: "/",
             supportedFormats: ["gltf", "fbx"],
             pluginClass: EngineKernel.ResourceReaderPlugin,
             userData: { },
