@@ -50,10 +50,11 @@ export class ResourceReaderPlugin extends BasePlugin {
     private maxConcurrent = 4
     private activeTasks = 0
     private cache = new Map<string, any>()
+    private wb: Workbox | null = null;
 
     constructor(meta: any) {
         super(meta)
-        this.url = meta?.userData?.url || "";
+        this.url = meta?.userData?.url || "/public";
         validateResourcePath(this.url);
         this.gltfLoader = new GLTFLoader()
         this.loadFromDirectory(this.url)
@@ -64,9 +65,17 @@ export class ResourceReaderPlugin extends BasePlugin {
         try {
             const files = await fetchResource(dirPath)
             files.forEach((file: any) => {
-                const filePath = encodeURI(`${dirPath}/${file}`)
-                const fileType = this.getFileType(file)
-                this.addTask(() => this.loadResource(filePath, fileType))
+                try {
+                    const fileType = this.getFileType(file);
+                    if (!['gltf','texture','skybox','text'].includes(fileType)) {
+                        console.warn(`Skipped unsupported file type: ${file}`);
+                        return;
+                    }
+                    const filePath = encodeURI(`${dirPath}/${file}`)
+                    this.addTask(() => this.loadResource(filePath, fileType))
+                } catch (error) {
+                    console.error('Error processing file:', file, error);
+                }
             })
             await this.processQueue()
         } catch (error) {
@@ -144,23 +153,46 @@ export class ResourceReaderPlugin extends BasePlugin {
                         reject(error);
                     });
                     break;
-                case 'skybox':
-                    const cubeTextureLoader = new THREE.CubeTextureLoader();
-                    cubeTextureLoader.load([filePath], (cubeTexture) => {
-                        eventBus.emit('SKYBOX_READY', cubeTexture);
-                        resolve(cubeTexture);
-                    }, undefined, (error) => {
+                case 'text':
+                    fetch(objectURL)
+                        .then(response => response.text())
+                        .then(text => {
+                            eventBus.emit('TEXT_READY', text);
+                            resolve(text);
+                        })
+                        .catch(error => {
+                            eventBus.emit('LOAD_ERROR', error);
+                            reject(error);
+                        });
+                case 'script':
+                    const script = document.createElement('script');
+                    script.src = objectURL;
+                    script.onload = () => {
+                        eventBus.emit('SCRIPT_LOADED', { url: objectURL });
+                        resolve(script);
+                    };
+                    script.onerror = (error) => {
                         eventBus.emit('LOAD_ERROR', error);
                         reject(error);
-                    });
+                    };
+                    document.head.appendChild(script);
                     break;
+                    break;
+                case 'skybox':
+                    return 'skybox';
+                case 'md':
+                    return 'text';
+                case 'js':
+                case 'ts':
+                    return 'script';
                 default:
-                    reject(new Error(`Unsupported file type: ${fileType}`));
+                throw new Error(`Unsupported file type: ${fileType}`);
             }
         });
     }
 
-    // 根据文件扩展名获取资源类型
+    // FIXME: 扩展性达不到要求，后续需要根据文件路径下的各个文件夹名称不同，分成各个不同的加载任务，形成一个加载队列，
+    // 后续还会涉及到天空盒、地图数据的加载，需要对资源读取插件进行扩展
     private getFileType(file: string) {
         const extension = file.split('.').pop();
         switch (extension) {
@@ -176,8 +208,17 @@ export class ResourceReaderPlugin extends BasePlugin {
                 return 'texture';
             case 'skybox':
                 return 'skybox';
+            case 'md':
+                return 'text';
+            case 'js':
+                return 'script';
             default:
                 throw new Error(`Unsupported file type: ${extension}`);
         }
+    }
+
+    // 后缀为js、ts、
+    ignore() {
+        return true;
     }
 }
