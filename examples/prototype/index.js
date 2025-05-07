@@ -1,29 +1,13 @@
 const engine = new EngineKernel.BaseCore({
     pluginsParams: [
-        // {
-        //     name: "CameraPlugin",
-        //     path: "/plugins/camera",
-        //     pluginClass: EngineKernel.CameraPlugin,
-        //     userData: {
-        //         cameraConfig: {
-        //             type: "perspective",
-        //             fov: 45,
-        //             near: 0.1,
-        //             far: 1000,
-        //             position: [0, 0, 5],
-        //             lookAt: [0, 0, 0],
-        //         },
-        //     },
-        // },
-        // {
-        //     name: "ResourceReaderPlugin",
-        //     path: "/plugins/ResourceReaderPlugin",
-        //     url: "/assets/models",
-        //     supportedFormats: ["gltf", "fbx"],
-        //     pluginClass: EngineKernel.ResourceReaderPlugin,
-        //     userData: {
-        //     },
-        // },
+        {
+            name: "ResourceReaderPlugin",
+            path: "/plugins/ResourceReaderPlugin",
+            url: "/assets/models",
+            supportedFormats: ["gltf", "fbx"],
+            pluginClass: EngineKernel.ResourceReaderPlugin,
+            userData: { },
+        },
         {
             name: "BaseScene",
             path: "/plugins/scene",
@@ -79,23 +63,23 @@ engine.register({
 })
 
 engine.on("init-complete", () => {
-    // let gltfLoader = engine.getPlugin('ResourceReaderPlugin').gltfLoader;
+    let gltfLoader = engine.getPlugin('ResourceReaderPlugin').gltfLoader;
 
-    // gltfLoader.load('./model/Horse.glb', (gltf) => {
-    //     console.log("gltf", gltf)
-    //     gltf.scene.scale.set(0.01, 0.01, 0.01); // 调整模型大小
-    //     gltf.scene.position.set(0, 0, 0);
+    gltfLoader.load('./model/Horse.glb', (gltf) => {
+        console.log("gltf", gltf)
+        gltf.scene.scale.set(0.01, 0.01, 0.01); // 调整模型大小
+        gltf.scene.position.set(0, 0, 0);
         
-    //     // 调试模型材质
-    //     gltf.scene.traverse(child => {
-    //         if (child.material) {
-    //             child.material.needsUpdate = true;
-    //         }
-    //     });
+        // 调试模型材质
+        gltf.scene.traverse(child => {
+            if (child.material) {
+                child.material.needsUpdate = true;
+            }
+        });
 
-    //     // 添加模型到场景
-    //     engine.getPlugin("BaseScene").scene.add(gltf.scene);
-    // })
+        // 添加模型到场景
+        engine.getPlugin("BaseScene").scene.add(gltf.scene);
+    })
 
     // 渲染循环
     engine.getPlugin("RenderLoopPlugin").initialize()

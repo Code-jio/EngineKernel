@@ -25,7 +25,7 @@ class BasePlugin {
     // 加载
     async load(): Promise<void> {}
     // 暂停
-    async stop(): Promise<void> {}
+    // async stop(): Promise<void> {}
     // 卸载
     async unload(): Promise<void> {
         this.status = "unloaded"

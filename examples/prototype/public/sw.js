@@ -12,7 +12,7 @@ const CACHE_POLICY = {
 }
 
 // 在fetch事件处理中新增动态缓存逻辑
-ServiceWorkerGlobalScope.addEventListener("fetch", event => {
+this.addEventListener("fetch", event => {
     const { request } = event
 
     // 动态资源自动缓存（模型/贴图等）
@@ -32,22 +32,22 @@ ServiceWorkerGlobalScope.addEventListener("fetch", event => {
 })
 
 // 安装事件
-ServiceWorkerGlobalScope.skipWaiting()
+this.skipWaiting()
 
-ServiceWorkerGlobalScope.addEventListener("install", event => {
-    event.waitUntil(
-        caches
-            .open(CACHE_NAME)
-            .then(cache =>
-                cache.addAll([
-                    "/model/",
-                    "/skyBox/"
-                ]),
-            ),
-    )
-})
+// this.addEventListener("install", event => {
+//     event.waitUntil(
+//         caches
+//             .open(CACHE_NAME)
+//             .then(cache =>
+//                 cache.addAll([
+//                     "/model",
+//                     "/skyBox"
+//                 ]),
+//             ),
+//     )
+// })
 
-ServiceWorkerGlobalScope.addEventListener("activate", event => {
+this.addEventListener("activate", event => {
     event.waitUntil(
         caches.keys().then(keys =>
             Promise.all(
@@ -62,7 +62,7 @@ ServiceWorkerGlobalScope.addEventListener("activate", event => {
     )
 })
 
-ServiceWorkerGlobalScope.addEventListener("fetch", event => {
+this.addEventListener("fetch", event => {
     const { request } = event
 
     if (
