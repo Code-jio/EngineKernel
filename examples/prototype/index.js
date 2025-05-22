@@ -48,7 +48,6 @@ const engine = new EngineKernel.BaseCore({
     pluginClass: EngineKernel.RenderLoop,
     userData: {},
 })
-
 let baseScene = engine.getPlugin("BaseScene")
 console.log("🚀 ~ engine:", engine)
 console.log(baseScene, "基础场景插件")
@@ -61,13 +60,25 @@ engine.register({
         camera: baseScene.camera,
         domElement: baseScene.renderer.domElement,
     },
+}).register({
+    name: "SkyBox",
+    path: "/plugins/webgl/skyBox",
+    pluginClass: EngineKernel.SkyBox,
+    userData: {
+        turbidity: 10,
+        rayleigh: 2,
+        elevation: 2,
+        azimuth: 180,
+        scene: baseScene.scene,
+        renderer: baseScene.renderer,
+    }
 })
+
 
 engine.on("init-complete", () => {
     let gltfLoader = engine.getPlugin("ResourceReaderPlugin").gltfLoader
 
     gltfLoader.load("./public/model/Horse.glb", gltf => {
-        console.log("gltf", gltf)
         gltf.scene.scale.set(0.01, 0.01, 0.01) // 调整模型大小
         gltf.scene.position.set(0, 0, 0)
 

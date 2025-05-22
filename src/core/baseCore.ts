@@ -114,11 +114,11 @@ class BaseCore {
                 throw new Error(`Invalid plugin path: ${pluginMeta.path}`)
             }
 
-            // 记录详细注册日志
-            this.logger.debug(`Registering plugin: ${pluginMeta.name}`, {
-                path: pluginMeta.path,
-                dependencies: pluginMeta.dependencies
-            });
+            // // 记录详细注册日志
+            // this.logger.debug(`Registering plugin: ${pluginMeta.name}`, {
+            //     path: pluginMeta.path,
+            //     dependencies: pluginMeta.dependencies
+            // });
 
             const plugin: PluginInstance = new pluginMeta.pluginClass({
                 name: pluginMeta.name,

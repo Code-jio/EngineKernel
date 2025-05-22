@@ -1,4 +1,5 @@
-import { THREE, BasePlugin } from "../basePlugin";
+import { BasePlugin } from "../basePlugin"
+import * as THREE from "three"
 import EventBus from '../../eventBus/eventBus';
 
 export class CameraPlugin extends BasePlugin {

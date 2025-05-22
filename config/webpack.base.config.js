@@ -19,6 +19,9 @@ export default {
         },
         globalObject: "this",
     },
+    externals: {
+        'three': 'THREE'
+    },
     ignoreWarnings: [/Failed to parse source map/, /Critical dependency/, /Module not found:/],
     module: {
         rules: [
@@ -42,7 +45,8 @@ export default {
     resolve: {
         extensions: [".js", ".ts"],
         alias: {
-            '@': path.resolve(__dirname, '../src').replace(/\\/g, '/') // 统一POSIX路径格式
+            '@': path.resolve(__dirname, '../src').replace(/\\/g, '/'), // 统一POSIX路径格式
+            'three': path.resolve(__dirname, '../node_modules/three')
         },
         fallback: {
             vm: require.resolve("vm-browserify"),

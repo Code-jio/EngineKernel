@@ -1,5 +1,4 @@
 import { PluginMeta } from "../types/Plugin"
-import * as THREE from "three"
 class BasePlugin {
     readonly name: string
     readonly path: string
@@ -32,4 +31,4 @@ class BasePlugin {
     }
 }
 
-export { THREE, BasePlugin }
+export { BasePlugin }

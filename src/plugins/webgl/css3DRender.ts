@@ -1,4 +1,5 @@
-import { THREE, BasePlugin } from "../basePlugin"
+import * as THREE from 'three'
+import { BasePlugin } from "../basePlugin"
 import { CSS3DRenderer, CSS3DObject } from "three/examples/jsm/renderers/CSS3DRenderer"
 import eventBus from '../../eventBus/eventBus'
 
@@ -46,9 +47,6 @@ export class CSS3DRenderPlugin extends BasePlugin {
         this.object.position.copy(config.position || new THREE.Vector3())
         this.object.rotation.copy(config.rotation || new THREE.Euler())
         this.object.scale.set(config.scale || 1, config.scale || 1, 1)
-
- 
-
 
         this.position.copy(this.object.position)
         return this.object

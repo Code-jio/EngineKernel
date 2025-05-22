@@ -1,0 +1,22 @@
+{
+  "models": [
+    "models/scene.gltf",
+    "models/character.fbx"
+  ],
+  "textures": [
+    "textures/ground.jpg",
+    "textures/wall.jpg"
+  ],
+  "skybox": [
+    "skybox/px.jpg",
+    "skybox/nx.jpg",
+    "skybox/py.jpg",
+    "skybox/ny.jpg",
+    "skybox/pz.jpg",
+    "skybox/nz.jpg"
+  ],
+  "maps": [
+    "maps/heightmap.png",
+    "maps/normalmap.png"
+  ]
+} 

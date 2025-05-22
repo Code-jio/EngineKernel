@@ -7,7 +7,7 @@ import { fileURLToPath } from "url"
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 export default new Promise(async resolve => {
-    const port = await detectPort(8080)
+    const port = await detectPort(8000)
 
     resolve(
         merge(baseConfig, {
