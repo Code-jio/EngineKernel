@@ -1,5 +1,5 @@
-import detectPort from "detect-port"
 import path from "path"
+import os from "os"
 import baseConfig from "./webpack.base.config.js"
 import { merge } from "webpack-merge"
 import { fileURLToPath } from "url"

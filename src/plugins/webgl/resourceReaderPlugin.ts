@@ -1,5 +1,6 @@
 // 增强后的资源读取插件
-import { THREE, BasePlugin } from "../basePlugin"
+import { BasePlugin } from "../basePlugin"
+import * as THREE from "three"
 import eventBus from '../../eventBus/eventBus'
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader"
 
@@ -49,22 +50,29 @@ const validateResourcePath = (path: string) => {
 };
 
 /**
- * 预期功能要求：
- * 1.实现资源读取的异步任务队列（防止线程阻塞）
- * 2.使用workBox完成资源缓存管理
- * 3.参数输入仅给一个文件路径，根据该文件路径下各个文件夹名称不同，分成各个不同的加载任务，形成一个加载队列
- * 4.加载队列中的任务完成后，将加载的资源通过eventBus进行发布，在主文件中进行订阅，进行资源的加载
- * 5.后续还会涉及到天空盒、地图数据的加载，需要对资源读取插件进行扩展
+ * 资源读取插件
+ * 功能要求：
+ * 1. 实现资源读取的异步任务队列（防止线程阻塞）
+ * 2. 支持多种资源类型的加载
+ * 3. 提供缓存管理
+ * 4. 通过 eventBus 发布加载事件
+ * 5. 支持优先级队列和并发控制
  */
-
 export class ResourceReaderPlugin extends BasePlugin {
-    private url: string = "" // 资源文件路径(主文件入口)
-    private taskQueue: Map<string, Promise<any>> = new Map()
-    private gltfLoader: GLTFLoader = new GLTFLoader() // 后续不仅仅是涉及模型的加载，还会涉及到天空盒、地图数据的加载
-    private totalTasks = 0
-    private maxConcurrent = 4
-    private activeTasks = 0
-    private cache = new Map<string, any>()
+    private baseUrl: string = ""
+    private loadTaskQueue: Map<string, LoadTask> = new Map()
+    private resourceCache: Map<string, any> = new Map()
+    private loadersMap: Map<ResourceType, any> = new Map()
+    
+    // 队列控制参数
+    private maxConcurrentTasks = 4
+    private activeTaskCount = 0
+    private isProcessingQueue = false
+    
+    // 统计信息
+    private totalTaskCount = 0
+    private completedTaskCount = 0
+    private failedTaskCount = 0
 
     constructor(meta: any) {
         super(meta)
@@ -96,31 +104,56 @@ export class ResourceReaderPlugin extends BasePlugin {
         }
     }
 
-    // 添加任务
-    private addTask(task: () => Promise<any>) {
-        this.taskQueue.set(task.name, task())
-        this.totalTasks++
-        this.processQueue()
+    /**
+     * 初始化插件配置
+     */
+    private initializePlugin(meta: any): void {
+        const userData = meta?.userData || {}
+        this.baseUrl = userData.url || "/public"
+        this.maxConcurrentTasks = userData.maxConcurrent || 4
+        
+        // 验证基础 URL
+        if (!this.baseUrl) {
+            throw new Error('资源基础路径不能为空')
+        }
     }
 
-    // 处理任务队列
-    private async processQueue() {
-        if (this.activeTasks >= this.maxConcurrent) return
-        this.activeTasks++
-        const task = this.taskQueue.values().next().value
-        if (task) {
-            try {
-                const result = await task;
-                this.cache.set(result.name, result)
-                this.activeTasks--
-                this.totalTasks--
-                this.processQueue()
-            } catch (error) {
-                console.error('Error processing task:', error)
-                this.activeTasks--
-                this.totalTasks--
-                this.processQueue()
-            }
+    /**
+     * 初始化各种加载器
+     */
+    private initializeLoaders(): void {
+        this.loadersMap.set(ResourceType.GLTF, new GLTFLoader())
+        this.loadersMap.set(ResourceType.TEXTURE, new THREE.TextureLoader())
+        // 其他加载器可以后续添加
+    }
+
+    /**
+     * 设置事件监听器
+     */
+    private setupEventListeners(): void {
+        eventBus.on('load-resource', this.handleResourceLoadRequest.bind(this))
+        eventBus.on('load-resource-list', this.handleResourceListLoadRequest.bind(this))
+    }
+
+    /**
+     * 处理单个资源加载请求
+     */
+    private handleResourceLoadRequest(resourceConfig: ResourceConfig): void {
+        try {
+            this.loadResource(resourceConfig)
+        } catch (error) {
+            console.error('处理资源加载请求失败:', error)
+        }
+    }
+
+    /**
+     * 处理资源列表加载请求
+     */
+    private handleResourceListLoadRequest(resourceList: ResourceConfig[]): void {
+        try {
+            this.loadResourceList(resourceList)
+        } catch (error) {
+            console.error('处理资源列表加载请求失败:', error)
         }
     }
 
@@ -191,29 +224,289 @@ export class ResourceReaderPlugin extends BasePlugin {
                     });
                     break;
                 default:
-                    reject(new Error(`Unsupported file type: ${fileType}`));
+                    reject(new Error(`不支持的资源类型: ${config.type}`))
             }
-        });
+        })
     }
 
-    // 根据文件扩展名获取资源类型
-    private getFileType(file: string) {
-        const extension = file.split('.').pop();
-        switch (extension) {
-            case 'gltf':
-            case 'glb':
-                return 'gltf';
-            case 'jpeg':
-            case 'bmp':
-            case 'jpg':
-            case 'png':
-                return 'texture';
-            case 'dds':
-                return 'texture';
-            case 'skybox':
-                return 'skybox';
-            default:
-                throw new Error(`Unsupported file type: ${extension}`);
+    /**
+     * 加载 GLTF 模型
+     */
+    private loadGltfResource(
+        path: string, 
+        name: string, 
+        startTime: number,
+        resolve: Function, 
+        reject: Function
+    ): void {
+        const loader = this.loadersMap.get(ResourceType.GLTF)
+        
+        loader.load(
+            path,
+            (gltf: any) => {
+                const result = this.createLoadResult(name, ResourceType.GLTF, gltf, startTime)
+                this.handleLoadSuccess(result, resolve)
+            },
+            (progress: any) => {
+                eventBus.emit('resource-progress', { name, progress })
+            },
+            (error: any) => {
+                this.handleLoadError(name, error, reject)
+            }
+        )
+    }
+
+    /**
+     * 加载纹理资源
+     */
+    private loadTextureResource(
+        path: string, 
+        name: string, 
+        startTime: number,
+        resolve: Function, 
+        reject: Function
+    ): void {
+        const loader = this.loadersMap.get(ResourceType.TEXTURE)
+        
+        loader.load(
+            path,
+            (texture: THREE.Texture) => {
+                const result = this.createLoadResult(name, ResourceType.TEXTURE, texture, startTime)
+                this.handleLoadSuccess(result, resolve)
+            },
+            (progress: any) => {
+                eventBus.emit('resource-progress', { name, progress })
+            },
+            (error: any) => {
+                this.handleLoadError(name, error, reject)
+            }
+        )
+    }
+
+    /**
+     * 加载文本资源
+     */
+    private loadTextResource(
+        path: string, 
+        name: string, 
+        startTime: number,
+        resolve: Function, 
+        reject: Function
+    ): void {
+        fetch(path)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+                }
+                return response.text()
+            })
+            .then(text => {
+                const result = this.createLoadResult(name, ResourceType.TEXT, text, startTime)
+                this.handleLoadSuccess(result, resolve)
+            })
+            .catch(error => {
+                this.handleLoadError(name, error, reject)
+            })
+    }
+
+    /**
+     * 加载脚本资源
+     */
+    private loadScriptResource(
+        path: string, 
+        name: string, 
+        startTime: number,
+        resolve: Function, 
+        reject: Function
+    ): void {
+        const script = document.createElement('script')
+        script.src = path
+        script.onload = () => {
+            const result = this.createLoadResult(name, ResourceType.SCRIPT, script, startTime)
+            this.handleLoadSuccess(result, resolve)
         }
+        script.onerror = (error) => {
+            this.handleLoadError(name, error, reject)
+        }
+        document.head.appendChild(script)
+    }
+
+    /**
+     * 处理加载成功
+     */
+    private handleLoadSuccess(result: LoadResult, resolve: Function): void {
+        // 添加到缓存
+        this.resourceCache.set(result.name, result)
+        
+        // 更新统计
+        this.completedTaskCount++
+        this.activeTaskCount--
+        
+        // 发送事件
+        eventBus.emit('resource-loaded', result)
+        eventBus.emit('resource-progress-update', {
+            total: this.totalTaskCount,
+            completed: this.completedTaskCount,
+            failed: this.failedTaskCount
+        })
+        
+        // 继续处理队列
+        this.processTaskQueue()
+        
+        resolve(result)
+    }
+
+    /**
+     * 处理加载失败
+     */
+    private handleLoadError(name: string, error: any, reject: Function): void {
+        this.failedTaskCount++
+        this.activeTaskCount--
+        
+        const errorMessage = `加载资源 "${name}" 失败: ${error instanceof Error ? error.message : '未知错误'}`
+        console.error(errorMessage, error)
+        
+        eventBus.emit('resource-load-error', { name, error: errorMessage })
+        eventBus.emit('resource-progress-update', {
+            total: this.totalTaskCount,
+            completed: this.completedTaskCount,
+            failed: this.failedTaskCount
+        })
+        
+        // 继续处理队列
+        this.processTaskQueue()
+        
+        reject(new Error(errorMessage))
+    }
+
+    /**
+     * 创建加载结果对象
+     */
+    private createLoadResult(name: string, type: ResourceType, data: any, startTime: number): LoadResult {
+        return {
+            name,
+            type,
+            data,
+            loadTime: Date.now() - startTime
+        }
+    }
+
+    /**
+     * 处理任务队列
+     */
+    private async processTaskQueue(): Promise<void> {
+        if (this.isProcessingQueue || this.activeTaskCount >= this.maxConcurrentTasks) {
+            return
+        }
+
+        this.isProcessingQueue = true
+
+        // 按优先级排序任务
+        const pendingTasks = Array.from(this.loadTaskQueue.values())
+            .filter(task => task.status === 'pending')
+            .sort((a, b) => (b.config.priority || 0) - (a.config.priority || 0))
+
+        const availableSlots = this.maxConcurrentTasks - this.activeTaskCount
+        const tasksToStart = pendingTasks.slice(0, availableSlots)
+
+        for (const task of tasksToStart) {
+            task.status = 'loading'
+            this.activeTaskCount++
+            
+            try {
+                await task.promise
+                task.status = 'completed'
+            } catch (error) {
+                task.status = 'failed'
+            } finally {
+                this.loadTaskQueue.delete(task.id)
+            }
+        }
+
+        this.isProcessingQueue = false
+
+        // 如果还有待处理任务，继续处理
+        if (this.activeTaskCount < this.maxConcurrentTasks && this.hasPendingTasks()) {
+            setTimeout(() => this.processTaskQueue(), 10)
+        }
+    }
+
+    /**
+     * 检查是否有待处理任务
+     */
+    private hasPendingTasks(): boolean {
+        return Array.from(this.loadTaskQueue.values()).some(task => task.status === 'pending')
+    }
+
+    /**
+     * 生成任务 ID
+     */
+    private generateTaskId(config: ResourceConfig): string {
+        return `${config.name}_${config.type}_${config.path}`
+    }
+
+    /**
+     * 构建完整资源路径
+     */
+    private buildResourcePath(relativePath: string): string {
+        // 确保路径格式正确
+        const cleanBasePath = this.baseUrl.replace(/\/$/, '')
+        const cleanRelativePath = relativePath.replace(/^\//, '')
+        return `${cleanBasePath}/${cleanRelativePath}`
+    }
+
+    /**
+     * 获取缓存的资源
+     */
+    public getCachedResource(name: string): LoadResult | null {
+        return this.resourceCache.get(name) || null
+    }
+
+    /**
+     * 清理缓存
+     */
+    public clearCache(): void {
+        this.resourceCache.clear()
+        eventBus.emit('resource-cache-cleared')
+    }
+
+    /**
+     * 获取加载统计信息
+     */
+    public getLoadStats() {
+        return {
+            total: this.totalTaskCount,
+            completed: this.completedTaskCount,
+            failed: this.failedTaskCount,
+            pending: this.loadTaskQueue.size,
+            active: this.activeTaskCount
+        }
+    }
+
+    /**
+     * 公开 gltfLoader 供其他地方使用（保持向后兼容）
+     */
+    public get gltfLoader(): GLTFLoader {
+        return this.loadersMap.get(ResourceType.GLTF)
+    }
+
+    /**
+     * 销毁插件
+     */
+    destroy(): void {
+        // 清理事件监听器
+        eventBus.off('load-resource', this.handleResourceLoadRequest)
+        eventBus.off('load-resource-list', this.handleResourceListLoadRequest)
+        
+        // 清理缓存和队列
+        this.resourceCache.clear()
+        this.loadTaskQueue.clear()
+        
+        // 清理加载器
+        this.loadersMap.clear()
+    }
+
+    update(): void {
+        // 插件更新逻辑（如果需要）
     }
 }

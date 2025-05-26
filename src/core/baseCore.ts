@@ -11,12 +11,19 @@ import { EventDispatcher } from "../eventBus/eventDispatch"
 import { applyMixins } from "../decorators/mixinGuards"
 
 // 定义 Core 类的依赖项接口
-interface InitParams {
+export interface InitParams {
     pluginsParams: []
 }
 
+// 定义公共接口
+export interface IBaseCore {
+    getPlugin(name: string): any;
+    register(pluginMeta: PluginMeta): BaseCore;
+    unregisterPlugin(plugin: PluginInstance): boolean;
+}
+
 // 基础核心类声明
-class BaseCore {
+class BaseCore implements IBaseCore {
     static STATUS = {
         REGISTERED: "registered",
         LOADING: "loading",
@@ -24,14 +31,14 @@ class BaseCore {
         ERROR: "error",
         UNLOADING: "unloading",
     }
-    loadStrategies: { [key: string]: (plugin: PluginInstance) => Promise<void> } // 加载策略
-    performance: { metrics: Map<string, any>; enable: boolean } // 后续转为性能表现的插件
-    components: any // 
-    _messageChannels: any // 
-    _servicePermissions: any // 
-    private logger = console
+    protected loadStrategies: { [key: string]: (plugin: PluginInstance) => Promise<void> } // 加载策略
+    protected performance: { metrics: Map<string, any>; enable: boolean } // 后续转为性能表现的插件
+    protected components: any // 
+    protected _messageChannels: any // 
+    protected _servicePermissions: any // 
+    protected logger = console
 
-    gpuManager: any // 后续移除，转变成对应插件
+    protected gpuManager: any // 后续移除，转变成对应插件
     
     constructor(InitParams: InitParams) {
         this.loadStrategies = {
@@ -61,10 +68,31 @@ class BaseCore {
                 }
             }
         >()
-        this._startAsyncInit(InitParams)
+        
+        // 同步注册插件，不进行异步初始化
+        this._syncInit(InitParams)
     }
 
-    private async _startAsyncInit(InitParams: InitParams) {
+    // 新增同步初始化方法
+    protected _syncInit(InitParams: InitParams) {
+        if (InitParams.pluginsParams) {
+            for (const params of InitParams.pluginsParams) {
+                if (params) {
+                    this.register(params)
+                }
+            }
+        }
+        // 不在构造函数中进行异步初始化
+        console.log('🔧 BaseCore 同步初始化完成，插件已注册但未初始化')
+    }
+
+    // 提供手动初始化方法
+    public async initialize(): Promise<void> {
+        await this._initPlugins()
+    }
+
+    // 原有的异步初始化方法改名并保留
+    protected async _startAsyncInit(InitParams: InitParams) {
         if (InitParams.pluginsParams) {
             for (const params of InitParams.pluginsParams) {
                 if (params) {
@@ -76,7 +104,7 @@ class BaseCore {
         await this._initPlugins()
     }
 
-    private async _initPlugins() {
+    protected async _initPlugins() {
         let that: CoreType = this as any
         const plugins = Array.from(this.registry.values())
         await Promise.all(plugins.map(p => p.instance.initialize?.(that)))
@@ -114,11 +142,11 @@ class BaseCore {
                 throw new Error(`Invalid plugin path: ${pluginMeta.path}`)
             }
 
-            // 记录详细注册日志
-            this.logger.debug(`Registering plugin: ${pluginMeta.name}`, {
-                path: pluginMeta.path,
-                dependencies: pluginMeta.dependencies
-            });
+            // // 记录详细注册日志
+            // this.logger.debug(`Registering plugin: ${pluginMeta.name}`, {
+            //     path: pluginMeta.path,
+            //     dependencies: pluginMeta.dependencies
+            // });
 
             const plugin: PluginInstance = new pluginMeta.pluginClass({
                 name: pluginMeta.name,
@@ -271,34 +299,39 @@ class BaseCore {
     }
 
     // 装饰器
-    private _withPerfMonitoring<T>(
+    protected _withPerfMonitoring<T>(
         methodName: string,
         fn: (...args: any[]) => Promise<T>,
     ): (...args: any[]) => Promise<T> {
         return async (...args) => {
             if (!this.performance.enable) return fn(...args)
 
-            const start = performance.now()
-            const memBefore = process.memoryUsage().rss
+            const startTime = performance.now()
+            const startMemory = (performance as any).memory?.usedJSHeapSize
 
             try {
                 const result = await fn(...args)
-                const duration = performance.now() - start
-                const memDelta = process.memoryUsage().rss - memBefore
+                const endTime = performance.now()
+                const endMemory = (performance as any).memory?.usedJSHeapSize
 
                 this._recordMetrics(methodName, {
-                    duration,
-                    memoryDelta: memDelta,
+                    duration: endTime - startTime,
+                    memoryDelta: endMemory ? endMemory - startMemory : undefined,
                     success: true,
                 })
 
                 return result
             } catch (error) {
+                const endTime = performance.now()
+                const endMemory = (performance as any).memory?.usedJSHeapSize
+
                 this._recordMetrics(methodName, {
-                    duration: performance.now() - start,
-                    error: (error as Error).message,
+                    duration: endTime - startTime,
+                    memoryDelta: endMemory ? endMemory - startMemory : undefined,
+                    error: error instanceof Error ? error.message : String(error),
                     success: false,
                 })
+
                 throw error
             }
         }
@@ -337,4 +370,4 @@ applyMixins(BaseCore, [
 ])
 
 // 增强类型导出
-export default BaseCore as typeof BaseCore & PluginManager & EventDispatcher
+export default BaseCore as typeof BaseCore & IBaseCore & PluginManager & EventDispatcher

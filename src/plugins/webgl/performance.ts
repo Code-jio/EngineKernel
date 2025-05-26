@@ -1,4 +1,5 @@
-import { THREE, BasePlugin } from "../basePlugin"
+import { BasePlugin } from "../basePlugin"
+import * as THREE from "three"
 import Stats from "three/examples/jsm/libs/stats.module"
 import eventBus from '../../eventBus/eventBus'
 

@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EngineKernel 测试</title>
+</head>
+<body>
+    <h1>EngineKernel 测试页面</h1>
+    <div id="result"></div>
+    
+    <script src="http://localhost:8000/engine-kernel.dev.js"></script>
+    <script>
+        console.log('测试开始...');
+        
+        // 等待库加载完成
+        setTimeout(() => {
+            const result = document.getElementById('result');
+            
+            if (typeof window.EngineKernel !== 'undefined') {
+                console.log('✅ EngineKernel 加载成功:', window.EngineKernel);
+                result.innerHTML = `
+                    <h2 style="color: green;">✅ 成功！</h2>
+                    <p>EngineKernel 已正确暴露到 window 对象</p>
+                    <p>可用组件: ${Object.keys(window.EngineKernel).join(', ')}</p>
+                `;
+                
+                // 测试BaseCore是否存在
+                if (window.EngineKernel.BaseCore) {
+                    console.log('✅ BaseCore 组件存在');
+                    result.innerHTML += '<p>✅ BaseCore 组件正常</p>';
+                } else {
+                    console.log('❌ BaseCore 组件不存在');
+                    result.innerHTML += '<p style="color: red;">❌ BaseCore 组件缺失</p>';
+                }
+                
+            } else {
+                console.log('❌ EngineKernel 未定义');
+                result.innerHTML = `
+                    <h2 style="color: red;">❌ 失败！</h2>
+                    <p>EngineKernel 未正确暴露到 window 对象</p>
+                `;
+            }
+        }, 1000);
+    </script>
+</body>
+</html> 

@@ -15,9 +15,9 @@ export default {
         library: {
             name: "EngineKernel",
             type: "umd",
-            umdNamedDefine: true,
+            umdNamedDefine: true
         },
-        globalObject: "this",
+        globalObject: 'typeof self !== \'undefined\' ? self : this'
     },
     ignoreWarnings: [/Failed to parse source map/, /Critical dependency/, /Module not found:/],
     module: {
@@ -31,6 +31,8 @@ export default {
                             onlyCompileBundledFiles: true, // 只编译当前项目的文件
                             compilerOptions: {
                                 esModuleInterop: true, // 启用ES模块互操作
+                                module: "esnext",
+                                target: "es5"
                             },
                         },
                     },
@@ -42,7 +44,8 @@ export default {
     resolve: {
         extensions: [".js", ".ts"],
         alias: {
-            '@': path.resolve(__dirname, '../src').replace(/\\/g, '/') // 统一POSIX路径格式
+            '@': path.resolve(__dirname, '../src').replace(/\\/g, '/'), // 统一POSIX路径格式
+            'three': path.resolve(__dirname, '../node_modules/three')
         },
         fallback: {
             vm: require.resolve("vm-browserify"),
@@ -50,6 +53,7 @@ export default {
             path: require.resolve("path-browserify"),
             fs: false,
         },
+        mainFields: ['browser', 'module', 'main']
     },
-    plugins: [],
+    plugins: []
 }

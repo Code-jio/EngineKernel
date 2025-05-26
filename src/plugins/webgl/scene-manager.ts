@@ -1,4 +1,5 @@
-import { THREE, BasePlugin } from "../basePlugin"
+import * as THREE from 'three'
+import { BasePlugin } from "../basePlugin"
 import eventBus from '../../eventBus/eventBus'
 import { GLTF } from "three/examples/jsm/loaders/GLTFLoader" // 导入GLTF类型，用于类型
 
@@ -26,7 +27,7 @@ export class SceneManager extends BasePlugin {
     switchScene(name: string) {
         const scene = this.sceneGraph.get(name)
         if (scene instanceof THREE.Scene) {
-            this.activeScene?.traverse(obj => obj.removeFromParent())
+            this.activeScene?.traverse((obj: THREE.Object3D) => obj.removeFromParent())
             this.activeScene = scene
         }
     }
