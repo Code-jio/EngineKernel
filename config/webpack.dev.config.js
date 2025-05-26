@@ -3,6 +3,7 @@ import path from "path"
 import baseConfig from "./webpack.base.config.js"
 import { merge } from "webpack-merge"
 import { fileURLToPath } from "url"
+import { networkInterfaces } from "os"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -32,9 +33,24 @@ export default new Promise(async resolve => {
             entry: path.resolve(__dirname, '../src/index.ts'),
             devtool: "source-map",
             output: {
-                filename: 'engine-kernel.dev.js',
+                filename: '[name].dev.js', // 使用动态文件名
                 path: path.resolve(__dirname, '../dist'),
                 publicPath: '/',
+            },
+            optimization: {
+                // 开发环境下禁用代码分割，避免文件名冲突
+                splitChunks: {
+                    chunks: 'async', // 只分割异步chunks
+                    cacheGroups: {
+                        // 开发环境下禁用Three.js分割
+                        default: false,
+                        vendors: false,
+                    },
+                },
+                // 确保Three.js模块去重
+                providedExports: true,
+                usedExports: true,
+                sideEffects: false,
             },
             devServer: {
                 // https: true,
@@ -95,9 +111,9 @@ export default new Promise(async resolve => {
                         const localIp = getLocalIpAddress();
                         
                         console.log("\n项目启动成功！可通过以下地址访问：");
-                        console.log(`- 本机访问: http://localhost:${serverPort}/engine-kernel.dev.js`);
-                        console.log(`- 局域网访问: http://${localIp}:${serverPort}/engine-kernel.dev.js`);
-                        // console.log(`- 外部访问: http://0.0.0.0:${serverPort}/engine-kernel.dev.js\n`);
+                        console.log(`- 本机访问: http://localhost:${serverPort}/main.dev.js`);
+                        console.log(`- 局域网访问: http://${localIp}:${serverPort}/main.dev.js`);
+                        // console.log(`- 外部访问: http://0.0.0.0:${serverPort}/main.dev.js\n`);
                     });
                     
                     return middlewares;
@@ -109,7 +125,7 @@ export default new Promise(async resolve => {
 })
 
 function getLocalIpAddress() {
-    const interfaces = require('os').networkInterfaces()
+    const interfaces = networkInterfaces()
 
     for (const devName in interfaces) {
         const iface = interfaces[devName]
@@ -122,4 +138,6 @@ function getLocalIpAddress() {
             }
         }
     }
+    
+    return 'localhost' // 默认返回localhost
 }

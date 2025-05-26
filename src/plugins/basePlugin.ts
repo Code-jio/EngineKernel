@@ -1,5 +1,6 @@
 import { PluginMeta } from "../types/Plugin"
-import * as THREE from "three"
+import { THREE } from "../utils/three-imports"
+
 class BasePlugin {
     readonly name: string
     readonly path: string
