@@ -27,6 +27,28 @@ const engine = new EngineKernel.BaseCore({
             userData: {
                 rendererConfig: {
                     container: document.getElementById("container"),
+                    antialias: true,
+                    alpha: false,
+                    clearColor: 0x444444,
+                },
+                cameraConfig: {
+                    type: "perspective",
+                    fov: 45,
+                    near: 0.1,
+                    far: 1000,
+                    position: [0, 0, 5],
+                    lookAt: [0, 0, 0],
+                },
+                lightConfig: {
+                    ambientLight: {
+                        color: 0xffffff,
+                        intensity: 0.5,
+                    },
+                    directionalLight: {
+                        color: 0xffffff,
+                        intensity: 1,
+                        position: [10, 10, 10],
+                    },
                 },
             },
         },
@@ -55,23 +77,25 @@ engine.register({
     },
 })
 
-// 监听资源加载事件
-engine.on("resource-loaded", (result) => {
-    console.log(`资源 "${result.name}" 加载完成`, result)
-    
-    if (result.type === 'gltf') {
-        const gltf = result.data
-        // 调整模型
-        gltf.scene.scale.set(0.01, 0.01, 0.01)
-        gltf.scene.position.set(0, -1.5, 0)
-        
-        // 添加模型到场景
-        baseScene.scene.add(gltf.scene)
-        console.log("模型已添加到场景",baseScene.scene)
-    }
-})
+engine.on("init-complete", () => {
+    let gltfLoader = engine.getPlugin("ResourceReaderPlugin").gltfLoader
 
-engine.on("init-complete", async () => {
-    // 启动渲染循环
+    gltfLoader.load("./public/model/Horse.glb", gltf => {
+        console.log("gltf", gltf)
+        gltf.scene.scale.set(0.01, 0.01, 0.01) // 调整模型大小
+        gltf.scene.position.set(0, 0, 0)
+
+        // 调试模型材质
+        gltf.scene.traverse(child => {
+            if (child.material) {
+                child.material.needsUpdate = true
+            }
+        })
+
+        // 添加模型到场景
+        engine.getPlugin("BaseScene").scene.add(gltf.scene)
+    })
+
+    // 渲染循环
     engine.getPlugin("RenderLoopPlugin").initialize()
 })

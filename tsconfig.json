@@ -6,7 +6,7 @@
     "types": ["node", "three"],
     // "module": "Node16",
     "moduleResolution": "node",
-    "lib": ["es2015", "dom"],
+    "lib": ["es2016", "dom"],
     "skipLibCheck": true,
     "strict": true,
     "declaration": true,

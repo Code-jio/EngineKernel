@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>资源读取插件示例</title>
+    <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>资源读取插件示例</h1>
+        
+        <div class="canvas-container">
+            <canvas id="renderer"></canvas>
+            <div id="loading-overlay">
+                <div class="loading-spinner"></div>
+                <div id="loading-text">资源加载中... 0%</div>
+            </div>
+        </div>
+        
+        <div class="controls">
+            <h2>加载状态:</h2>
+            <div id="status">等待开始...</div>
+            
+            <h2>已加载资源:</h2>
+            <div class="resource-list">
+                <h3>模型:</h3>
+                <ul id="models-list"></ul>
+                
+                <h3>纹理:</h3>
+                <ul id="textures-list"></ul>
+                
+                <h3>天空盒:</h3>
+                <ul id="skybox-list"></ul>
+                
+                <h3>地图:</h3>
+                <ul id="maps-list"></ul>
+            </div>
+        </div>
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+    <script src="https://unpkg.com/three@0.160.0/build/three.js"></script>
+    <script src="http://localhost:8000/engine-kernel.min.js"></script>
+    <script src="./index.js"></script>
+</body>
+</html> 

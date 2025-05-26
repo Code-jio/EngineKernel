@@ -1,4 +1,5 @@
-import { THREE, BasePlugin } from "../basePlugin"
+import * as THREE from 'three'
+import { BasePlugin } from "../basePlugin"
 import eventBus from '../../eventBus/eventBus'
 import WebGPURenderer from "three/examples/jsm/renderers/webgpu/WebGPURenderer";
 
@@ -32,7 +33,7 @@ export class WebGLContextLose extends BasePlugin {
     private handleOutOfMemory = () => {
         console.log("Out of memory");
         // 处理内存溢出的逻辑，例如释放不必要的资源、缩小场景等
-        this.scene.traverse((object) => { // 遍历场景中的所有对象
+        this.scene.traverse((object: THREE.Object3D) => { // 遍历场景中的所有对象
             if (object instanceof THREE.Mesh) { // 如果是网格对象
                 object.geometry.dispose(); // 释放几何体
                 object.material.dispose(); // 释放材质

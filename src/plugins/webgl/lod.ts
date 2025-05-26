@@ -1,5 +1,6 @@
 // LOD多层次渲染插件
-import { THREE, BasePlugin } from "../basePlugin"
+import { BasePlugin } from "../basePlugin"
+import * as THREE from "three"
 import eventBus from '../../eventBus/eventBus'
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls"
 

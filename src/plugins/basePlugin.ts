@@ -33,4 +33,4 @@ class BasePlugin {
     }
 }
 
-export { THREE, BasePlugin }
+export { BasePlugin }

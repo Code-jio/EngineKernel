@@ -1,5 +1,6 @@
 // 增强后的资源读取插件
-import { THREE, BasePlugin } from "../basePlugin"
+import { BasePlugin } from "../basePlugin"
+import * as THREE from "three"
 import eventBus from '../../eventBus/eventBus'
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader"
 

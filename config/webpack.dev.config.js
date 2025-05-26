@@ -50,6 +50,12 @@ export default new Promise(async resolve => {
                 filename: 'engine-kernel.dev.js',
                 path: path.resolve(__dirname, '../dist'),
                 publicPath: '/',
+                library: {
+                    name: "EngineKernel",
+                    type: "umd",
+                    export: "default"
+                },
+                globalObject: 'this',
             },
             devServer: {
                 // https: true,

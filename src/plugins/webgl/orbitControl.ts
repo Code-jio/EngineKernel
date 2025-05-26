@@ -1,5 +1,6 @@
 // 轨道控制器插件
-import { THREE, BasePlugin } from "../basePlugin"
+import * as THREE from 'three'
+import { BasePlugin } from "../basePlugin"
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js"
 import eventBus from '../../eventBus/eventBus'
 

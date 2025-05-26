@@ -1,4 +1,5 @@
-import { THREE, BasePlugin } from "../basePlugin"
+import { BasePlugin } from "../basePlugin"
+import * as THREE from "three"
 import eventBus from '../../eventBus/eventBus'
 
 export class RenderLoop extends BasePlugin {
