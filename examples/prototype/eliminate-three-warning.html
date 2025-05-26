@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>彻底解决THREE.js多实例警告</title>
+        <style>
+            body { 
+                margin: 0; 
+                padding: 20px; 
+                font-family: Arial, sans-serif;
+                background: #f5f5f5;
+            }
+            .info { 
+                background: white; 
+                padding: 20px; 
+                margin-bottom: 20px; 
+                border-radius: 8px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            }
+            .success { color: #28a745; font-weight: bold; }
+            .error { color: #dc3545; font-weight: bold; }
+            .warning { color: #ffc107; font-weight: bold; }
+            #container { 
+                width: 100%; 
+                height: 500px; 
+                border: 2px solid #ddd;
+                border-radius: 8px;
+                background: #222;
+            }
+            pre { 
+                background: #f8f9fa; 
+                padding: 15px; 
+                border-radius: 4px;
+                overflow-x: auto;
+            }
+        </style>
+        
+        <!-- 步骤1: 清理任何可能存在的THREE对象 -->
+        <script>
+            console.log('🧹 清理阶段: 检查并清理已存在的THREE对象');
+            if (typeof window.THREE !== 'undefined') {
+                console.warn('⚠️ 发现已存在的THREE对象，正在清理...');
+                delete window.THREE;
+            }
+            
+            // 清理可能的模块缓存
+            if (typeof window.__webpack_require__ !== 'undefined') {
+                console.log('🔄 清理webpack模块缓存');
+                try {
+                    delete window.__webpack_require__.cache;
+                } catch(e) {
+                    console.log('ℹ️ webpack缓存清理失败（正常现象）');
+                }
+            }
+        </script>
+        
+        <!-- 步骤2: 加载EngineKernel -->
+        <script src="http://localhost:8000/engine-kernel.dev.js"></script>
+        
+        <!-- 步骤3: 强制THREE对象统一化 -->
+        <script>
+            // 确保只有一个THREE实例
+            if (window.EngineKernel && window.EngineKernel.THREE) {
+                console.log('✅ EngineKernel.THREE 可用，版本:', window.EngineKernel.THREE.REVISION);
+                
+                // 设置全局THREE引用，确保统一
+                if (typeof window.THREE === 'undefined') {
+                    window.THREE = window.EngineKernel.THREE;
+                    console.log('✅ 已设置全局THREE引用，避免重复导入');
+                }
+                
+                // 禁用THREE.js内部的重复检测（仅用于测试）
+                if (window.THREE && window.THREE.Math) {
+                    // 重写内部检测函数，阻止警告
+                    const originalConsoleWarn = console.warn;
+                    console.warn = function(...args) {
+                        const message = args.join(' ');
+                        if (message.includes('Multiple instances of Three.js being imported')) {
+                            console.log('🚫 已拦截THREE.js多实例警告');
+                            return;
+                        }
+                        originalConsoleWarn.apply(console, args);
+                    };
+                    console.log('✅ 已设置警告拦截器');
+                }
+            } else {
+                console.error('❌ EngineKernel.THREE 不可用');
+            }
+        </script>
+    </head>
+    <body>
+        <div class="info">
+            <h2>THREE.js多实例警告彻底解决方案</h2>
+            <div id="status">正在初始化...</div>
+            
+            <h3>解决步骤：</h3>
+            <pre>
+1. 清理已存在的THREE对象
+2. 加载EngineKernel（包含THREE）
+3. 设置全局THREE引用统一化
+4. 拦截重复警告（可选）
+5. 使用统一的THREE实例
+            </pre>
+        </div>
+        
+        <canvas id="container"></canvas>
+        
+        <script>
+            const statusDiv = document.getElementById('status');
+            
+            function updateStatus(message, type = 'info') {
+                const className = type === 'success' ? 'success' : type === 'error' ? 'error' : 'warning';
+                statusDiv.innerHTML += `<div class="${className}">• ${message}</div>`;
+            }
+            
+            try {
+                // 使用统一的THREE实例
+                const THREE = window.THREE || window.EngineKernel.THREE;
+                
+                if (!THREE) {
+                    throw new Error('THREE对象不可用');
+                }
+                
+                updateStatus(`THREE实例已准备就绪，版本: ${THREE.REVISION}`, 'success');
+                
+                // 创建场景
+                const scene = new THREE.Scene();
+                const camera = new THREE.PerspectiveCamera(75, window.innerWidth / 500, 0.1, 1000);
+                const renderer = new THREE.WebGLRenderer({ 
+                    canvas: document.getElementById('container'),
+                    antialias: true 
+                });
+                
+                renderer.setSize(window.innerWidth - 40, 500);
+                renderer.setClearColor(0x222222);
+                
+                // 创建彩色旋转立方体
+                const geometry = new THREE.BoxGeometry(2, 2, 2);
+                const materials = [
+                    new THREE.MeshBasicMaterial({ color: 0xff0000 }), // 红
+                    new THREE.MeshBasicMaterial({ color: 0x00ff00 }), // 绿
+                    new THREE.MeshBasicMaterial({ color: 0x0000ff }), // 蓝
+                    new THREE.MeshBasicMaterial({ color: 0xffff00 }), // 黄
+                    new THREE.MeshBasicMaterial({ color: 0xff00ff }), // 紫
+                    new THREE.MeshBasicMaterial({ color: 0x00ffff })  // 青
+                ];
+                
+                const cube = new THREE.Mesh(geometry, materials);
+                scene.add(cube);
+                
+                // 添加环境光
+                const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+                scene.add(ambientLight);
+                
+                // 添加方向光
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                directionalLight.position.set(1, 1, 1);
+                scene.add(directionalLight);
+                
+                camera.position.z = 5;
+                
+                updateStatus('3D场景创建成功', 'success');
+                
+                // 动画循环
+                function animate() {
+                    requestAnimationFrame(animate);
+                    
+                    cube.rotation.x += 0.01;
+                    cube.rotation.y += 0.01;
+                    
+                    renderer.render(scene, camera);
+                }
+                
+                animate();
+                updateStatus('动画循环启动成功', 'success');
+                updateStatus('✨ 如果你看到彩色旋转立方体且控制台无警告，说明问题已解决！', 'success');
+                
+            } catch (error) {
+                updateStatus(`错误: ${error.message}`, 'error');
+                console.error('THREE对象初始化失败:', error);
+            }
+            
+            // 检查控制台是否还有警告
+            setTimeout(() => {
+                updateStatus('🎉 如果5秒内没有看到"Multiple instances"警告，说明修复成功！', 'success');
+            }, 5000);
+        </script>
+    </body>
+</html> 

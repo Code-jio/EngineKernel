@@ -3,14 +3,22 @@
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+        <meta http-equiv="Pragma" content="no-cache" />
+        <meta http-equiv="Expires" content="0" />
         <title>EngineKernel 原型验证</title>
         <link rel="stylesheet" href="./index.css " />
+        <script>
+            // 在加载其他脚本之前清理可能存在的全局THREE对象
+            if (typeof window.THREE !== 'undefined') {
+                console.warn('检测到已存在的THREE对象，将被清理以避免冲突');
+                delete window.THREE;
+            }
+        </script>
+        <script src="http://localhost:8000/engine-kernel.dev.js"></script>
     </head>
     <body>
         <canvas id="container"></canvas>
-        
-        <script src="http://localhost:8080/engine-kernel.dev.js"></script>
-        
         <script src="./index.js"></script>
     </body>
 </html>

@@ -26,7 +26,6 @@ export default new Promise(async resolve => {
 
     resolve(
         merge(baseConfig, {
-            // 简化编译输出信息 (移到这里作为顶级配置)
             stats: {
                 colors: true,
                 hash: false,
@@ -87,7 +86,7 @@ export default new Promise(async resolve => {
                 host: "0.0.0.0",
                 port,
                 open: [
-                    // `http://localhost:${port}`,
+                    `http://localhost:${port}//engine-kernel.dev.js`,
                     // `http://${getLocalIpAddress()}:${port}`,
                 ],
                 hot: true, // 启用完全热模块替换
@@ -116,9 +115,9 @@ export default new Promise(async resolve => {
                     const localIp = getLocalIpAddress();
                     
                     console.log('\n项目启动成功！可通过以下地址访问：');
-                    console.log(`- 本机访问: http://localhost:${port}`);
-                    console.log(`- 局域网访问: http://${localIp}:${port}`);
-                    console.log(`- 外部访问: http://0.0.0.0:${port}\n`);
+                    console.log(`- 本机访问: http://localhost:${port}/engine-kernel.dev.js`);
+                    console.log(`- 局域网访问: http://${localIp}:${port}/engine-kernel.dev.js`);
+                    console.log(`- 外部访问: http://0.0.0.0:${port}/engine-kernel.dev.js\n`);
                 },
             },
             infrastructureLogging: {

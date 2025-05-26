@@ -1,12 +1,23 @@
+// 确保使用EngineKernel提供的THREE实例
+console.log('🔍 检查THREE对象可用性...')
+if (!window.EngineKernel || !window.EngineKernel.THREE) {
+    throw new Error('❌ EngineKernel.THREE 不可用，请确保正确加载了engine-kernel.dev.js')
+}
+
+// 将EngineKernel.THREE设为本地THREE引用，方便使用
+const THREE = window.EngineKernel.THREE
+console.log('✅ THREE对象已正确初始化:', THREE)
+
 const engine = new EngineKernel.BaseCore({
     pluginsParams: [
         {
             name: "ResourceReaderPlugin",
             path: "/plugins/ResourceReaderPlugin",
-            supportedFormats: ["gltf", "fbx"],
+            supportedFormats: ["gltf", "glb"],
             pluginClass: EngineKernel.ResourceReaderPlugin,
             userData: {
-                url: "/public",
+                url: "./public",
+                maxConcurrent: 4, // 最大并发加载数
             },
         },
         {
@@ -16,28 +27,6 @@ const engine = new EngineKernel.BaseCore({
             userData: {
                 rendererConfig: {
                     container: document.getElementById("container"),
-                    antialias: true,
-                    alpha: false,
-                    clearColor: 0x444444,
-                },
-                cameraConfig: {
-                    type: "perspective",
-                    fov: 45,
-                    near: 0.1,
-                    far: 1000,
-                    position: [0, 0, 5],
-                    lookAt: [0, 0, 0],
-                },
-                lightConfig: {
-                    ambientLight: {
-                        color: 0xffffff,
-                        intensity: 0.5,
-                    },
-                    directionalLight: {
-                        color: 0xffffff,
-                        intensity: 1,
-                        position: [10, 10, 10],
-                    },
                 },
             },
         },
@@ -50,8 +39,11 @@ const engine = new EngineKernel.BaseCore({
 })
 
 let baseScene = engine.getPlugin("BaseScene")
+let resourceLoader = engine.getPlugin("ResourceReaderPlugin")
+
 console.log("🚀 ~ engine:", engine)
 console.log(baseScene, "基础场景插件")
+console.log(resourceLoader, "资源加载插件")
 
 engine.register({
     name: "orbitControl",
@@ -63,25 +55,23 @@ engine.register({
     },
 })
 
-engine.on("init-complete", () => {
-    let gltfLoader = engine.getPlugin("ResourceReaderPlugin").gltfLoader
-
-    gltfLoader.load("./public/model/Horse.glb", gltf => {
-        console.log("gltf", gltf)
-        gltf.scene.scale.set(0.01, 0.01, 0.01) // 调整模型大小
-        gltf.scene.position.set(0, 0, 0)
-
-        // 调试模型材质
-        gltf.scene.traverse(child => {
-            if (child.material) {
-                child.material.needsUpdate = true
-            }
-        })
-
+// 监听资源加载事件
+engine.on("resource-loaded", (result) => {
+    console.log(`资源 "${result.name}" 加载完成`, result)
+    
+    if (result.type === 'gltf') {
+        const gltf = result.data
+        // 调整模型
+        gltf.scene.scale.set(0.01, 0.01, 0.01)
+        gltf.scene.position.set(0, -1.5, 0)
+        
         // 添加模型到场景
-        engine.getPlugin("BaseScene").scene.add(gltf.scene)
-    })
+        baseScene.scene.add(gltf.scene)
+        console.log("模型已添加到场景",baseScene.scene)
+    }
+})
 
-    // 渲染循环
+engine.on("init-complete", async () => {
+    // 启动渲染循环
     engine.getPlugin("RenderLoopPlugin").initialize()
 })
