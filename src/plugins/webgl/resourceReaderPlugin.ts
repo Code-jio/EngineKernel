@@ -2,33 +2,48 @@
 import { THREE, BasePlugin } from "../basePlugin"
 import eventBus from '../../eventBus/eventBus'
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader"
-import { Workbox } from "workbox-window"
-import Strategy from "workbox-strategies"
 
-const fetchResource = async (path: string) => {
+
+// 加载path底下所有的文件，以文件名为key，文件路径为value，返回一个对象。 这个path是一个文件目录路径
+const getResource = async (basePath: string) => {
     try {
-        const response = await fetch(path, {
-            headers: {
-                'Accept': 'application/json'
-            }
+        const response = await fetch(`${basePath}`, {
+            headers: { 'Accept': 'application/json' }
         });
-        if (!response.ok) {
-            throw new Error(`Failed to fetch resource: ${response.statusText}`);
-        }
+        if (!response.ok) throw new Error(`目录请求失败: ${response.status}`);
         const contentType = response.headers.get('Content-Type');
-        if (!contentType || !contentType.includes('application/json')) {
-            throw new Error(`Invalid content type: ${contentType}`);
+        if (!contentType?.includes('application/json')) {
+            const text = await response.text();
+            throw new Error(`无效的响应类型: ${contentType} - 响应内容: ${text.substring(0, 100)}`);
         }
-        return await response.json();
+        const entries = await response.json();
+        console.log("🚀 ~ getResource ~ entries:", entries)
+
+        const fileMap: { [key: string]: string } = {};
+        const processEntry = async (entry: any) => {
+            const entryPath = `${basePath}/${encodeURIComponent(entry.name)}`;
+            if (entry.type === 'directory') {
+                const subFiles = await getResource(entryPath);
+                console.log(subFiles,"subfiles")
+                Object.assign(fileMap, subFiles);
+            } else if (entry.type === 'file') {
+                fileMap[entry.name] = entryPath;
+                eventBus.emit('FILE_FOUND', { name: entry.name, path: entryPath });
+            }
+        };
+        await Promise.all(entries.map(processEntry));
+        console.log(`资源加载完成: ${basePath}`, fileMap);
+        return fileMap;
     } catch (error) {
-        console.error('Error fetching resource:', error);
+        console.error(`资源加载失败: ${basePath}`, error);
+        eventBus.emit('LOAD_ERROR', error);
         throw error;
     }
 };
 
 const validateResourcePath = (path: string) => {
-    if (!path) {
-        throw new Error('Resource path is required');
+    if (!path || !/^[\w\-/.:]+$/.test(path) || path.endsWith('.html')) {
+        throw new Error(`Invalid resource path: ${path}`);
     }
     return path;
 };
@@ -62,15 +77,21 @@ export class ResourceReaderPlugin extends BasePlugin {
     // 从目录加载资源
     async loadFromDirectory(dirPath: string) {
         try {
-            const files = await fetchResource(dirPath)
-            files.forEach((file: any) => {
-                const filePath = encodeURI(`${dirPath}/${file}`)
-                const fileType = this.getFileType(file)
-                this.addTask(() => this.loadResource(filePath, fileType))
-            })
-            await this.processQueue()
+            eventBus.emit('DIR_SCAN_START', { path: dirPath });
+            const fileMap = await getResource(dirPath);
+            
+            const tasks = Object.entries(fileMap).map(([fileName, filePath]) => {
+                const fileType = this.getFileType(fileName);
+                return this.loadResource(filePath as string, fileType);
+            });
+
+            await Promise.all(tasks);
+            eventBus.emit('DIR_SCAN_COMPLETE', {
+                path: dirPath,
+                totalFiles: Object.keys(fileMap).length
+            });
         } catch (error) {
-            console.error('Error loading directory:', error);
+            console.error('目录加载失败:', error);
             eventBus.emit('LOAD_ERROR', error);
         }
     }
@@ -117,18 +138,33 @@ export class ResourceReaderPlugin extends BasePlugin {
         if (!response.ok) {
             throw new Error(`Failed to fetch resource: ${response.statusText}`);
         }
+
+        // 新增响应内容预检
         const contentType = response.headers.get('Content-Type');
         if (!contentType || !contentType.includes('application/json')) {
+            const text = await response.text();
+            if (text.startsWith('<')) {
+                throw new Error(`HTML content detected: ${text.substring(0, 100)}...`);
+            }
             throw new Error(`Invalid content type: ${contentType}`);
         }
+
+        // 验证JSON格式有效性
+        const rawData = await response.text();
+        try {
+            JSON.parse(rawData);
+        } catch (e) {
+            throw new Error(`Invalid JSON format: ${rawData.substring(0, 100)}...`);
+        }
+        const fileList = JSON.parse(rawData);
         const blob = await response.blob();
         const objectURL = URL.createObjectURL(blob);
         return new Promise((resolve, reject) => {
             switch (fileType) {
                 case 'gltf':
                     this.gltfLoader.load(objectURL, (gltf) => {
-                        eventBus.emit('GLTF_READY', gltf);
-                        resolve(gltf);
+                        eventBus.emit('GLTF_READY', { asset: gltf, path: filePath });
+                        resolve({ ...gltf, path: filePath });
                     }, undefined, (error) => {
                         eventBus.emit('LOAD_ERROR', error);
                         reject(error);
@@ -137,8 +173,8 @@ export class ResourceReaderPlugin extends BasePlugin {
                 case 'texture':
                     const textureLoader = new THREE.TextureLoader();
                     textureLoader.load(objectURL, (texture) => {
-                        eventBus.emit('TEXTURE_READY', texture);
-                        resolve(texture);
+                        eventBus.emit('TEXTURE_READY', { asset: texture, path: filePath });
+                        resolve({ texture, path: filePath });
                     }, undefined, (error) => {
                         eventBus.emit('LOAD_ERROR', error);
                         reject(error);
@@ -147,8 +183,8 @@ export class ResourceReaderPlugin extends BasePlugin {
                 case 'skybox':
                     const cubeTextureLoader = new THREE.CubeTextureLoader();
                     cubeTextureLoader.load([filePath], (cubeTexture) => {
-                        eventBus.emit('SKYBOX_READY', cubeTexture);
-                        resolve(cubeTexture);
+                        eventBus.emit('SKYBOX_READY', { asset: cubeTexture, path: filePath });
+                        resolve({ ...cubeTexture, path: filePath });
                     }, undefined, (error) => {
                         eventBus.emit('LOAD_ERROR', error);
                         reject(error);

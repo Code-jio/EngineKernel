@@ -3,10 +3,9 @@ const engine = new EngineKernel.BaseCore({
         {
             name: "ResourceReaderPlugin",
             path: "/plugins/ResourceReaderPlugin",
-            url: "/",
             supportedFormats: ["gltf", "fbx"],
             pluginClass: EngineKernel.ResourceReaderPlugin,
-            userData: { },
+            userData: { url: "/examples/prototype/public/" },
         },
         {
             name: "BaseScene",
@@ -17,7 +16,7 @@ const engine = new EngineKernel.BaseCore({
                     container: document.getElementById("container"),
                     antialias: true,
                     alpha: false,
-                    clearColor: 0x444444
+                    clearColor: 0x444444,
                 },
                 cameraConfig: {
                     type: "perspective",
@@ -30,14 +29,14 @@ const engine = new EngineKernel.BaseCore({
                 lightConfig: {
                     ambientLight: {
                         color: 0xffffff,
-                        intensity: 0.5
+                        intensity: 0.5,
                     },
                     directionalLight: {
                         color: 0xffffff,
                         intensity: 1,
-                        position: [10, 10, 10]
-                    }
-                }
+                        position: [10, 10, 10],
+                    },
+                },
             },
         },
     ],
@@ -64,11 +63,11 @@ engine.register({
 
 engine.on("init-complete", () => {
     let gltfLoader = engine.getPlugin('ResourceReaderPlugin').gltfLoader;
-
-    gltfLoader.load('./model/Horse.glb', (gltf) => {
+    
+    gltfLoader.load('./public/model/Horse.glb', (gltf) => {
         console.log("gltf", gltf)
         gltf.scene.scale.set(0.01, 0.01, 0.01); // 调整模型大小
-        gltf.scene.position.set(0, 0, 0);
+        // gltf.scene.position.set(0, 0, 0);
         
         // 调试模型材质
         gltf.scene.traverse(child => {
@@ -84,3 +83,8 @@ engine.on("init-complete", () => {
     // 渲染循环
     engine.getPlugin("RenderLoopPlugin").initialize()
 })
+
+
+// fetch("./public/").then((res)=>{
+//     console.log(res)
+// })

@@ -2,7 +2,7 @@
 module.exports = {
     globDirectory: "dist/",
     globPatterns: ["**/*.{gltf,png,jpg,hdr}"],
-    swDest: "dist/sw.js",
+    swDest: "dist/sw.js", // 生成的 Service Worker 文件路径
     runtimeCaching: [
         {
             urlPattern: /.(gltf)$/,
@@ -10,7 +10,7 @@ module.exports = {
             options: {
                 cacheName: "gltf-cache-v1",
                 expiration: {
-                    maxEntries: 50,
+                    maxEntries: 5000,
                     maxAgeSeconds: 30 * 24 * 60 * 60,
                 },
             },
@@ -21,7 +21,7 @@ module.exports = {
             options: {
                 cacheName: "texture-cache-v1",
                 expiration: {
-                    maxEntries: 100,
+                    maxEntries: 10000,
                     maxAgeSeconds: 60 * 24 * 60 * 60,
                 },
             },
