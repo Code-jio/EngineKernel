@@ -1,16 +1,49 @@
 import detectPort from "detect-port"
 import path from "path"
+import os from "os"
 import baseConfig from "./webpack.base.config.js"
 import { merge } from "webpack-merge"
 import { fileURLToPath } from "url"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
+// 获取本机IP地址
+const getLocalIpAddress = () => {
+    const interfaces = os.networkInterfaces();
+    for (const name of Object.keys(interfaces)) {
+      for (const networkInterface of interfaces[name]) {
+        // 跳过内部地址和非IPv4地址
+        if (networkInterface.family === 'IPv4' && !networkInterface.internal) {
+          return networkInterface.address;
+        }
+      }
+    }
+    return 'localhost';
+  };
+
 export default new Promise(async resolve => {
-    const port = await detectPort(8080)
+    const port = await detectPort(8000)
 
     resolve(
         merge(baseConfig, {
+            // 简化编译输出信息 (移到这里作为顶级配置)
+            stats: {
+                colors: true,
+                hash: false,
+                version: false,
+                timings: true,
+                assets: false,        // 不显示资产信息
+                chunks: false,        // 不显示代码块信息
+                modules: false,       // 不显示模块信息
+                reasons: false,       // 不显示模块被包含的原因
+                children: false,      // 不显示子编译信息
+                source: false,        // 不显示源码
+                errors: true,         // 显示错误
+                errorDetails: true,   // 显示错误详情
+                warnings: true,       // 显示警告
+                publicPath: false,    // 不显示公共路径
+                entrypoints: false,   // 不显示入口点信息
+            },
             mode: "development",
             entry: path.resolve(__dirname, '../src/index.ts'),
             devtool: "source-map",
@@ -31,6 +64,10 @@ export default new Promise(async resolve => {
                     reconnect: 5,
                     webSocketTransport: 'ws',
                     // processEnv: { NODE_ENV: 'development' }
+                    overlay: {
+                      errors: true,
+                      warnings: false,
+                    },
                 },
                 static: {
                     directory: path.join(__dirname, "../dist"),
@@ -49,8 +86,12 @@ export default new Promise(async resolve => {
                 },
                 host: "0.0.0.0",
                 port,
-                open: true,
+                open: [
+                    // `http://localhost:${port}`,
+                    // `http://${getLocalIpAddress()}:${port}`,
+                ],
                 hot: true, // 启用完全热模块替换
+                allowedHosts: 'all',
                 liveReload: true, // 启用自动刷新
                 // 如果需要代理API，可添加以下配置（示例）
                 // proxy: {
@@ -65,7 +106,23 @@ export default new Promise(async resolve => {
                         usePolling: true, // 使用轮询
                         interval: 300, // 轮询间隔时间（毫秒）
                     },
-                }
+                },
+                onListening: function (devServer) {
+                    if (!devServer) {
+                      throw new Error('webpack-dev-server is not defined');
+                    }
+                    
+                    const port = devServer.server.address().port;
+                    const localIp = getLocalIpAddress();
+                    
+                    console.log('\n项目启动成功！可通过以下地址访问：');
+                    console.log(`- 本机访问: http://localhost:${port}`);
+                    console.log(`- 局域网访问: http://${localIp}:${port}`);
+                    console.log(`- 外部访问: http://0.0.0.0:${port}\n`);
+                },
+            },
+            infrastructureLogging: {
+                level: 'warn', // 只显示警告和错误级别的基础设施日志
             },
         }),
     )
