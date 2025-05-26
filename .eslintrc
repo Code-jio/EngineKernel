@@ -1,67 +1,62 @@
 {
-  "env": {
-    "browser": true,
-    "es2021": true
-  },
-  "extends": "airbnb-base",
-  "parserOptions": {
-    "ecmaVersion": "latest",
-    "sourceType": "module"
-  },
-  "rules": {
-    "no-console": "off",
-    "import/prefer-default-export": "off",
-    "no-use-before-define": "off",
-    "indent": [
-      "error",
-      4, // 缩进
-      {
-        "SwitchCase": 1 // switch case 缩进
-      }
-    ],
-    "linebreak-style": "off",
-    "eol-last": "off",
-    "no-empty-function": "off",
-    "class-methods-use-this": "off",
-    "no-unused-vars": "off",
-    "no-trailing-spaces": "off",
-    "semi": "off",
-    "space-before-blocks": "off",
-    "eslint-plugin-import/no-cycle": "off",
-    "arrow-parens": "off",
-    "implicit-arrow-linebreak": "off",
-    "comma-dangle": "off",
-    "padded-blocks": "off",
-    "no-await-in-loop": "off",
-    "new-cap": "off",
-    "import/no-unresolved": "off",
-    "import/extensions": "off",
-    "no-underscore-dangle": [
-      "error",
-      {
-        "allowAfterThis": true
-      }
-    ],
-    "no-param-reassign": [
-      "error",
-      {
-        "props": false
-      }
-    ],
-    "quotes": "off",
-    // 处理类成员空白行
-    "lines-between-class-members": "off",
-    // 处理未定义变量
-    "no-undef": "off",
-    "eslint-plugin-import/no-named-as-default": "off",
-    "eslint-plugin-import/no-named-as-default-member": "off",
-    "no-restricted-syntax": "off",
-    "no-multiple-empty-lines": "off",
-    "object-curly-newline": "off",
-    "no-confusing-arrow": "off",
-    "operator-linebreak": "off",
-    "no-plusplus": "off",
-    "no-unused-expressions": "off",
-    "function-paren-newline": "off"
-  }
+    "env": {
+        "browser": true,
+        "es2021": true,
+    },
+    "extends": "airbnb-base",
+    "parserOptions": {
+        "ecmaVersion": "latest",
+        "sourceType": "module",
+    },
+    "rules": {
+        "no-console": "off",
+        "import/prefer-default-export": "off",
+        "no-use-before-define": "off",
+        "indent": ["error", 4, { "ignoredNodes": ["TemplateLiteral"] }],
+        "linebreak-style": "off",
+        "eol-last": "off",
+        "no-empty-function": "off",
+        "class-methods-use-this": "off",
+        "no-unused-vars": "off",
+        "no-trailing-spaces": "off",
+        "semi": "off",
+        "space-before-blocks": "off",
+        "eslint-plugin-import/no-cycle": "off",
+        "arrow-parens": "off",
+        "implicit-arrow-linebreak": "off",
+        "comma-dangle": "off",
+        "padded-blocks": "off",
+        "no-await-in-loop": "off",
+        "new-cap": "off",
+        "import/no-unresolved": "off",
+        "import/extensions": "off",
+        "no-underscore-dangle": [
+            "error",
+            {
+                "allowAfterThis": true,
+            },
+        ],
+        "no-param-reassign": [
+            "error",
+            {
+                "props": false,
+            },
+        ],
+        "quotes": "off",
+        // 处理类成员空白行
+        "lines-between-class-members": "off",
+        // 处理未定义变量
+        "no-undef": "off",
+        "eslint-plugin-import/no-named-as-default": "off",
+        "eslint-plugin-import/no-named-as-default-member": "off",
+        "no-restricted-syntax": "off",
+        "no-multiple-empty-lines": "off",
+        "object-curly-newline": "off",
+        "no-confusing-arrow": "off",
+        "operator-linebreak": "off",
+        "no-plusplus": "off",
+        "no-unused-expressions": "off",
+        "function-paren-newline": "off",
+        "no-multi-spaces": ["error", { "exceptions": { "VariableDeclarator": true } }],
+    },
 }
