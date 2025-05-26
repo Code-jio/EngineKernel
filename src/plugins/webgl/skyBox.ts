@@ -1,6 +1,6 @@
 import { BasePlugin } from "../basePlugin"
 import * as THREE from "three"
-import { Sky } from 'three/examples/jsm/objects/Sky.js'
+import { Sky } from "../../utils/threeModules"
 import { CoreType } from "../../types/core"
 import { PluginMeta } from "../../types/Plugin"
 import eventBus from "../../eventBus/eventBus"
@@ -19,7 +19,7 @@ export class SkyBox extends BasePlugin {
     public version = "1.0.0"
     public pluginClass = "SkyBox"
 
-    private sky: Sky | null = null
+    private sky: any | null = null  // 使用 any 类型避免类型错误
     private scene!: THREE.Scene
     private renderer!: THREE.WebGLRenderer
     private sunPosition: THREE.Vector3

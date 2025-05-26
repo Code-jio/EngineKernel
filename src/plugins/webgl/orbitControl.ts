@@ -1,15 +1,16 @@
 // 轨道控制器插件
 import * as THREE from 'three'
 import { BasePlugin } from "../basePlugin"
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js"
+import { OrbitControls } from "../../utils/threeModules"
 import eventBus from '../../eventBus/eventBus'
+import { PluginMeta } from "../../types/Plugin"
 
 export type OrbitControlPluginOptions = {
     damping?: number
 }
 
 export class orbitControls extends BasePlugin {
-    private control: OrbitControls
+    private control: any  // 使用 any 类型避免类型错误
     private camera: THREE.PerspectiveCamera
     private dom: HTMLElement
     

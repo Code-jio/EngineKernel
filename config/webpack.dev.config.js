@@ -3,7 +3,7 @@ import os from "os"
 import baseConfig from "./webpack.base.config.js"
 import { merge } from "webpack-merge"
 import { fileURLToPath } from "url"
-import os from "os"
+import detectPort from "detect-port"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -40,6 +40,8 @@ export default new Promise(async resolve => {
                 library: {
                     name: "EngineKernel",
                     type: "window",
+                    umdNamedDefine: undefined,
+                    export: undefined
                 },
                 globalObject: "this",
                 pathinfo: true,
@@ -75,7 +77,7 @@ export default new Promise(async resolve => {
                 host: "0.0.0.0",
                 port,
                 open: [
-                    `http://localhost:${port}/engine-kernel.dev.js`,
+                    // `http://localhost:${port}/engine-kernel.dev.js`,
                     // `http://${getLocalIpAddress()}:${port}`,
                 ],
                 hot: true, 

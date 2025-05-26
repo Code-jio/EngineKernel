@@ -1,11 +1,11 @@
 import { BasePlugin } from "../basePlugin"
 import * as THREE from "three"
-import Stats from "three/examples/jsm/libs/stats.module"
+import { Stats } from "../../utils/threeModules"
 import eventBus from '../../eventBus/eventBus'
 
 export class Performance extends BasePlugin {
     private dom: HTMLDivElement
-    private stats: Stats
+    private stats: any  // 使用 any 类型避免类型错误
     private fps: number = 0
     private ms: number = 0
     private mb: number = 0

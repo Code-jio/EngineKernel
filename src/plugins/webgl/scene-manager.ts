@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { BasePlugin } from "../basePlugin"
 import eventBus from '../../eventBus/eventBus'
-import { GLTF } from "three/examples/jsm/loaders/GLTFLoader" // 导入GLTF类型，用于类型
+// 使用 any 类型替代 GLTF，避免外部依赖
 
 // 该插件承担多场景同屏显示，主次场景切换等任务，并作为首要插件加载，管理场景事务
 export class SceneManager extends BasePlugin {
@@ -36,7 +36,7 @@ export class SceneManager extends BasePlugin {
     async addModelToScene() {
         // 响应GLTF_READY事件 加载模型到当前场景
         eventBus.on("GLTF_READY", ({ type, payload, resoucePath }) => {
-            let gltf = payload as GLTF
+            let gltf = payload as any  // 使用 any 类型避免类型错误
             if (gltf.scene) {
                 this.activeScene?.add(gltf.scene) // 将模型添加到当前场景
                 eventBus.emit("MODEL_READY", { scene: this.activeScene, model: gltf.scene }) // 触发MODEL_READY事件，通知模型加载完成

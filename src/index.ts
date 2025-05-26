@@ -16,4 +16,6 @@ const engineKernel: any = {
 
 // 挂载到window上面并暴露出去
 (window as any).EngineKernel = engineKernel;
+console.log("🚀 ~ engineKernel:", engineKernel)
+
 export default engineKernel;

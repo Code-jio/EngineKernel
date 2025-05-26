@@ -15,9 +15,19 @@ export default {
         library: {
             name: "EngineKernel",
             type: "umd",
-            umdNamedDefine: true
+            umdNamedDefine: true,
+            export: "default"
         },
         globalObject: 'typeof self !== \'undefined\' ? self : this'
+    },
+    // 外部化 THREE.js，不打包进 bundle
+    externals: {
+        'three': {
+            commonjs: 'three',
+            commonjs2: 'three',
+            amd: 'three',
+            root: 'THREE'
+        }
     },
     ignoreWarnings: [/Failed to parse source map/, /Critical dependency/, /Module not found:/],
     module: {

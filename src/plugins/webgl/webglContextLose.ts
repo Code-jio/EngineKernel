@@ -1,10 +1,11 @@
 import * as THREE from 'three'
 import { BasePlugin } from "../basePlugin"
 import eventBus from '../../eventBus/eventBus'
-import WebGPURenderer from "three/examples/jsm/renderers/webgpu/WebGPURenderer";
+// WebGPURenderer 暂时注释，避免外部依赖
+// import WebGPURenderer from "three/examples/jsm/renderers/webgpu/WebGPURenderer";
 
 export class WebGLContextLose extends BasePlugin {
-    private renderer: WebGPURenderer;
+    private renderer: any;  // 使用 any 替代 WebGPURenderer
     private scene: THREE.Scene;
     private camera: THREE.Camera;
 
@@ -21,7 +22,7 @@ export class WebGLContextLose extends BasePlugin {
         console.log("WebGL context lost");
         // 处理上下文丢失的逻辑，例如重新创建上下文、重置状态等
         this.renderer.dispose(); // 释放渲染器资源
-        this.renderer = new WebGPURenderer(); // 重新创建渲染器
+        this.renderer = new THREE.WebGLRenderer(); // 重新创建渲染器（使用 WebGLRenderer 替代）
         this.renderer.setSize(window.innerWidth, window.innerHeight); // 设置渲染器大小
         this.renderer.setPixelRatio(window.devicePixelRatio); // 设置像素比
         this.renderer.setAnimationLoop(() => { // 设置动画循环

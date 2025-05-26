@@ -1,4 +1,3 @@
-
 <!doctype html>
 <html lang="en">
     <head>
@@ -9,14 +8,78 @@
         <meta http-equiv="Expires" content="0" />
         <title>EngineKernel 原型验证</title>
         <link rel="stylesheet" href="./index.css " />
-        <script src="http://localhost:8000/engine-kernel.dev.js"></script>
+        
+        <!-- 使用本地 THREE.js 文件的 import map -->
+        <script type="importmap">
+        {
+            "imports": {
+                "three": "./libs/three.module.js",
+                "three/examples/jsm/controls/OrbitControls.js": "./libs/OrbitControls.js",
+                "three/examples/jsm/loaders/GLTFLoader.js": "./libs/GLTFLoader.js",
+                "three/examples/jsm/renderers/CSS3DRenderer.js": "./libs/CSS3DRenderer.js",
+                "three/examples/jsm/objects/Sky.js": "./libs/Sky.js"
+            }
+        }
+        </script>
     </head>
     <body>
         <canvas id="container"></canvas>
         
-        <script src="http://localhost:8080/engine-kernel.dev.js"></script>
-        
-        <script src="./index.js"></script>
+        <script type="module">
+            // 使用本地 THREE.js 文件
+            import * as THREE from 'three';
+            import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+            import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+            import { CSS3DRenderer, CSS3DObject } from 'three/examples/jsm/renderers/CSS3DRenderer.js';
+            import { Sky } from 'three/examples/jsm/objects/Sky.js';
+            
+            // 将模块挂载到全局，以供我们的 UMD 包使用
+            window.THREE = THREE;
+            // 由于 THREE 对象不可扩展，我们直接挂载到 window
+            window.OrbitControls = OrbitControls;
+            window.GLTFLoader = GLTFLoader;
+            window.CSS3DRenderer = CSS3DRenderer;
+            window.CSS3DObject = CSS3DObject;
+            window.Sky = Sky;
+            
+            console.log('THREE.js 模块已加载:', THREE);
+            console.log('OrbitControls 已加载:', OrbitControls);
+            console.log('CSS3DRenderer 已加载:', CSS3DRenderer);
+            console.log('CSS3DObject 已加载:', CSS3DObject);
+            console.log('所有模块已从本地文件加载完成');
+            
+            // 动态加载我们的 EngineKernel
+            const script = document.createElement('script');
+            script.src = 'http://localhost:8080/engine-kernel.dev.js';
+            script.onload = function() {
+                // 等待一下，确保模块完全加载
+                setTimeout(() => {
+                    if (typeof window.EngineKernel !== 'undefined' && window.EngineKernel.constructor !== Promise) {
+                        console.log("🚀 ~ EngineKernel 加载成功:", window.EngineKernel);
+                        loadMainScript();
+                    } else if (window.EngineKernel && typeof window.EngineKernel.then === 'function') {
+                        window.EngineKernel.then(engine => {
+                            window.EngineKernel = engine;
+                            console.log("🚀 ~ EngineKernel 异步加载成功:", window.EngineKernel);
+                            loadMainScript();
+                        });
+                    } else {
+                        console.error('EngineKernel 模块加载失败');
+                    }
+                }, 100);
+            };
+            script.onerror = function() {
+                console.error('无法加载 EngineKernel 脚本');
+            };
+            document.head.appendChild(script);
+
+            function loadMainScript() {
+                // 动态加载主要逻辑
+                const mainScript = document.createElement('script');
+                mainScript.src = './index.js';
+                document.body.appendChild(mainScript);
+            }
+        </script>
     </body>
 </html>
 <!-- 

@@ -2,7 +2,7 @@
 import { BasePlugin } from "../basePlugin"
 import * as THREE from "three"
 import eventBus from '../../eventBus/eventBus'
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls"
+import { OrbitControls } from "../../utils/threeModules"
 
 export class LODPlugin extends BasePlugin {
     private lodGroups: Map<string, THREE.LOD> = new Map()

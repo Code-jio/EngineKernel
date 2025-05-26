@@ -1,5 +1,6 @@
 import { PluginMeta } from "../types/Plugin"
-import * as THREE from "three"
+// 从统一的模块管理文件导入 THREE
+import { THREE } from "../utils/threeModules"
 
 class BasePlugin {
     readonly name: string
