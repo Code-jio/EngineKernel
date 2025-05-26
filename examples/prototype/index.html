@@ -1,3 +1,4 @@
+
 <!doctype html>
 <html lang="en">
     <head>
@@ -8,23 +9,11 @@
         <meta http-equiv="Expires" content="0" />
         <title>EngineKernel 原型验证</title>
         <link rel="stylesheet" href="./index.css " />
-        <script>
-            // 在加载其他脚本之前清理可能存在的全局THREE对象
-            if (typeof window.THREE !== 'undefined') {
-                console.warn('检测到已存在的THREE对象，将被清理以避免冲突');
-                delete window.THREE;
-            }
-        </script>
         <script src="http://localhost:8000/engine-kernel.dev.js"></script>
     </head>
     <body>
         <canvas id="container"></canvas>
-        
         <script src="./index.js"></script>
-        <!-- <script>
-
-            console.log(window.EngineKernel)
-        </script> -->
     </body>
 </html>
 <!-- 

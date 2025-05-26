@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>测试 EngineKernel Promise 修复</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .test-result {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        pre {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🧪 EngineKernel Promise 修复测试</h1>
+        
+        <div id="test-results"></div>
+        
+        <h2>测试步骤：</h2>
+        <ol>
+            <li>检查 window.EngineKernel 是否存在</li>
+            <li>检查 window.EngineKernel 的类型</li>
+            <li>检查是否为 Promise 对象</li>
+            <li>检查 BaseCore 是否可用</li>
+            <li>尝试创建 BaseCore 实例</li>
+        </ol>
+    </div>
+
+    <script src="http://localhost:8000/engine-kernel.dev.js"></script>
+    <script>
+        const resultsContainer = document.getElementById('test-results');
+        
+        function addResult(message, type = 'info') {
+            const div = document.createElement('div');
+            div.className = `test-result ${type}`;
+            div.innerHTML = message;
+            resultsContainer.appendChild(div);
+        }
+        
+        function runTests() {
+            addResult('🚀 开始测试...', 'info');
+            
+            // 测试 1: 检查 window.EngineKernel 是否存在
+            if (typeof window.EngineKernel !== 'undefined') {
+                addResult('✅ 测试 1 通过: window.EngineKernel 存在', 'success');
+            } else {
+                addResult('❌ 测试 1 失败: window.EngineKernel 不存在', 'error');
+                return;
+            }
+            
+            // 测试 2: 检查类型
+            const engineKernelType = typeof window.EngineKernel;
+            addResult(`📋 测试 2: window.EngineKernel 类型为: ${engineKernelType}`, 'info');
+            
+            // 测试 3: 检查是否为 Promise
+            const isPromise = window.EngineKernel instanceof Promise;
+            if (!isPromise) {
+                addResult('✅ 测试 3 通过: window.EngineKernel 不是 Promise 对象', 'success');
+            } else {
+                addResult('❌ 测试 3 失败: window.EngineKernel 仍然是 Promise 对象', 'error');
+                return;
+            }
+            
+            // 测试 4: 检查 BaseCore 是否可用
+            if (window.EngineKernel.BaseCore && typeof window.EngineKernel.BaseCore === 'function') {
+                addResult('✅ 测试 4 通过: BaseCore 类可用', 'success');
+            } else {
+                addResult('❌ 测试 4 失败: BaseCore 类不可用', 'error');
+                return;
+            }
+            
+            // 测试 5: 尝试创建实例
+            try {
+                const engine = new window.EngineKernel.BaseCore({
+                    pluginsParams: []
+                });
+                
+                if (engine && typeof engine.getPlugin === 'function') {
+                    addResult('✅ 测试 5 通过: 成功创建 BaseCore 实例', 'success');
+                } else {
+                    addResult('❌ 测试 5 失败: BaseCore 实例创建异常', 'error');
+                }
+            } catch (error) {
+                addResult(`❌ 测试 5 失败: 创建实例时出错 - ${error.message}`, 'error');
+            }
+            
+            // 显示详细信息
+            addResult('<h3>详细信息:</h3>', 'info');
+            addResult(`<pre>window.EngineKernel 的键: ${JSON.stringify(Object.keys(window.EngineKernel), null, 2)}</pre>`, 'info');
+            
+            addResult('🎉 测试完成!', 'success');
+        }
+        
+        // 等待一下确保脚本加载完成
+        setTimeout(runTests, 100);
+    </script>
+</body>
+</html> 

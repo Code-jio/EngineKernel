@@ -15,9 +15,9 @@ export default {
         library: {
             name: "EngineKernel",
             type: "umd",
-            export: "default"
+            umdNamedDefine: true
         },
-        globalObject: 'this',
+        globalObject: 'typeof self !== \'undefined\' ? self : this'
     },
     ignoreWarnings: [/Failed to parse source map/, /Critical dependency/, /Module not found:/],
     module: {

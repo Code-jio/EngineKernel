@@ -68,9 +68,30 @@ class BaseCore implements IBaseCore {
                 }
             }
         >()
-        this._startAsyncInit(InitParams)
+        
+        // 同步注册插件，不进行异步初始化
+        this._syncInit(InitParams)
     }
 
+    // 新增同步初始化方法
+    protected _syncInit(InitParams: InitParams) {
+        if (InitParams.pluginsParams) {
+            for (const params of InitParams.pluginsParams) {
+                if (params) {
+                    this.register(params)
+                }
+            }
+        }
+        // 不在构造函数中进行异步初始化
+        console.log('🔧 BaseCore 同步初始化完成，插件已注册但未初始化')
+    }
+
+    // 提供手动初始化方法
+    public async initialize(): Promise<void> {
+        await this._initPlugins()
+    }
+
+    // 原有的异步初始化方法改名并保留
     protected async _startAsyncInit(InitParams: InitParams) {
         if (InitParams.pluginsParams) {
             for (const params of InitParams.pluginsParams) {
