@@ -6,8 +6,6 @@
     "dev": "cross-env NODE_ENV=development webpack serve --config config/webpack.dev.config.js --mode development",
     "build": "npm run build:types && cross-env NODE_ENV=production webpack --config config/webpack.prod.config.js --mode production",
     "build:types": "tsc --emitDeclarationOnly --outDir ./dist/types",
-    "download-three": "node scripts/download-three.js",
-    "setup": "npm run download-three",
     "lint": "npx eslint .",
     "lint:fix": "npx eslint . --fix"
   },
@@ -21,7 +19,7 @@
   },
   "devDependencies": {
     "@types/joi": "^17.2.2",
-    "@types/node": "^22.15.21",
+    "@types/node": "^22.14.1",
     "@types/three": "^0.164.1",
     "@types/webgl2": "^0.0.11",
     "@types/webpack-env": "^1.18.8",
@@ -52,7 +50,6 @@
     "path-browserify": "^1.0.1",
     "semver": "6.3.1",
     "three": "^0.164.1",
-    "tweenjs": "^1.0.2",
     "util": "^0.12.5",
     "vm-browserify": "^1.1.2",
     "workbox-expiration": "^7.3.0",

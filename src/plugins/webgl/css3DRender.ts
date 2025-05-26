@@ -1,6 +1,5 @@
-import * as THREE from 'three'
-import { BasePlugin } from "../basePlugin"
-import { CSS3DRenderer, CSS3DObject } from "../../utils/threeModules"
+import { THREE, BasePlugin } from "../basePlugin"
+import { CSS3DRenderer, CSS3DObject } from "three/examples/jsm/renderers/CSS3DRenderer"
 import eventBus from '../../eventBus/eventBus'
 
 interface CSS3DPluginConfig {
@@ -11,8 +10,8 @@ interface CSS3DPluginConfig {
 }
 
 export class CSS3DRenderPlugin extends BasePlugin {
-    private renderer: any 
-    private object?: any  
+    private renderer: CSS3DRenderer
+    private object?: CSS3DObject
     private camera: THREE.Camera
     private scene: THREE.Scene
     
@@ -40,13 +39,16 @@ export class CSS3DRenderPlugin extends BasePlugin {
     }
 
     // 创建3D对象
-    createObject(config: CSS3DPluginConfig): any {  // 使用 any 类型避免类型错误
+    createObject(config: CSS3DPluginConfig): CSS3DObject {
         const element = this.resolveComponent(config.component)
         this.object = new CSS3DObject(element)
 
         this.object.position.copy(config.position || new THREE.Vector3())
         this.object.rotation.copy(config.rotation || new THREE.Euler())
         this.object.scale.set(config.scale || 1, config.scale || 1, 1)
+
+ 
+
 
         this.position.copy(this.object.position)
         return this.object

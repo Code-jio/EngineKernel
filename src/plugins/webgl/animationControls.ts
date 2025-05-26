@@ -1,5 +1,4 @@
-import { BasePlugin } from "../basePlugin"
-import * as THREE from "three"
+import { THREE, BasePlugin } from "../basePlugin"
 import eventBus from "../../eventBus/eventBus"
 
 export class AnimationControls extends BasePlugin {

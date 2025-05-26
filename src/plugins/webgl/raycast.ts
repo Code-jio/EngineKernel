@@ -1,5 +1,4 @@
-import { BasePlugin } from "../basePlugin"
-import * as THREE from "three"
+import { THREE, BasePlugin } from "../basePlugin"
 import eventBus from '../../eventBus/eventBus'
 
 // 该插件主要承担射线拾取的工作，需要维护射线拾取的检测队列

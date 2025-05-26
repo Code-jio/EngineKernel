@@ -1,8 +1,7 @@
 // LOD多层次渲染插件
-import { BasePlugin } from "../basePlugin"
-import * as THREE from "three"
+import { THREE, BasePlugin } from "../basePlugin"
 import eventBus from '../../eventBus/eventBus'
-import { OrbitControls } from "../../utils/threeModules"
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls"
 
 export class LODPlugin extends BasePlugin {
     private lodGroups: Map<string, THREE.LOD> = new Map()
