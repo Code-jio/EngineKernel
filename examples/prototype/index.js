@@ -60,20 +60,6 @@ engine.register({
     userData: {
         camera: baseScene.camera,
         domElement: baseScene.renderer.domElement,
-        // 传递相机配置信息，确保OrbitControls知道初始设置
-        cameraConfig: {
-            position: [500, 500, 500],
-            lookAt: [0, 0, 0],
-        },
-        orbitControlOptions: {
-            damping: true,
-            dampingFactor: 0.05,
-            minDistance: 1,
-            maxDistance: 20000,        // 最大距离限制
-            minPolarAngle: 0.1,        // 防止翻转
-            maxPolarAngle: Math.PI - 0.1,
-            boundaryRadius: 20000,     // 移动边界半径（小于天空盒大小50000的一半）
-        },
     },
 }).register({
     name: "SkyBoxPlugin",
