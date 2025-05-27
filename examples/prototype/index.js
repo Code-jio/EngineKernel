@@ -61,6 +61,16 @@ engine.register({
         camera: baseScene.camera,
         domElement: baseScene.renderer.domElement,
     },
+}).register({
+    name: "SkyBoxPlugin",
+    path: "/plugins/webgl/skyBox",
+    pluginClass: EngineKernel.SkyBox,
+    userData: {
+        scene: baseScene.scene,      // 传递场景
+        camera: baseScene.camera,    // 传递相机
+        renderer: baseScene.renderer,// 传递渲染器
+        skyBoxType: EngineKernel.SkyBoxType.PROCEDURAL_SKY,
+    },
 })
 
 engine.on("init-complete", () => {
@@ -81,7 +91,6 @@ engine.on("init-complete", () => {
         // 添加模型到场景
         engine.getPlugin("BaseScene").scene.add(gltf.scene)
     })
-
     // 渲染循环
     engine.getPlugin("RenderLoopPlugin").initialize()
 })

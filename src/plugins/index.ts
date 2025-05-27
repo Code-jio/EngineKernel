@@ -9,7 +9,7 @@ export { Performance } from './webgl/performance';
 export { Raycast } from './webgl/raycast';
 export { RenderLoop } from './webgl/renderLoop';
 export { ResourceReaderPlugin } from './webgl/resourceReaderPlugin';
-export { SkyBox } from './webgl/skyBox';
+export { SkyBox, SkyBoxType} from './webgl/skyBox';
 export { WebGLContextLose } from './webgl/webglContextLose';
 export { CSS3DRenderPlugin } from './webgl/css3DRender';
 export { SceneManager } from './webgl/scene-manager';
