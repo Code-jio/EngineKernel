@@ -14,4 +14,6 @@ export { WebGLContextLose } from './webgl/webglContextLose';
 export { CSS3DRenderPlugin } from './webgl/css3DRender';
 export { SceneManager } from './webgl/scene-manager';
 export { LayerManager } from './webgl/layerManager';
+export { ModelMarker } from './webgl/3DModelMarker';
 // export { BaseModel } from './webgl/baseModel';
+    

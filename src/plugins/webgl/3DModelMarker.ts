@@ -1,5 +1,6 @@
 import { THREE, BasePlugin } from "../basePlugin"
 import eventBus from '../../eventBus/eventBus'
+import { GLTFLoader,DRACOLoader } from "../../utils/three-imports"
 
 // 本插件承担任务：
 // 1. 在场景中添加一个3D模型
@@ -48,9 +49,9 @@ interface AnimationState {
 interface ModelMarkerConfig {
   modelUrl: string // 模型文件路径
   name?: string // 模型名称
-  position?: THREE.Vector3 // 模型位置
-  rotation?: THREE.Euler // 模型旋转
-  scale?: THREE.Vector3 // 模型缩放
+  position?: Array<number> | THREE.Vector3 // 模型位置，支持数组或Vector3对象
+  rotation?: Array<number> | THREE.Euler // 模型旋转，支持数组或Euler对象
+  scale?: Array<number> | THREE.Vector3 // 模型缩放，支持数组或Vector3对象
   autoLoad?: boolean // 是否自动加载
   enableAnimations?: boolean // 是否启用动画
   // 性能优化配置
@@ -101,9 +102,9 @@ export class ModelMarker extends BasePlugin {
   private enableDebugMode: boolean = false
   private defaultConfig: Partial<ModelMarkerConfig>
 
-  constructor(userData: any = {}) {
-    super(userData)
-    this.enableDebugMode = userData.enableDebugMode || false
+  constructor(meta: any = {}) {
+    super(meta)
+    this.enableDebugMode = meta.userData.enableDebugMode || false
     
     // 设置默认配置
     this.defaultConfig = {
@@ -120,8 +121,9 @@ export class ModelMarker extends BasePlugin {
       position: new THREE.Vector3(0, 0, 0),
       rotation: new THREE.Euler(0, 0, 0),
       scale: new THREE.Vector3(1, 1, 1),
-      ...userData.defaultConfig
+      ...meta.userData.defaultConfig
     }
+    this.scene = meta.userData.scene || null
   }
 
   /**
@@ -194,9 +196,35 @@ export class ModelMarker extends BasePlugin {
     }
 
     // 设置初始变换（使用默认值）
-    instance.model.position.copy(finalConfig.position || new THREE.Vector3(0, 0, 0))
-    instance.model.rotation.copy(finalConfig.rotation || new THREE.Euler(0, 0, 0))
-    instance.model.scale.copy(finalConfig.scale || new THREE.Vector3(1, 1, 1))
+    if (finalConfig.position) {
+      if (Array.isArray(finalConfig.position)) {
+        instance.model.position.set(finalConfig.position[0] || 0, finalConfig.position[1] || 0, finalConfig.position[2] || 0)
+      } else {
+        instance.model.position.copy(finalConfig.position)
+      }
+    } else {
+      instance.model.position.set(0, 0, 0)
+    }
+
+    if (finalConfig.rotation) {
+      if (Array.isArray(finalConfig.rotation)) {
+        instance.model.rotation.set(finalConfig.rotation[0] || 0, finalConfig.rotation[1] || 0, finalConfig.rotation[2] || 0)
+      } else {
+        instance.model.rotation.copy(finalConfig.rotation)
+      }
+    } else {
+      instance.model.rotation.set(0, 0, 0)
+    }
+
+    if (finalConfig.scale) {
+      if (Array.isArray(finalConfig.scale)) {
+        instance.model.scale.set(finalConfig.scale[0] || 1, finalConfig.scale[1] || 1, finalConfig.scale[2] || 1)
+      } else {
+        instance.model.scale.copy(finalConfig.scale)
+      }
+    } else {
+      instance.model.scale.set(1, 1, 1)
+    }
 
     // 性能优化设置
     if (finalConfig.enableFrustumCulling) {
@@ -204,6 +232,7 @@ export class ModelMarker extends BasePlugin {
     }
 
     // 添加到场景
+    // debugger
     if (this.scene) {
       this.scene.add(instance.model)
     }
@@ -289,10 +318,10 @@ export class ModelMarker extends BasePlugin {
     const config = instance.config
 
     // 创建独立的GLTF加载器
-    const loader = new (window as any).EngineKernel.GLTFLoader()
+    const loader = new GLTFLoader()
     
     // 配置DRACO解压器
-    const dracoLoader = new (window as any).EngineKernel.DRACOLoader()
+    const dracoLoader = new DRACOLoader()
     dracoLoader.setDecoderPath('/draco/')
     loader.setDRACOLoader(dracoLoader)
 

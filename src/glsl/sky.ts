@@ -41,6 +41,7 @@ class Sky {
 			const geometry = new THREE.BoxGeometry( 1, 1, 1 );
 			this.mesh = new THREE.Mesh( geometry, material );
 			this.material = material;
+			this.mesh.name = "SkyBox";
 
 			console.log('Sky创建成功');
 		} catch (error) {
