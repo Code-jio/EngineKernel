@@ -13,3 +13,5 @@ export { SkyBox, SkyBoxType} from './webgl/skyBox';
 export { WebGLContextLose } from './webgl/webglContextLose';
 export { CSS3DRenderPlugin } from './webgl/css3DRender';
 export { SceneManager } from './webgl/scene-manager';
+export { LayerManager } from './webgl/layerManager';
+// export { BaseModel } from './webgl/baseModel';

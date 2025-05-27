@@ -16,28 +16,6 @@ const engine = new EngineKernel.BaseCore({
             userData: {
                 rendererConfig: {
                     container: document.getElementById("container"),
-                    antialias: true,
-                    alpha: false,
-                    clearColor: 0x444444,
-                },
-                cameraConfig: {
-                    type: "perspective",
-                    fov: 45,
-                    near: 0.1,
-                    far: 100000,  // 增加远裁剪面以适应天空盒
-                    position: [500, 500, 500],  // 设置更远的初始位置
-                    lookAt: [0, 0, 0],
-                },
-                lightConfig: {
-                    ambientLight: {
-                        color: 0xffffff,
-                        intensity: 0.5,
-                    },
-                    directionalLight: {
-                        color: 0xffffff,
-                        intensity: 1,
-                        position: [10, 10, 10],
-                    },
                 },
             },
         },
@@ -46,6 +24,11 @@ const engine = new EngineKernel.BaseCore({
     name: "RenderLoopPlugin",
     path: "/plugins/webgl/renderLoop",
     pluginClass: EngineKernel.RenderLoop,
+    userData: {},
+}).register({
+    name: "LayerManager",
+    path: "/plugins/webgl/layerManager",
+    pluginClass: EngineKernel.LayerManager,
     userData: {},
 })
 
@@ -74,35 +57,11 @@ engine.register({
 })
 
 engine.on("init-complete", () => {
-    let gltfLoader = engine.getPlugin("ResourceReaderPlugin").gltfLoader
-
-    gltfLoader.load("./public/model/Horse.glb", gltf => {
-        console.log("gltf", gltf)
-        // gltf.scene.scale.set(0.01, 0.01, 0.01) // 调整模型大小
-        // gltf.scene.position.set(0, 0, 0)
-
-        // 调试模型材质
-        gltf.scene.traverse(child => {
-            if (child.material) {
-                child.material.needsUpdate = true
-            }
-        })
-
-        // 添加模型到场景
-        engine.getPlugin("BaseScene").scene.add(gltf.scene)
-    })
-    // 获取轨道控制器插件
     const orbitControl = engine.getPlugin("orbitControl")
-    
-    // 验证相机位置设置
-    console.log("=== 相机位置调试信息 ===")
-    console.log(`BaseScene相机位置: [${baseScene.camera.position.x}, ${baseScene.camera.position.y}, ${baseScene.camera.position.z}]`)
-    console.log(`OrbitControl相机距离中心: ${orbitControl.getDistanceFromCenter().toFixed(2)}`)
-    
+
     // 监听相机移动事件
     EngineKernel.eventBus.on("camera-moved", () => {
         const distance = orbitControl.getDistanceFromCenter()
-        // 如果距离过大，可以显示警告（这在enforceMovementBounds中已处理）
         if (distance > 18000) {
             console.log(`警告：相机接近边界，距离: ${distance.toFixed(2)}`)
         }
@@ -110,9 +69,6 @@ engine.on("init-complete", () => {
 
     // 启动轨道控制器更新
     orbitControl.update()
-    
-
-    
     // 渲染循环
     engine.getPlugin("RenderLoopPlugin").initialize()
 })
