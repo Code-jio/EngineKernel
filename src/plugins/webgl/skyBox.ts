@@ -164,7 +164,6 @@ export class SkyBox extends BasePlugin {
                 this.mesh = new THREE.Mesh(geometry, material)
                 this.mesh.scale.setScalar(45000)
                 
-                console.log("立方体贴图天空盒创建成功")
                 eventBus.emit("skybox-ready", { type: SkyBoxType.CUBE_TEXTURE })
                 
                 // 自动添加到场景
@@ -194,7 +193,6 @@ export class SkyBox extends BasePlugin {
                 })
                 this.mesh = new THREE.Mesh(geometry, material)
                 
-                console.log("环境贴图天空盒创建成功")
                 eventBus.emit("skybox-ready", { type: SkyBoxType.ENVIRONMENT_MAP })
                 
                 // 自动添加到场景
@@ -210,7 +208,6 @@ export class SkyBox extends BasePlugin {
 
     private createProceduralSkyBox() {
         try {
-            console.log("开始创建程序化天空盒")
             
             // 创建Sky实例
             this.skyMaterial = new Sky()
@@ -247,9 +244,8 @@ export class SkyBox extends BasePlugin {
             }
 
             // 设置天空盒大小
-            this.mesh.scale.setScalar(this.config.size! / 2)
+            this.mesh.scale.setScalar(45000)
             
-            console.log("程序化天空盒创建成功")
             eventBus.emit("skybox-ready", { type: SkyBoxType.PROCEDURAL_SKY })
             
             // 自动添加到场景
@@ -264,7 +260,6 @@ export class SkyBox extends BasePlugin {
     private addToScene() {
         if (this.mesh) {
             this.scene.add(this.mesh)
-            console.log("天空盒已添加到场景")
         }
     }
 

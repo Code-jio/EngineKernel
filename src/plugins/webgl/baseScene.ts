@@ -19,7 +19,7 @@ export class BaseScene extends BasePlugin {
             near: 0.01,
             far: 100000,
             lookAt: [0, 0, 0],
-            position: [0, 0, 5],
+            position: [300, 300, 300],
         }
 
         const rendererOption = meta.userData.rendererConfig || {

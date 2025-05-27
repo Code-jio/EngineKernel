@@ -24,8 +24,8 @@ const engine = new EngineKernel.BaseCore({
                     type: "perspective",
                     fov: 45,
                     near: 0.1,
-                    far: 1000,
-                    position: [0, 0, 5],
+                    far: 100000,  // 增加远裁剪面以适应天空盒
+                    position: [500, 500, 500],  // 设置更远的初始位置
                     lookAt: [0, 0, 0],
                 },
                 lightConfig: {
@@ -60,6 +60,20 @@ engine.register({
     userData: {
         camera: baseScene.camera,
         domElement: baseScene.renderer.domElement,
+        // 传递相机配置信息，确保OrbitControls知道初始设置
+        cameraConfig: {
+            position: [500, 500, 500],
+            lookAt: [0, 0, 0],
+        },
+        orbitControlOptions: {
+            damping: true,
+            dampingFactor: 0.05,
+            minDistance: 1,
+            maxDistance: 20000,        // 最大距离限制
+            minPolarAngle: 0.1,        // 防止翻转
+            maxPolarAngle: Math.PI - 0.1,
+            boundaryRadius: 20000,     // 移动边界半径（小于天空盒大小50000的一半）
+        },
     },
 }).register({
     name: "SkyBoxPlugin",
@@ -78,8 +92,8 @@ engine.on("init-complete", () => {
 
     gltfLoader.load("./public/model/Horse.glb", gltf => {
         console.log("gltf", gltf)
-        gltf.scene.scale.set(0.01, 0.01, 0.01) // 调整模型大小
-        gltf.scene.position.set(0, 0, 0)
+        // gltf.scene.scale.set(0.01, 0.01, 0.01) // 调整模型大小
+        // gltf.scene.position.set(0, 0, 0)
 
         // 调试模型材质
         gltf.scene.traverse(child => {
@@ -91,6 +105,28 @@ engine.on("init-complete", () => {
         // 添加模型到场景
         engine.getPlugin("BaseScene").scene.add(gltf.scene)
     })
+    // 获取轨道控制器插件
+    const orbitControl = engine.getPlugin("orbitControl")
+    
+    // 验证相机位置设置
+    console.log("=== 相机位置调试信息 ===")
+    console.log(`BaseScene相机位置: [${baseScene.camera.position.x}, ${baseScene.camera.position.y}, ${baseScene.camera.position.z}]`)
+    console.log(`OrbitControl相机距离中心: ${orbitControl.getDistanceFromCenter().toFixed(2)}`)
+    
+    // 监听相机移动事件
+    EngineKernel.eventBus.on("camera-moved", () => {
+        const distance = orbitControl.getDistanceFromCenter()
+        // 如果距离过大，可以显示警告（这在enforceMovementBounds中已处理）
+        if (distance > 18000) {
+            console.log(`警告：相机接近边界，距离: ${distance.toFixed(2)}`)
+        }
+    })
+
+    // 启动轨道控制器更新
+    orbitControl.update()
+    
+
+    
     // 渲染循环
     engine.getPlugin("RenderLoopPlugin").initialize()
 })
