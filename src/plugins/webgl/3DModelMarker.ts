@@ -46,15 +46,13 @@ interface AnimationState {
 
 // 模型标记配置接口
 interface ModelMarkerConfig {
-  modelUrl?: string
-  position?: THREE.Vector3
-  rotation?: THREE.Euler
-  scale?: THREE.Vector3
-  autoLoad?: boolean
-  enableAnimations?: boolean
-  enablePhysics?: boolean
-  castShadow?: boolean
-  receiveShadow?: boolean
+  modelUrl: string // 模型文件路径
+  name?: string // 模型名称
+  position?: THREE.Vector3 // 模型位置
+  rotation?: THREE.Euler // 模型旋转
+  scale?: THREE.Vector3 // 模型缩放
+  autoLoad?: boolean // 是否自动加载
+  enableAnimations?: boolean // 是否启用动画
   // 性能优化配置
   enableCaching?: boolean // 默认false，不使用缓存
   optimizeGeometry?: boolean // 几何体优化
@@ -66,13 +64,14 @@ interface ModelMarkerConfig {
   onComplete?: (model: THREE.Group) => void
   onError?: (error: Error) => void
   // 材质配置
-  materialOverrides?: { [key: string]: any }
-  textureQuality?: 'low' | 'medium' | 'high'
+  materialOverrides?: { [key: string]: any } // 材质覆盖
+  textureQuality?: 'low' | 'medium' | 'high' // 纹理质量
 }
 
 // 模型实例接口
 interface ModelInstance {
   id: string
+  fileName: string
   name: string
   model: THREE.Group
   originalModel?: THREE.Group // 原始模型的备份
@@ -185,7 +184,8 @@ export class ModelMarker extends BasePlugin {
     
     const instance: ModelInstance = {
       id: modelId,
-      name: finalConfig.modelUrl?.split('/').pop()?.split('.')[0] || `model_${modelId}`,
+      fileName: finalConfig.modelUrl?.split('/').pop()?.split('.')[0] || `model_${modelId}`,
+      name: finalConfig.name || `model_${modelId}`,
       model: new THREE.Group(),
       config: finalConfig,
       animations: [],
@@ -197,10 +197,6 @@ export class ModelMarker extends BasePlugin {
     instance.model.position.copy(finalConfig.position || new THREE.Vector3(0, 0, 0))
     instance.model.rotation.copy(finalConfig.rotation || new THREE.Euler(0, 0, 0))
     instance.model.scale.copy(finalConfig.scale || new THREE.Vector3(1, 1, 1))
-
-    // 设置阴影（默认关闭）
-    instance.model.castShadow = finalConfig.castShadow === true
-    instance.model.receiveShadow = finalConfig.receiveShadow === true
 
     // 性能优化设置
     if (finalConfig.enableFrustumCulling) {
@@ -550,10 +546,6 @@ export class ModelMarker extends BasePlugin {
   private updateShadowSettings(instance: ModelInstance): void {
     instance.model.traverse((child) => {
       if (child instanceof THREE.Mesh) {
-        // 默认关闭阴影，只有明确开启时才启用
-        child.castShadow = instance.config.castShadow === true
-        child.receiveShadow = instance.config.receiveShadow === true
-        
         // 性能优化：禁用不必要的材质更新
         if (child.material) {
           child.material.needsUpdate = false
@@ -561,10 +553,6 @@ export class ModelMarker extends BasePlugin {
       }
     })
     
-    if (this.enableDebugMode) {
-      const shadowEnabled = instance.config.castShadow || instance.config.receiveShadow
-      console.log(`🌒 阴影设置完成: ${shadowEnabled ? '开启' : '关闭'}`)
-    }
   }
 
   /**
@@ -1116,11 +1104,6 @@ export class ModelMarker extends BasePlugin {
     // 合并配置
     const oldConfig = instance.config
     instance.config = { ...oldConfig, ...newConfig }
-
-    // 应用新配置
-    if (newConfig.castShadow !== undefined || newConfig.receiveShadow !== undefined) {
-      this.updateShadowSettings(instance)
-    }
 
     if (newConfig.materialOverrides) {
       this.applyMaterialOverrides(instance.model, newConfig.materialOverrides)
