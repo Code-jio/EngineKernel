@@ -151,6 +151,7 @@ export class BaseScene extends BasePlugin {
     
     // 渲染器高级配置
     private rendererAdvancedConfig: {
+        container: HTMLElement | null
         physicallyCorrectLights: boolean
         outputColorSpace: string
         toneMapping: THREE.ToneMapping
@@ -162,7 +163,6 @@ export class BaseScene extends BasePlugin {
     
     constructor(meta: any) {
         super(meta)
-        
         try {
             // 防护：确保meta和userData存在
             if (!meta) {
@@ -204,8 +204,9 @@ export class BaseScene extends BasePlugin {
             lastUpdateTime: 0
         }
         
-        // 初始化渲染器高级配置
+        // 初始化渲染器高级配置（简化版）
         this.rendererAdvancedConfig = {
+            container: document.body, // 直接使用body作为容器
             physicallyCorrectLights: finalConfig.rendererConfig.physicallyCorrectLights,
             outputColorSpace: finalConfig.rendererConfig.outputColorSpace || 'srgb',
             toneMapping: finalConfig.rendererConfig.toneMapping,
@@ -219,55 +220,7 @@ export class BaseScene extends BasePlugin {
         const rendererOption = {
             ...finalConfig.rendererConfig
         }
-
-        // 安全的Canvas获取和创建逻辑
-        let canvas: HTMLCanvasElement | null = null
         
-        // 1. 尝试从用户配置获取canvas
-        if (meta.userData.rendererConfig?.container) {
-            const userContainer = meta.userData.rendererConfig.container
-            if (this.isValidCanvas(userContainer)) {
-                canvas = userContainer as HTMLCanvasElement
-                console.log('✅ 使用用户提供的canvas')
-            } else {
-                console.warn('⚠️ 用户提供的container不是有效的HTMLCanvasElement')
-            }
-        }
-        
-        // 2. 尝试查找现有的canvas
-        if (!canvas && typeof document !== 'undefined') {
-            const existingCanvas = document.querySelector("#container")
-            if (this.isValidCanvas(existingCanvas)) {
-                canvas = existingCanvas as HTMLCanvasElement
-                console.log('✅ 找到现有的#container canvas')
-            }
-        }
-        
-        // 3. 创建新的canvas
-        if (!canvas && typeof document !== 'undefined') {
-            canvas = document.createElement('canvas')
-            canvas.id = 'container'
-            document.body.appendChild(canvas)
-            
-            // 全屏显示
-            canvas.style.width = '100%'
-            canvas.style.height = '100%'
-            canvas.style.position = 'fixed'
-            canvas.style.top = '0'
-            canvas.style.left = '0'
-            canvas.style.zIndex = '-1'
-            
-            console.log('✅ 创建新的canvas元素')
-        }
-        
-        // 4. 如果还是没有canvas（可能在Node.js环境）
-        if (!canvas) {
-            throw new Error('无法获取或创建有效的HTMLCanvasElement，请确保在浏览器环境中运行或提供有效的canvas元素')
-        }
-        
-        // 将canvas添加到渲染器选项
-        rendererOption.container = canvas
-
         if (cameraOption.type == "perspective") {
             this.camera = new THREE.PerspectiveCamera(cameraOption.fov, this.aspectRatio, cameraOption.near, cameraOption.far)
             this.camera.position.set(...(cameraOption.position as [number, number, number]))
@@ -300,12 +253,22 @@ export class BaseScene extends BasePlugin {
         this.scene.add(this.ambientLight)
         
         this.renderer = new THREE.WebGLRenderer({
-            canvas: canvas, // 使用验证过的canvas元素
             antialias: rendererOption.antialias, // 抗锯齿
             alpha: rendererOption.alpha || false, // 透明
             precision: rendererOption.precision, // 精度
             powerPreference: rendererOption.powerPreference, // 性能
         })
+
+        // 直接将Three.js生成的canvas添加到body
+        this.renderer.domElement.style.position = 'fixed'
+        this.renderer.domElement.style.top = '0'
+        this.renderer.domElement.style.left = '0'
+        this.renderer.domElement.style.width = '100%'
+        this.renderer.domElement.style.height = '100%'
+        // this.renderer.domElement.style.zIndex = '1000'
+        
+        document.body.appendChild(this.renderer.domElement)
+        console.log('✅ Canvas已直接添加到body')
 
         // 应用渲染器高级配置
         this.applyRendererAdvancedConfig()
@@ -346,6 +309,7 @@ export class BaseScene extends BasePlugin {
             }
             
             this.rendererAdvancedConfig = {
+                container: document.body,
                 physicallyCorrectLights: false,
                 outputColorSpace: 'srgb',
                 toneMapping: THREE.LinearToneMapping,
@@ -610,7 +574,10 @@ export class BaseScene extends BasePlugin {
     // 初始化设置
     initialize() {
         this.camera.updateProjectionMatrix()
-        this.renderer.setSize(window.innerWidth, window.innerHeight)
+        
+        // 根据容器尺寸设置渲染器大小
+        this.updateRendererSize()
+        
         window.addEventListener("resize", this.handleResize.bind(this))
 
         eventBus.emit("scene-ready", { 
@@ -630,12 +597,27 @@ export class BaseScene extends BasePlugin {
         })
     }
 
-    handleResize() {
+    /**
+     * 更新渲染器尺寸
+     */
+    private updateRendererSize(): void {
+        const width = window.innerWidth
+        const height = window.innerHeight
+        
+        // 更新相机纵横比
         if (this.camera instanceof THREE.PerspectiveCamera) {
-            this.camera.aspect = window.innerWidth / window.innerHeight
+            this.camera.aspect = width / height
             this.camera.updateProjectionMatrix()
-            this.renderer.setSize(window.innerWidth, window.innerHeight)
-        }  
+        }
+        
+        // 设置渲染器尺寸
+        this.renderer.setSize(width, height)
+        
+        console.log(`📐 渲染器尺寸已更新: ${width}x${height}`)
+    }
+
+    handleResize() {
+        this.updateRendererSize()
     }
 
     /**
@@ -796,21 +778,12 @@ export class BaseScene extends BasePlugin {
     /**
      * 静态工厂方法 - 创建最简场景（最少配置）
      */
-    static createMinimal(container?: HTMLCanvasElement): BaseScene {
-        const config: any = {
+    static createMinimal(): BaseScene {
+        return new BaseScene({
             userData: {
                 preset: 'balanced'
             }
-        }
-        
-        // 只有在提供了有效canvas时才设置
-        if (container) {
-            config.userData.rendererConfig = {
-                container: container
-            }
-        }
-        
-        return new BaseScene(config)
+        })
     }
 
     /**

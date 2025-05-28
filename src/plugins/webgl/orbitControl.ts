@@ -25,11 +25,22 @@ export class orbitControls extends BasePlugin {
     
     constructor(meta:any) {
         super(meta)
-        if (!meta?.userData?.domElement) {
-            throw new Error("缺少domElement")
-        }
-        this.dom = meta.userData.domElement
+        
+        // 获取相机
         this.camera = meta.userData.camera as THREE.PerspectiveCamera
+        if (!this.camera) {
+            throw new Error("轨道控制器需要相机实例")
+        }
+        
+        // 获取DOM元素，优先使用传入的domElement，否则使用renderer的domElement或body
+        if (meta.userData.domElement) {
+            this.dom = meta.userData.domElement
+            console.log("🎮 OrbitControls: 使用传入的DOM元素")
+        } else {
+            // 使用canvas元素作为回退
+            this.dom = document.body
+            console.warn("⚠️ OrbitControls: 未提供DOM元素，使用body作为控制目标")
+        }
         this.control = new OrbitControls(this.camera, this.dom)
         
         // 设置默认限制
@@ -114,6 +125,79 @@ export class orbitControls extends BasePlugin {
         eventBus.on("update", () => {
             this.control.update()
         })
+    }
+    
+    /**
+     * 初始化事件监听器
+     */
+    public initializeEventListeners() {
+        // 监听场景就绪事件
+        eventBus.on("scene-ready", (data: any) => {
+            console.log("OrbitControls: 场景就绪事件接收")
+        })
+        
+        // 监听窗口大小变化
+        window.addEventListener("resize", () => {
+            // 窗口大小变化时可能需要更新控制器
+            this.control.update()
+        })
+        
+        console.log("✅ OrbitControls事件监听器已初始化")
+    }
+    
+    /**
+     * 获取Three.js OrbitControls实例
+     */
+    public getControl(): OrbitControls | null {
+        if (!this.control) {
+            console.warn("⚠️ OrbitControls实例不存在")
+            return null
+        }
+        return this.control
+    }
+    
+    /**
+     * 检查控制器是否已初始化且可用
+     */
+    public isControlReady(): boolean {
+        return !!(this.control && this.camera && this.dom)
+    }
+    
+    /**
+     * 获取控制器详细状态信息
+     */
+    public getControlStatus(): any {
+        if (!this.control) {
+            return {
+                ready: false,
+                error: "OrbitControls实例不存在"
+            }
+        }
+        
+        return {
+            ready: true,
+            enabled: this.control.enabled,
+            enableZoom: this.control.enableZoom,
+            enableRotate: this.control.enableRotate,
+            enablePan: this.control.enablePan,
+            enableDamping: this.control.enableDamping,
+            dampingFactor: this.control.dampingFactor,
+            minDistance: this.control.minDistance,
+            maxDistance: this.control.maxDistance,
+            domElement: this.control.domElement && 'tagName' in this.control.domElement ? this.control.domElement.tagName : null,
+            cameraPosition: {
+                x: this.camera.position.x,
+                y: this.camera.position.y,
+                z: this.camera.position.z
+            },
+            target: {
+                x: this.control.target.x,
+                y: this.control.target.y,
+                z: this.control.target.z
+            },
+            distanceFromCenter: this.getDistanceFromCenter(),
+            boundaryRadius: this.boundaryRadius
+        }
     }
     
     // 设置边界半径
