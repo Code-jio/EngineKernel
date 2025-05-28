@@ -11,7 +11,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import { CSS3DRenderer, CSS3DObject } from 'three/examples/jsm/renderers/CSS3DRenderer';
 import Stats from 'three/examples/jsm/libs/stats.module';
 import WebGPURenderer from 'three/examples/jsm/renderers/webgpu/WebGPURenderer';
-
+import { WebGLRenderer } from 'three';
 // 类型导入
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader';
 
@@ -25,6 +25,7 @@ export {
     CSS3DObject,
     Stats,
     WebGPURenderer,
+    WebGLRenderer,
     type GLTF,
 };
 
