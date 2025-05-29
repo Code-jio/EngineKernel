@@ -8,39 +8,28 @@ export class CSS3DExample {
     private controls: any // 相机控制器
 
     constructor() {
-        this.plugin = new CSS3DRenderPlugin()
+        // 🔧 创建插件时需要传入meta参数
+        const mockMeta = {
+            userData: {
+                renderer: null,
+                scene: null
+            }
+        }
+        this.plugin = new CSS3DRenderPlugin(mockMeta)
         this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000)
         
         this.init()
     }
 
     private async init() {
-        // 初始化插件
-        const mockCore = {
-            registry: new Map(),
-            listeners: new Map(),
-            loadStrategies: {},
-            _messageChannels: new Map(),
-            performance: { metrics: new Map(), enable: true },
-            components: new Map(),
-            _servicePermissions: {},
-            register: () => {},
-            unregisterPlugin: () => {},
-            getPlugin: () => undefined
-        }
-
-        this.plugin.initialize(mockCore)
-        await this.plugin.start()
+        // 🔧 直接调用插件的init方法
+        await this.plugin.init()
 
         // 设置相机位置
         this.camera.position.set(0, 0, 5)
 
-        // 将渲染器DOM添加到页面
-        const renderer = this.plugin.getRenderer()
-        if (renderer) {
-            document.body.appendChild(renderer.domElement)
-        }
-
+        // 将渲染器DOM添加到页面（已在init中处理）
+        
         this.createExampleObjects()
         this.startRenderLoop()
     }
@@ -65,10 +54,10 @@ export class CSS3DExample {
             </div>
         `
 
-        const object1Id = this.plugin.createCSS3DObject({
-            component: div1,
-            position: new THREE.Vector3(-2, 0, 0),
-            rotation: new THREE.Euler(0, 0.2, 0)
+        const object1Id = this.plugin.createObject({
+            element: div1,
+            position: [-2, 0, 0],
+            rotation: [0, 0.2, 0]
         })
 
         // 示例2：创建表单元素
@@ -88,22 +77,20 @@ export class CSS3DExample {
             </form>
         `
 
-        const object2Id = this.plugin.createCSS3DObject({
-            component: form,
-            position: new THREE.Vector3(2, 0, 0),
-            rotation: new THREE.Euler(0, -0.2, 0),
+        const object2Id = this.plugin.createObject({
+            element: form,
+            position: [2, 0, 0],
+            rotation: [0, -0.2, 0],
             scale: 0.8
         })
 
         // 演示动画效果
         setTimeout(() => {
-            // 晃动第一个对象
-            this.plugin.shake(object1Id, 0.1, 1000)
+            this.plugin.animateMove(object1Id, [-2, 0.5, 0], 1000)
         }, 2000)
 
         setTimeout(() => {
-            // 移动第二个对象
-            this.plugin.animateToPosition(object2Id, new THREE.Vector3(2, 1, -1), 2000)
+            this.plugin.animateMove(object2Id, [2, 1, -1], 2000)
         }, 4000)
 
         // 添加交互事件
@@ -116,31 +103,35 @@ export class CSS3DExample {
             switch(event.key) {
                 case '1':
                     // 重置第一个对象位置
-                    this.plugin.setPosition(object1Id, new THREE.Vector3(-2, 0, 0))
+                    this.plugin.moveObject(object1Id, -2, 0, 0)
                     break
                 case '2':
                     // 重置第二个对象位置
-                    this.plugin.setPosition(object2Id, new THREE.Vector3(2, 0, 0))
+                    this.plugin.moveObject(object2Id, 2, 0, 0)
                     break
                 case 's':
-                    // 晃动效果
-                    this.plugin.shake(object1Id, 0.2, 500)
-                    this.plugin.shake(object2Id, 0.2, 500)
+                    // 缩放效果
+                    this.plugin.scaleObject(object1Id, 1.2)
+                    this.plugin.scaleObject(object2Id, 1.2)
+                    setTimeout(() => {
+                        this.plugin.scaleObject(object1Id, 1.0)
+                        this.plugin.scaleObject(object2Id, 1.0)
+                    }, 200)
                     break
                 case 'r':
                     // 旋转效果
-                    const rotation1 = new THREE.Euler(
+                    const rotation1 = [
                         Math.random() * Math.PI * 2,
                         Math.random() * Math.PI * 2,
                         Math.random() * Math.PI * 2
-                    )
-                    const rotation2 = new THREE.Euler(
+                    ] as [number, number, number]
+                    const rotation2 = [
                         Math.random() * Math.PI * 2,
                         Math.random() * Math.PI * 2,
                         Math.random() * Math.PI * 2
-                    )
-                    this.plugin.setRotation(object1Id, rotation1)
-                    this.plugin.setRotation(object2Id, rotation2)
+                    ] as [number, number, number]
+                    this.plugin.rotateObject(object1Id, ...rotation1)
+                    this.plugin.rotateObject(object2Id, ...rotation2)
                     break
             }
         })
@@ -163,7 +154,7 @@ export class CSS3DExample {
             <h4 style="margin: 0 0 10px 0;">CSS3D插件操作说明:</h4>
             <p style="margin: 5px 0;">按键 1: 重置左侧对象位置</p>
             <p style="margin: 5px 0;">按键 2: 重置右侧对象位置</p>
-            <p style="margin: 5px 0;">按键 S: 晃动效果</p>
+            <p style="margin: 5px 0;">按键 S: 缩放效果</p>
             <p style="margin: 5px 0;">按键 R: 随机旋转</p>
         `
         document.body.appendChild(instructions)
@@ -187,9 +178,8 @@ export class CSS3DExample {
     }
 
     // 清理资源
-    destroy() {
-        this.plugin.stop()
-        this.plugin.uninstall()
+    async destroy() {
+        await this.plugin.unload()
     }
 }
 
