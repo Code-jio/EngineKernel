@@ -48,6 +48,11 @@ const DEFAULT_CONFIGS = {
         },
         performanceConfig: {
             enabled: true
+        },
+        debugConfig: {
+            enabled: false,
+            gridHelper: false,
+            axesHelper: false
         }
     },
     
@@ -74,6 +79,14 @@ const DEFAULT_CONFIGS = {
         },
         performanceConfig: {
             enabled: true
+        },
+        debugConfig: {
+            enabled: false,
+            gridHelper: true,
+            axesHelper: true,
+            gridSize: 100,
+            gridDivisions: 100,
+            axesSize: 100
         }
     },
     
@@ -101,6 +114,14 @@ const DEFAULT_CONFIGS = {
         },
         performanceConfig: {
             enabled: true
+        },
+        debugConfig: {
+            enabled: false,
+            gridHelper: true,
+            axesHelper: true,
+            gridSize: 200,
+            gridDivisions: 20,
+            axesSize: 100
         }
     },
     
@@ -126,6 +147,14 @@ const DEFAULT_CONFIGS = {
         },
         performanceConfig: {
             enabled: true
+        },
+        debugConfig: {
+            enabled: true,
+            gridHelper: true,
+            axesHelper: true,
+            gridSize: 100,
+            gridDivisions: 100,
+            axesSize: 100
         }
     }
 }
@@ -159,6 +188,22 @@ export class BaseScene extends BasePlugin {
         shadowMapEnabled: boolean
         shadowMapType: THREE.ShadowMapType
         pixelRatio: number
+    }
+    
+    // Debug模式相关
+    private debugConfig: {
+        enabled: boolean
+        gridHelper: boolean
+        axesHelper: boolean
+        gridSize: number
+        gridDivisions: number
+        axesSize: number
+    }
+    
+    // Debug辅助器实例
+    private debugHelpers: {
+        gridHelper: THREE.GridHelper | null
+        axesHelper: THREE.AxesHelper | null
     }
     
     constructor(meta: any) {
@@ -214,6 +259,22 @@ export class BaseScene extends BasePlugin {
             shadowMapEnabled: finalConfig.rendererConfig.shadowMapEnabled,
             shadowMapType: finalConfig.rendererConfig.shadowMapType || THREE.PCFSoftShadowMap,
             pixelRatio: Math.min(finalConfig.rendererConfig.pixelRatio || window.devicePixelRatio, 2)
+        }
+
+        // 初始化Debug配置
+        this.debugConfig = {
+            enabled: finalConfig.debugConfig?.enabled || false,
+            gridHelper: finalConfig.debugConfig?.gridHelper || false,
+            axesHelper: finalConfig.debugConfig?.axesHelper || false,
+            gridSize: finalConfig.debugConfig?.gridSize || 100,
+            gridDivisions: finalConfig.debugConfig?.gridDivisions || 100,
+            axesSize: finalConfig.debugConfig?.axesSize || 100
+        }
+
+        // 初始化Debug辅助器
+        this.debugHelpers = {
+            gridHelper: null,
+            axesHelper: null
         }
 
         const cameraOption = finalConfig.cameraConfig
@@ -280,15 +341,21 @@ export class BaseScene extends BasePlugin {
 
         this.initialize()
         
-            // 显示初始化信息
-            const usedPreset = meta.userData.preset || 'balanced'
-            console.log(`✅ BaseScene初始化完成 - 使用预设: ${usedPreset}`, {
-                相机类型: cameraOption.type,
-                阴影系统: this.rendererAdvancedConfig.shadowMapEnabled ? '启用' : '禁用',
-                性能监控: this.performanceMonitor.enabled ? '启用' : '禁用',
-                色调映射: this.getToneMappingName(this.rendererAdvancedConfig.toneMapping),
-                像素比率: this.rendererAdvancedConfig.pixelRatio
-            })
+        // 显示初始化信息
+        const usedPreset = meta.userData.preset || 'balanced'
+        console.log(`✅ BaseScene初始化完成 - 使用预设: ${usedPreset}`, {
+            相机类型: cameraOption.type,
+            阴影系统: this.rendererAdvancedConfig.shadowMapEnabled ? '启用' : '禁用',
+            性能监控: this.performanceMonitor.enabled ? '启用' : '禁用',
+            Debug模式: this.debugConfig.enabled ? '启用' : '禁用',
+            色调映射: this.getToneMappingName(this.rendererAdvancedConfig.toneMapping),
+            像素比率: this.rendererAdvancedConfig.pixelRatio
+        })
+        
+        // 如果启用了debug模式，则添加辅助器
+        if (this.debugConfig.enabled) {
+            this.addDebugHelpers()
+        }
             
         } catch (error: any) {
             console.error('❌ BaseScene初始化失败:', error)
@@ -787,6 +854,24 @@ export class BaseScene extends BasePlugin {
     }
 
     /**
+     * 静态工厂方法 - 创建带Debug模式的场景
+     */
+    static createWithDebug(preset: string = 'development', customConfig: any = {}): BaseScene {
+        return new BaseScene({
+            userData: {
+                preset,
+                debugConfig: {
+                    enabled: true,
+                    gridHelper: true,
+                    axesHelper: true,
+                    ...customConfig.debugConfig
+                },
+                ...customConfig
+            }
+        })
+    }
+
+    /**
      * 获取所有可用的配置预设
      */
     static getAvailablePresets(): string[] {
@@ -801,6 +886,9 @@ export class BaseScene extends BasePlugin {
     }
 
     destroy() {
+        // 清理Debug辅助器
+        this.removeDebugHelpers()
+        
         window.removeEventListener("resize", this.handleResize)
         this.renderer.dispose()
         this.scene.clear()
@@ -813,5 +901,162 @@ export class BaseScene extends BasePlugin {
 
     update(){ 
         // 预留给子类的更新方法
+    }
+
+    // 添加Debug辅助器
+    private addDebugHelpers(): void {
+        const config = this.debugConfig
+        
+        if (config.gridHelper) {
+            this.debugHelpers.gridHelper = new THREE.GridHelper(config.gridSize, config.gridDivisions)
+            this.scene.add(this.debugHelpers.gridHelper)
+        }
+        
+        if (config.axesHelper) {
+            this.debugHelpers.axesHelper = new THREE.AxesHelper(config.axesSize)
+            this.scene.add(this.debugHelpers.axesHelper)
+        }
+        
+        console.log('🔧 Debug辅助器已添加:', {
+            gridHelper: !!this.debugHelpers.gridHelper,
+            axesHelper: !!this.debugHelpers.axesHelper
+        })
+    }
+
+    /**
+     * 移除Debug辅助器
+     */
+    private removeDebugHelpers(): void {
+        if (this.debugHelpers.gridHelper) {
+            this.scene.remove(this.debugHelpers.gridHelper)
+            this.debugHelpers.gridHelper.dispose()
+            this.debugHelpers.gridHelper = null
+        }
+        
+        if (this.debugHelpers.axesHelper) {
+            this.scene.remove(this.debugHelpers.axesHelper)
+            this.debugHelpers.axesHelper.dispose()
+            this.debugHelpers.axesHelper = null
+        }
+        
+        console.log('🗑️ Debug辅助器已移除')
+    }
+
+    /**
+     * 切换Debug模式
+     */
+    public setDebugMode(enabled: boolean): void {
+        this.debugConfig.enabled = enabled
+        
+        if (enabled) {
+            this.addDebugHelpers()
+            console.log('🐛 Debug模式已启用')
+        } else {
+            this.removeDebugHelpers()
+            console.log('🚫 Debug模式已禁用')
+        }
+        
+        eventBus.emit('debug:mode-toggled', { enabled })
+    }
+
+    /**
+     * 切换网格辅助器
+     */
+    public toggleGridHelper(enabled?: boolean): void {
+        const shouldEnable = enabled !== undefined ? enabled : !this.debugHelpers.gridHelper
+        
+        if (shouldEnable && !this.debugHelpers.gridHelper) {
+            this.debugHelpers.gridHelper = new THREE.GridHelper(this.debugConfig.gridSize, this.debugConfig.gridDivisions)
+            this.scene.add(this.debugHelpers.gridHelper)
+            this.debugConfig.gridHelper = true
+            console.log('✅ 网格辅助器已添加')
+        } else if (!shouldEnable && this.debugHelpers.gridHelper) {
+            this.scene.remove(this.debugHelpers.gridHelper)
+            this.debugHelpers.gridHelper.dispose()
+            this.debugHelpers.gridHelper = null
+            this.debugConfig.gridHelper = false
+            console.log('🗑️ 网格辅助器已移除')
+        }
+        
+        eventBus.emit('debug:grid-toggled', { enabled: shouldEnable })
+    }
+
+    /**
+     * 切换坐标轴辅助器
+     */
+    public toggleAxesHelper(enabled?: boolean): void {
+        const shouldEnable = enabled !== undefined ? enabled : !this.debugHelpers.axesHelper
+        
+        if (shouldEnable && !this.debugHelpers.axesHelper) {
+            this.debugHelpers.axesHelper = new THREE.AxesHelper(this.debugConfig.axesSize)
+            this.scene.add(this.debugHelpers.axesHelper)
+            this.debugConfig.axesHelper = true
+            console.log('✅ 坐标轴辅助器已添加')
+        } else if (!shouldEnable && this.debugHelpers.axesHelper) {
+            this.scene.remove(this.debugHelpers.axesHelper)
+            this.debugHelpers.axesHelper.dispose()
+            this.debugHelpers.axesHelper = null
+            this.debugConfig.axesHelper = false
+            console.log('🗑️ 坐标轴辅助器已移除')
+        }
+        
+        eventBus.emit('debug:axes-toggled', { enabled: shouldEnable })
+    }
+
+    /**
+     * 更新网格辅助器配置
+     */
+    public updateGridConfig(size?: number, divisions?: number): void {
+        if (size !== undefined) {
+            this.debugConfig.gridSize = size
+        }
+        if (divisions !== undefined) {
+            this.debugConfig.gridDivisions = divisions
+        }
+        
+        // 如果网格辅助器已存在，重新创建
+        if (this.debugHelpers.gridHelper) {
+            this.scene.remove(this.debugHelpers.gridHelper)
+            this.debugHelpers.gridHelper.dispose()
+            this.debugHelpers.gridHelper = new THREE.GridHelper(this.debugConfig.gridSize, this.debugConfig.gridDivisions)
+            this.scene.add(this.debugHelpers.gridHelper)
+            console.log(`🔧 网格辅助器已更新: 大小=${this.debugConfig.gridSize}, 分割=${this.debugConfig.gridDivisions}`)
+        }
+    }
+
+    /**
+     * 更新坐标轴辅助器配置
+     */
+    public updateAxesConfig(size?: number): void {
+        if (size !== undefined) {
+            this.debugConfig.axesSize = size
+        }
+        
+        // 如果坐标轴辅助器已存在，重新创建
+        if (this.debugHelpers.axesHelper) {
+            this.scene.remove(this.debugHelpers.axesHelper)
+            this.debugHelpers.axesHelper.dispose()
+            this.debugHelpers.axesHelper = new THREE.AxesHelper(this.debugConfig.axesSize)
+            this.scene.add(this.debugHelpers.axesHelper)
+            console.log(`🔧 坐标轴辅助器已更新: 大小=${this.debugConfig.axesSize}`)
+        }
+    }
+
+    /**
+     * 获取Debug状态
+     */
+    public getDebugStatus(): any {
+        return {
+            enabled: this.debugConfig.enabled,
+            gridHelper: {
+                enabled: !!this.debugHelpers.gridHelper,
+                size: this.debugConfig.gridSize,
+                divisions: this.debugConfig.gridDivisions
+            },
+            axesHelper: {
+                enabled: !!this.debugHelpers.axesHelper,
+                size: this.debugConfig.axesSize
+            }
+        }
     }
 }

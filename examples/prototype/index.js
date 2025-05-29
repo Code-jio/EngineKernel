@@ -15,7 +15,11 @@ const engine = new EngineKernel.BaseCore({
             pluginClass: EngineKernel.BaseScene,
             userData: {
                 rendererConfig: {
-                    container: document.getElementById("container"),
+                },
+                debugConfig: {
+                    enabled: true,
+                    gridHelper: true,
+                    axesHelper: true,
                 },
             },
         },
@@ -42,7 +46,6 @@ engine.register({
     pluginClass: EngineKernel.orbitControls,
     userData: {
         camera: baseScene.camera,
-        domElement: baseScene.renderer.domElement,
     },
 }).register({
     name: "SkyBoxPlugin",

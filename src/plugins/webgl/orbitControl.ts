@@ -20,8 +20,8 @@ export type OrbitControlPluginOptions = {
 export class orbitControls extends BasePlugin {
     private control: OrbitControls
     private camera: THREE.PerspectiveCamera
-    private dom: HTMLElement
     private boundaryRadius: number = 20000 // 默认边界半径
+    private controlLayer: HTMLElement
     
     constructor(meta:any) {
         super(meta)
@@ -31,17 +31,30 @@ export class orbitControls extends BasePlugin {
         if (!this.camera) {
             throw new Error("轨道控制器需要相机实例")
         }
+
+        // 创建控制器专用层
+        let element = document.createElement('div');
+        element.className = 'orbit-control-layer'
+        element.style.position = 'fixed';
+        element.style.top = '0';
+        element.style.left = '0';
+        element.style.width = window.innerWidth + 'px';
+        element.style.height = window.innerHeight + 'px';
+        element.style.pointerEvents = 'auto';
+        // element.style.zIndex = '0'; // 在CSS3D层下面
+        element.style.background = 'transparent';
+
+        // 将控制层添加到DOM
         
-        // 获取DOM元素，优先使用传入的domElement，否则使用renderer的domElement或body
         if (meta.userData.domElement) {
-            this.dom = meta.userData.domElement
+            this.controlLayer = meta.userData.domElement
             console.log("🎮 OrbitControls: 使用传入的DOM元素")
-        } else {
-            // 使用canvas元素作为回退
-            this.dom = document.body
-            console.warn("⚠️ OrbitControls: 未提供DOM元素，使用body作为控制目标")
+        }else{
+            this.controlLayer = element
+            document.body.appendChild(this.controlLayer);
         }
-        this.control = new OrbitControls(this.camera, this.dom)
+
+        this.control = new OrbitControls(this.camera, this.controlLayer)
         
         // 设置默认限制
         this.setupDefaultLimits()
@@ -140,6 +153,8 @@ export class orbitControls extends BasePlugin {
         window.addEventListener("resize", () => {
             // 窗口大小变化时可能需要更新控制器
             this.control.update()
+            this.controlLayer.style.width = window.innerWidth + 'px';
+            this.controlLayer.style.height = window.innerHeight + 'px';
         })
         
         console.log("✅ OrbitControls事件监听器已初始化")
@@ -160,7 +175,7 @@ export class orbitControls extends BasePlugin {
      * 检查控制器是否已初始化且可用
      */
     public isControlReady(): boolean {
-        return !!(this.control && this.camera && this.dom)
+        return !!(this.control && this.camera && this.controlLayer)
     }
     
     /**

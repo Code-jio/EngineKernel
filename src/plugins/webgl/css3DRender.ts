@@ -48,7 +48,7 @@ export class CSS3DRenderPlugin extends BasePlugin {
     private resizeHandler: (() => void) | null = null
     // 添加渲染模式配置
     private renderMode: 'continuous' | 'onDemand' = 'continuous' // 连续渲染或按需渲染
-    private lastRenderTime: number = 0
+    // private lastRenderTime: number = 0
     // 存储update事件处理器引用，便于清理
     private updateHandler: (() => void) | null = null
 
@@ -58,6 +58,15 @@ export class CSS3DRenderPlugin extends BasePlugin {
         this.camera = meta.userData.camera || null // 获取相机
         this.css3Drenderer = new CSS3DRenderer()
         this.domElement = this.css3Drenderer.domElement
+
+        this.domElement.className = 'css3d-renderer-layer'
+        // this.domElement.style.position = 'fixed'
+        this.domElement.style.top = '0'
+        this.domElement.style.left = '0'
+        this.domElement.style.width = '100%'
+        this.domElement.style.height = '100%'
+        // this.domElement.style.pointerEvents = 'none'
+        this.domElement.style.zIndex = '1000'
         
         // 设置渲染器尺寸并添加到DOM
         this.css3Drenderer.setSize(window.innerWidth, window.innerHeight)
@@ -82,6 +91,7 @@ export class CSS3DRenderPlugin extends BasePlugin {
      * @description 创建CSS3D对象，并添加到CSS3D渲染器中
      */
     createCSS3DObject(options: CSS3DConfig): string {
+        debugger    
         // 提供默认参数
         const defaultOptions: CSS3DConfig = {
             element: document.createElement('div'),
@@ -176,13 +186,9 @@ export class CSS3DRenderPlugin extends BasePlugin {
      * @description 插件初始化方法，集成到渲染循环
      */
     async init(): Promise<void> {
-        // 创建update事件处理器
-        this.updateHandler = () => {
+        eventBus.on("update", () => {
             this.update()
-        }
-        
-        // 使用eventBus.on("update", () => {})的方式集成循环渲染
-        eventBus.on("update", this.updateHandler)
+        })
         
         console.log("✅ CSS3D插件已通过eventBus集成到渲染循环")
         console.log(`🎬 当前渲染模式: ${this.renderMode}`)
@@ -297,15 +303,15 @@ export class CSS3DRenderPlugin extends BasePlugin {
         }
         
         try {
-            // 避免过度渲染 - 限制最大FPS为60
-            const now = performance.now()
-            if (now - this.lastRenderTime < 16.67) { // ~60FPS
-                return
-            }
+            // // 避免过度渲染 - 限制最大FPS为60
+            // const now = performance.now()
+            // if (now - this.lastRenderTime < 16.67) { // ~60FPS
+            //     return
+            // }
 
             this.css3Drenderer.render(this.mainScene, this.camera)
             this.needsRender = false
-            this.lastRenderTime = now
+            // this.lastRenderTime = now
             
         } catch (error) {
             console.error('CSS3D渲染失败:', error)
@@ -360,7 +366,7 @@ export class CSS3DRenderPlugin extends BasePlugin {
     /**
      * 销毁插件
      * @description 销毁整个插件，清理所有资源
-     */
+     */     
     destroyPlugin(): void {
         try {
             // 清理所有CSS3D对象
