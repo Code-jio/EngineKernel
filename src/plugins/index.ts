@@ -6,7 +6,6 @@ export { GLMonitor } from './webgl/glMonitor';
 export { LODPlugin } from './webgl/lod';
 export { orbitControls } from './webgl/orbitControl';
 export { Performance } from './webgl/performance';
-export { Raycast } from './webgl/raycast';
 export { RenderLoop } from './webgl/renderLoop';
 export { ResourceReaderPlugin } from './webgl/resourceReaderPlugin';
 export { SkyBox, SkyBoxType} from './webgl/skyBox';
@@ -15,5 +14,6 @@ export { CSS3DRenderPlugin } from './webgl/css3DRender';
 export { SceneManager } from './webgl/scene-manager';
 export { LayerManager } from './webgl/layerManager';
 export { ModelMarker } from './webgl/3DModelMarker';
+export { MousePickPlugin } from './webgl/mousePickPlugin';
 // export { BaseModel } from './webgl/baseModel';
     
