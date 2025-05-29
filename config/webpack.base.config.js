@@ -30,7 +30,7 @@ export default {
                         loader: "ts-loader",
                         options: {
                             onlyCompileBundledFiles: true, // 只编译当前项目的文件
-                            configFile: path.resolve(__dirname, '../tsconfig.json'), // 明确指定配置文件
+                            configFile: path.resolve(__dirname, "../tsconfig.json"), // 明确指定配置文件
                             compilerOptions: {
                                 esModuleInterop: true, // 启用ES模块互操作
                                 sourceMap: true, // 确保生成源码映射
@@ -45,10 +45,10 @@ export default {
     resolve: {
         extensions: [".js", ".ts"],
         alias: {
-            '@': path.resolve(__dirname, '../src').replace(/\\/g, '/'), // 统一POSIX路径格式
+            "@": path.resolve(__dirname, "../src").replace(/\\/g, "/"), // 统一POSIX路径格式
             // 确保Three.js只有一个实例
-            'three': path.resolve(__dirname, '../node_modules/three'),
-            'three/examples': path.resolve(__dirname, '../node_modules/three/examples'),
+            three: path.resolve(__dirname, "../node_modules/three"),
+            "three/examples": path.resolve(__dirname, "../node_modules/three/examples"),
         },
         fallback: {
             vm: require.resolve("vm-browserify"),

@@ -60,12 +60,11 @@ export class CSS3DRenderPlugin extends BasePlugin {
         this.domElement = this.css3Drenderer.domElement
 
         this.domElement.className = 'css3d-renderer-layer'
-        // this.domElement.style.position = 'fixed'
+        this.domElement.style.position = 'fixed'
         this.domElement.style.top = '0'
         this.domElement.style.left = '0'
         this.domElement.style.width = '100%'
         this.domElement.style.height = '100%'
-        // this.domElement.style.pointerEvents = 'none'
         this.domElement.style.zIndex = '1000'
         
         // 设置渲染器尺寸并添加到DOM
@@ -75,6 +74,8 @@ export class CSS3DRenderPlugin extends BasePlugin {
 
         // 初始标记需要渲染
         this.markNeedsRender()
+
+        this.initialize()
     }
 
     /**
@@ -91,7 +92,6 @@ export class CSS3DRenderPlugin extends BasePlugin {
      * @description 创建CSS3D对象，并添加到CSS3D渲染器中
      */
     createCSS3DObject(options: CSS3DConfig): string {
-        debugger    
         // 提供默认参数
         const defaultOptions: CSS3DConfig = {
             element: document.createElement('div'),
@@ -185,11 +185,11 @@ export class CSS3DRenderPlugin extends BasePlugin {
      * 初始化插件
      * @description 插件初始化方法，集成到渲染循环
      */
-    async init(): Promise<void> {
+    private initialize () {
         eventBus.on("update", () => {
             this.update()
         })
-        
+
         console.log("✅ CSS3D插件已通过eventBus集成到渲染循环")
         console.log(`🎬 当前渲染模式: ${this.renderMode}`)
     }
