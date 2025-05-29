@@ -30,8 +30,10 @@ export default {
                         loader: "ts-loader",
                         options: {
                             onlyCompileBundledFiles: true, // 只编译当前项目的文件
+                            configFile: path.resolve(__dirname, '../tsconfig.json'), // 明确指定配置文件
                             compilerOptions: {
                                 esModuleInterop: true, // 启用ES模块互操作
+                                sourceMap: true, // 确保生成源码映射
                             },
                         },
                     },

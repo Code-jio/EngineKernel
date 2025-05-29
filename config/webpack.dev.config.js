@@ -31,7 +31,7 @@ export default new Promise(async resolve => {
             },
             mode: "development",
             entry: path.resolve(__dirname, '../src/index.ts'),
-            devtool: "source-map",
+            devtool: "eval-source-map",
             output: {
                 filename: '[name].dev.js', // 使用动态文件名
                 path: path.resolve(__dirname, '../dist'),
@@ -56,9 +56,9 @@ export default new Promise(async resolve => {
                 // https: true,
                 client: {
                     overlay: {
-                        errors: false,
+                        errors: true, // 显示错误覆盖层
                         warnings: false,
-                        runtimeErrors: false,
+                        runtimeErrors: true, // 显示运行时错误
                     },
                     logging: "warn",
                     reconnect: 5,
@@ -85,6 +85,7 @@ export default new Promise(async resolve => {
                 open: true,
                 hot: true, // 启用完全热模块替换
                 liveReload: true, // 启用自动刷新
+                compress: false, // 开发环境关闭压缩，避免源码映射问题
                 // 如果需要代理API，可添加以下配置（示例）
                 // proxy: {
                 //   '/api': {
