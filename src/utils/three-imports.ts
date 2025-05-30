@@ -15,6 +15,7 @@ import { WebGLRenderer } from 'three';
 // 类型导入
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader';
 
+
 // 导出所有内容
 export {
     THREE,

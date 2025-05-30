@@ -146,7 +146,6 @@ export class ModelMarker extends BasePlugin {
 
     // 启动动画循环
     this.startAnimationLoop()
-
     // 监听事件
     this.setupEventListeners()
 

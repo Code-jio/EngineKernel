@@ -1,10 +1,10 @@
-export { BasePlugin } from './basePlugin';
+export { BasePlugin, THREE } from './basePlugin';
 export { BaseScene } from './webgl/baseScene';
 export { AnimationControls } from './webgl/animationControls';
 export { CameraPlugin } from './webgl/cameraPlugin';
 export { GLMonitor } from './webgl/glMonitor';
 export { LODPlugin } from './webgl/lod';
-export { orbitControls } from './webgl/orbitControl';
+export { orbitControls } from './webgl/baseControl';
 export { Performance } from './webgl/performance';
 export { RenderLoop } from './webgl/renderLoop';
 export { ResourceReaderPlugin } from './webgl/resourceReaderPlugin';
@@ -15,5 +15,7 @@ export { SceneManager } from './webgl/scene-manager';
 export { LayerManager } from './webgl/layerManager';
 export { ModelMarker } from './webgl/3DModelMarker';
 export { MousePickPlugin } from './webgl/mousePickPlugin';
+
+
 // export { BaseModel } from './webgl/baseModel';
     

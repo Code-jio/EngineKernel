@@ -2,7 +2,6 @@ import mitt from 'mitt';
 import type { EventBus } from "../types/core"
 
 const eventBus = mitt() as EventBus;
-console.log(eventBus)
 
 // 扩展 once 方法
 eventBus.once = (type: string, handler: Function) => {

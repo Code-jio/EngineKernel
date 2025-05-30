@@ -37,7 +37,6 @@ const engine = new EngineKernel.BaseCore({
 })
 
 let baseScene = engine.getPlugin("BaseScene")
-console.log("🚀 ~ engine:", engine)
 console.log(baseScene, "基础场景插件")
 
 engine.register({

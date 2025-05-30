@@ -326,10 +326,10 @@ export class BaseScene extends BasePlugin {
         this.renderer.domElement.style.left = '0'
         this.renderer.domElement.style.width = '100%'
         this.renderer.domElement.style.height = '100%'
-        // this.renderer.domElement.style.zIndex = '1000'
+        // this.renderer.domElement.style.zIndex = '1' // 设置合适的层级
+        this.renderer.domElement.style.pointerEvents = 'auto' // 确保能接收事件
         
         document.body.appendChild(this.renderer.domElement)
-        console.log('✅ Canvas已直接添加到body')
 
         // 应用渲染器高级配置
         this.applyRendererAdvancedConfig()
@@ -679,8 +679,6 @@ export class BaseScene extends BasePlugin {
         
         // 设置渲染器尺寸
         this.renderer.setSize(width, height)
-        
-        console.log(`📐 渲染器尺寸已更新: ${width}x${height}`)
     }
 
     handleResize() {

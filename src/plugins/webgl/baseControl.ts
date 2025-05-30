@@ -34,7 +34,7 @@ export class orbitControls extends BasePlugin {
 
         // 创建控制器专用层
         let element = document.createElement('div');
-        element.className = 'orbit-control-layer'
+        element.className = 'base-control-layer'
         element.style.position = 'fixed';
         element.style.top = '0';
         element.style.left = '0';
@@ -48,7 +48,6 @@ export class orbitControls extends BasePlugin {
         
         if (meta.userData.domElement) {
             this.controlLayer = meta.userData.domElement
-            console.log("🎮 OrbitControls: 使用传入的DOM元素")
         }else{
             this.controlLayer = element
             document.body.appendChild(this.controlLayer);
@@ -82,8 +81,6 @@ export class orbitControls extends BasePlugin {
         this.camera.position.copy(initialCameraPosition)
         this.control.target.copy(initialTargetPosition)
         this.control.update()
-        
-        console.log(`相机初始位置设置为: [${initialCameraPosition.x}, ${initialCameraPosition.y}, ${initialCameraPosition.z}]`)
     }
     
     private setupDefaultLimits() {
@@ -146,7 +143,7 @@ export class orbitControls extends BasePlugin {
     public initializeEventListeners() {
         // 监听场景就绪事件
         eventBus.on("scene-ready", (data: any) => {
-            console.log("OrbitControls: 场景就绪事件接收")
+            // console.log("OrbitControls: 场景就绪事件接收")
         })
         
         // 监听窗口大小变化
@@ -157,7 +154,7 @@ export class orbitControls extends BasePlugin {
             this.controlLayer.style.height = window.innerHeight + 'px';
         })
         
-        console.log("✅ OrbitControls事件监听器已初始化")
+        // console.log("✅ OrbitControls事件监听器已初始化")
     }
     
     /**
@@ -240,7 +237,6 @@ export class orbitControls extends BasePlugin {
         this.camera.position.set(x, y, z)
         this.control.target.set(targetX, targetY, targetZ)
         this.control.update()
-        console.log(`相机位置强制设置为: [${x}, ${y}, ${z}], 目标: [${targetX}, ${targetY}, ${targetZ}]`)
     }
 
     public configure(options: OrbitControlPluginOptions) {

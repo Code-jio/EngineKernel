@@ -34,7 +34,6 @@ debug模式：显示射线、包围盒、碰撞网格
 // 拾取模式枚举
 enum PickMode {
     SINGLE = 'single',      // 单选
-    MULTI = 'multi',        // 多选
     BOX_SELECT = 'box'      // 框选
 }
 
@@ -48,7 +47,12 @@ interface PickResult {
     faceIndex?: number;              // 面索引
     uv?: THREE.Vector2;              // UV坐标
     normal?: THREE.Vector3;          // 法向量
-    object3D?: THREE.Object3D;       // 原始THREE对象
+    instanceId?: number;             // 实例ID（如果是InstancedMesh）
+    objectType: string;              // 物体类型（Mesh、Line、Points等）
+    materialName?: string;           // 材质名称
+    geometryType?: string;           // 几何体类型
+    worldMatrix: THREE.Matrix4;      // 世界变换矩阵
+    boundingBox?: THREE.Box3;        // 包围盒
 }
 
 // 拾取配置接口
@@ -81,6 +85,8 @@ export class MousePickPlugin extends BasePlugin {
     private camera: THREE.Camera | null = null;
     private scene: THREE.Scene | null = null;
     private renderer: THREE.WebGLRenderer | null = null;
+    // private controlLayer: HTMLElement | null = null;
+    private controller: any = null;
 
     // 拾取配置
     private config: PickConfig = {
@@ -117,9 +123,19 @@ export class MousePickPlugin extends BasePlugin {
     private isCtrlPressed = false;
     private isShiftPressed = false;
 
+    // 控制器状态管理
+    private controllerOriginalState: {
+        enabled?: boolean;
+        enableRotate?: boolean;
+        enableZoom?: boolean;
+        enablePan?: boolean;
+        enableDamping?: boolean;
+        autoRotate?: boolean;
+    } = {};
+
     constructor(meta: any) {
         super(meta);
-
+        
         // 初始化射线投射器
         this.raycaster = new THREE.Raycaster();
         this.mouse = new THREE.Vector2();
@@ -138,6 +154,7 @@ export class MousePickPlugin extends BasePlugin {
         this.camera = meta.userData.camera;
         this.scene = meta.userData.scene;
         this.renderer = meta.userData.renderer;
+        this.controller = meta.userData.controller
 
         // 绑定事件处理函数
         this.boundMouseDown = this.handleMouseDown.bind(this);
@@ -148,21 +165,59 @@ export class MousePickPlugin extends BasePlugin {
 
         this.initializeEventListeners();
         this.createBoxSelectElement();
+        
+        console.log("✅ MousePickPlugin 初始化完成");
     }
 
     /**
      * 初始化事件监听器
      */
     private initializeEventListeners(): void {
-        const canvas = this.renderer?.domElement;
-        if (!canvas) return;
-
-        canvas.addEventListener('mousedown', this.boundMouseDown);
-        canvas.addEventListener('mousemove', this.boundMouseMove);
-        canvas.addEventListener('mouseup', this.boundMouseUp);
+        const controlLayer = this.controller?.controlLayer
         
+        if (!controlLayer) {
+            console.error("❌ controlLayer元素不存在，无法绑定事件监听器");
+            return;
+        }
+
+        // 确保controlLayer可以接收事件
+        if (!controlLayer.style.pointerEvents || controlLayer.style.pointerEvents === 'none') {
+            controlLayer.style.pointerEvents = 'auto';
+            console.log("🔧 controlLayer pointerEvents 已设置为 auto");
+        }
+
+        // 使用capture模式确保拾取事件优先于控制器事件处理
+        const captureOptions = { capture: true, passive: false };
+        
+        controlLayer.addEventListener('mousedown', this.boundMouseDown, captureOptions);
+        controlLayer.addEventListener('mousemove', this.boundMouseMove, captureOptions);
+        controlLayer.addEventListener('mouseup', this.boundMouseUp, captureOptions);
+        
+        // 键盘事件仍然绑定到window
         window.addEventListener('keydown', this.boundKeyDown);
         window.addEventListener('keyup', this.boundKeyUp);
+        
+        console.log("✅ 事件监听器绑定完成 (capture模式):", {
+            mousedown: true,
+            mousemove: true,
+            mouseup: true,
+            keydown: true,
+            keyup: true
+        });
+        
+        // 添加测试事件监听器验证绑定是否成功
+        const testListener = (e: MouseEvent) => {
+            console.log("🎯 controlLayer 接收到鼠标事件:", {
+                type: e.type,
+                button: e.button,
+                clientX: e.clientX,
+                clientY: e.clientY,
+                target: e.target
+            });
+        };
+        
+        controlLayer.addEventListener('click', testListener, { once: true });
+        console.log("🧪 测试点击监听器已添加，点击controlLayer查看是否触发");
     }
 
     /**
@@ -183,14 +238,31 @@ export class MousePickPlugin extends BasePlugin {
      * 鼠标按下事件处理
      */
     private handleMouseDown(event: MouseEvent): void {
-        if (event.button !== 0) return; // 只处理左键
-
+        if (event.button !== 0) {
+            console.log("⚠️ 非左键点击，忽略事件");
+            return; // 只处理左键
+        }
+        
+        // 如果Ctrl键按下，阻止事件传播到控制器
+        if (this.isCtrlPressed) {
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation();
+            console.log("🚫 Ctrl键按下，已阻止事件传播到控制器");
+        }
+        
         this.updateMousePosition(event);
+        console.log("📍 鼠标位置已更新:", {
+            normalizedX: this.mouse.x,
+            normalizedY: this.mouse.y
+        });
 
-        // 根据当前模式和按键状态决定行为
-        if (this.config.mode === PickMode.BOX_SELECT || this.isShiftPressed) {
+        // 只有在Ctrl键按下时才进行框选，否则进行普通拾取
+        if (this.isCtrlPressed) {
+            console.log("📦 Ctrl键按下，开始框选模式");
             this.startBoxSelection(event);
         } else {
+            console.log("🎯 普通点击，开始射线拾取");
             this.performRaycastPick(event);
         }
     }
@@ -199,17 +271,24 @@ export class MousePickPlugin extends BasePlugin {
      * 鼠标移动事件处理
      */
     private handleMouseMove(event: MouseEvent): void {
+        // 如果Ctrl键按下，阻止事件传播到控制器
+        if (this.isCtrlPressed) {
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation();
+        }
+        
         this.updateMousePosition(event);
 
         if (this.isBoxSelecting) {
             this.updateBoxSelection(event);
-        } else {
-            // 悬停检测
+        } else if (!this.isCtrlPressed) {
+            // 只有在非Ctrl模式下才进行悬停检测
             this.performHoverDetection(event);
         }
 
         // 更新调试射线
-        if (this.debugEnabled) {
+        if (this.debugEnabled && !this.isCtrlPressed) {
             this.updateDebugRay();
         }
     }
@@ -218,6 +297,13 @@ export class MousePickPlugin extends BasePlugin {
      * 鼠标抬起事件处理
      */
     private handleMouseUp(event: MouseEvent): void {
+        // 如果Ctrl键按下，阻止事件传播到控制器
+        if (this.isCtrlPressed) {
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation();
+        }
+        
         if (this.isBoxSelecting) {
             this.finishBoxSelection(event);
         }
@@ -228,10 +314,23 @@ export class MousePickPlugin extends BasePlugin {
      */
     private handleKeyDown(event: KeyboardEvent): void {
         if (event.code === 'ControlLeft' || event.code === 'ControlRight') {
-            this.isCtrlPressed = true;
+            if (!this.isCtrlPressed) {
+                this.isCtrlPressed = true;
+                // 进入框选准备模式，彻底禁用控制器
+                this.disableController();
+                console.log("🔒 Ctrl键按下，进入框选模式，已彻底禁用场景控制器");
+                
+                // 发送框选模式开启事件
+                this.emitPickEvent('box-select-mode-enabled', {
+                    timestamp: Date.now()
+                });
+            }
         }
         if (event.code === 'ShiftLeft' || event.code === 'ShiftRight') {
             this.isShiftPressed = true;
+        }
+        if (event.code === 'Escape' && this.isBoxSelecting) {
+            this.cancelBoxSelection();
         }
     }
 
@@ -240,7 +339,29 @@ export class MousePickPlugin extends BasePlugin {
      */
     private handleKeyUp(event: KeyboardEvent): void {
         if (event.code === 'ControlLeft' || event.code === 'ControlRight') {
-            this.isCtrlPressed = false;
+            if (this.isCtrlPressed) {
+                this.isCtrlPressed = false;
+                
+                // 如果正在框选，先完成框选
+                if (this.isBoxSelecting && this.boxSelectArea) {
+                    // 创建一个模拟的mouseup事件来完成框选
+                    const mockEvent = new MouseEvent('mouseup', {
+                        clientX: this.boxSelectArea.endX,
+                        clientY: this.boxSelectArea.endY,
+                        button: 0
+                    });
+                    this.finishBoxSelection(mockEvent);
+                }
+                
+                // 退出框选模式，恢复控制器
+                this.enableController();
+                console.log("🔓 Ctrl键松开，退出框选模式，已恢复场景控制器");
+                
+                // 发送框选模式关闭事件
+                this.emitPickEvent('box-select-mode-disabled', {
+                    timestamp: Date.now()
+                });
+            }
         }
         if (event.code === 'ShiftLeft' || event.code === 'ShiftRight') {
             this.isShiftPressed = false;
@@ -251,10 +372,10 @@ export class MousePickPlugin extends BasePlugin {
      * 更新鼠标标准化坐标
      */
     private updateMousePosition(event: MouseEvent): void {
-        const canvas = this.renderer?.domElement;
-        if (!canvas) return;
+        const controlLayer = this.renderer?.domElement;
+        if (!controlLayer) return;
 
-        const rect = canvas.getBoundingClientRect();
+        const rect = controlLayer.getBoundingClientRect();
         this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
         this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
     }
@@ -283,8 +404,8 @@ export class MousePickPlugin extends BasePlugin {
         if (filteredResults.length > 0) {
             this.handlePickResults(filteredResults, event);
         } else {
-            // 没有拾取到物体，清空选择（如果不是多选模式）
-            if (!this.isCtrlPressed && this.config.mode !== PickMode.MULTI) {
+            // 没有拾取到物体，在非Ctrl状态下清空选择
+            if (!this.isCtrlPressed) {
                 this.clearSelection();
             }
         }
@@ -314,17 +435,49 @@ export class MousePickPlugin extends BasePlugin {
      * 过滤交点结果
      */
     private filterIntersections(intersects: THREE.Intersection[]): PickResult[] {
-        let results: PickResult[] = intersects.map(intersect => ({
-            object: intersect.object,
-            point: intersect.point,
-            localPoint: intersect.point.clone(),
-            distance: intersect.distance,
-            face: intersect.face || undefined,
-            faceIndex: intersect.faceIndex,
-            uv: intersect.uv,
-            normal: intersect.face?.normal,
-            object3D: intersect.object
-        }));
+        let results: PickResult[] = intersects.map(intersect => {
+            const obj = intersect.object;
+            const isMesh = obj.type === 'Mesh' || obj.type === 'SkinnedMesh';
+            const isInstancedMesh = obj.type === 'InstancedMesh';
+            const mesh = isMesh ? obj as THREE.Mesh : null;
+            const instancedMesh = isInstancedMesh ? obj as THREE.InstancedMesh : null;
+
+            // 计算包围盒
+            let boundingBox: THREE.Box3 | undefined;
+            if (mesh?.geometry) {
+                if (!mesh.geometry.boundingBox) {
+                    mesh.geometry.computeBoundingBox();
+                }
+                boundingBox = mesh.geometry.boundingBox || undefined;
+            }
+
+            // 获取材质名称
+            let materialName: string | undefined;
+            if (mesh?.material) {
+                if (Array.isArray(mesh.material)) {
+                    materialName = mesh.material[0]?.name;
+                } else {
+                    materialName = mesh.material.name;
+                }
+            }
+
+            return {
+                object: obj,
+                point: intersect.point,
+                localPoint: intersect.point.clone(),
+                distance: intersect.distance,
+                face: intersect.face || undefined,
+                faceIndex: intersect.faceIndex,
+                uv: intersect.uv,
+                normal: intersect.face?.normal,
+                instanceId: intersect.instanceId, // 使用intersect提供的instanceId
+                objectType: obj.type,
+                materialName: materialName,
+                geometryType: mesh?.geometry?.type || (obj as any).geometry?.type,
+                worldMatrix: obj.matrixWorld.clone(),
+                boundingBox: boundingBox
+            };
+        });
 
         // 距离过滤
         if (this.config.maxDistance !== Infinity) {
@@ -345,20 +498,68 @@ export class MousePickPlugin extends BasePlugin {
     private handlePickResults(results: PickResult[], event: MouseEvent): void {
         const closestResult = results[0];
 
-        if (this.isCtrlPressed || this.config.mode === PickMode.MULTI) {
-            // 多选模式：切换选中状态
-            this.toggleObjectSelection(closestResult.object);
-        } else {
+        // 只在非Ctrl键状态下处理拾取，Ctrl键用于框选模式
+        if (!this.isCtrlPressed) {
             // 单选模式：选中当前物体
             this.selectSingleObject(closestResult.object);
         }
+        // 如果Ctrl键按下，这里不处理选择，因为Ctrl键用于框选模式
 
-        // 发送拾取事件
+        // 发送拾取事件 - 只包含3D场景信息
         this.emitPickEvent('object-picked', {
-            results,
-            selectedObject: closestResult.object,
-            mouseEvent: event,
-            pickMode: this.config.mode
+            results: results.map(result => ({
+                objectId: result.object.id,
+                objectName: result.object.name,
+                objectType: result.objectType,
+                worldPosition: result.point,
+                localPosition: result.localPoint,
+                distance: result.distance,
+                normal: result.normal,
+                uv: result.uv ? [result.uv.x, result.uv.y] : undefined,
+                materialName: result.materialName,
+                geometryType: result.geometryType,
+                faceIndex: result.faceIndex,
+                instanceId: result.instanceId,
+                worldMatrix: result.worldMatrix,
+                boundingBox: result.boundingBox ? {
+                    min: result.boundingBox.min,
+                    max: result.boundingBox.max
+                } : undefined
+            })),
+            selectedObjectId: closestResult.object.id,
+            selectedObjectName: closestResult.object.name,
+            pickMode: this.isCtrlPressed ? 'box-select-mode' : this.config.mode,
+            timestamp: Date.now()
+        });
+
+        console.log("🎯 拾取成功!", {
+            objectName: closestResult.object.name || '未命名物体',
+            objectType: closestResult.objectType,
+            worldPosition: closestResult.point,
+            distance: closestResult.distance.toFixed(2),
+            results: results.map(result => ({
+                objectId: result.object.id,
+                objectName: result.object.name,
+                objectType: result.objectType,
+                worldPosition: result.point,
+                localPosition: result.localPoint,
+                distance: result.distance,
+                normal: result.normal,
+                uv: result.uv ? [result.uv.x, result.uv.y] : undefined,
+                materialName: result.materialName,
+                geometryType: result.geometryType,
+                faceIndex: result.faceIndex,
+                instanceId: result.instanceId,
+                worldMatrix: result.worldMatrix,
+                boundingBox: result.boundingBox ? {
+                    min: result.boundingBox.min,
+                    max: result.boundingBox.max
+                } : undefined
+            })),
+            selectedObjectId: closestResult.object.id,
+            selectedObjectName: closestResult.object.name,
+            pickMode: this.config.mode,
+            timestamp: Date.now()
         });
     }
 
@@ -367,6 +568,10 @@ export class MousePickPlugin extends BasePlugin {
      */
     private startBoxSelection(event: MouseEvent): void {
         this.isBoxSelecting = true;
+        
+        // 控制器已经在Ctrl键按下时被禁用，这里不需要重复处理
+        console.log("📦 开始框选操作");
+        
         const rect = this.renderer?.domElement.getBoundingClientRect();
         if (!rect) return;
 
@@ -424,14 +629,13 @@ export class MousePickPlugin extends BasePlugin {
     private finishBoxSelection(event: MouseEvent): void {
         if (!this.boxSelectArea) return;
 
+        console.log("📦 完成框选操作，统计选中物体");
+
         // 计算框选区域内的物体
         const objectsInBox = this.getObjectsInBox(this.boxSelectArea);
 
-        // 处理选择
-        if (!this.isCtrlPressed) {
-            this.clearSelection();
-        }
-
+        // 处理选择（不再考虑Ctrl键状态，因为Ctrl键控制框选模式本身）
+        this.clearSelection();
         objectsInBox.forEach(obj => this.addToSelection(obj));
 
         // 隐藏框选元素
@@ -442,11 +646,23 @@ export class MousePickPlugin extends BasePlugin {
         this.isBoxSelecting = false;
         this.boxSelectArea = null;
 
+        // 控制器将在Ctrl键抬起时恢复，这里不需要处理
+
         // 发送框选事件
         this.emitPickEvent('box-select-finished', {
-            selectedObjects: Array.from(this.selectedObjects),
-            boxArea: this.boxSelectArea
+            selectedObjects: Array.from(this.selectedObjects).map(obj => ({
+                id: obj.id,
+                name: obj.name,
+                type: obj.type,
+                position: obj.position,
+                rotation: obj.rotation,
+                scale: obj.scale
+            })),
+            selectedCount: this.selectedObjects.size,
+            timestamp: Date.now()
         });
+
+        console.log(`📦 框选完成，选中了 ${this.selectedObjects.size} 个物体`);
     }
 
     /**
@@ -497,11 +713,21 @@ export class MousePickPlugin extends BasePlugin {
         const newHoveredObject = intersects.length > 0 ? intersects[0].object : null;
 
         if (newHoveredObject !== this.hoveredObject) {
-            // 发送悬停变化事件
+            // 发送悬停变化事件 - 只包含3D场景信息
             this.emitPickEvent('hover-changed', {
-                previousObject: this.hoveredObject,
-                currentObject: newHoveredObject,
-                mouseEvent: event
+                previousObject: this.hoveredObject ? {
+                    id: this.hoveredObject.id,
+                    name: this.hoveredObject.name,
+                    type: this.hoveredObject.type
+                } : null,
+                currentObject: newHoveredObject ? {
+                    id: newHoveredObject.id,
+                    name: newHoveredObject.name,
+                    type: newHoveredObject.type,
+                    position: intersects[0].point,
+                    distance: intersects[0].distance
+                } : null,
+                timestamp: Date.now()
             });
 
             this.hoveredObject = newHoveredObject;
@@ -514,17 +740,6 @@ export class MousePickPlugin extends BasePlugin {
     private selectSingleObject(object: THREE.Object3D): void {
         this.clearSelection();
         this.addToSelection(object);
-    }
-
-    /**
-     * 切换物体选中状态
-     */
-    private toggleObjectSelection(object: THREE.Object3D): void {
-        if (this.selectedObjects.has(object)) {
-            this.removeFromSelection(object);
-        } else {
-            this.addToSelection(object);
-        }
     }
 
     /**
@@ -671,15 +886,19 @@ export class MousePickPlugin extends BasePlugin {
      */
     public destroy(): void {
         // 移除事件监听器
-        const canvas = this.renderer?.domElement;
-        if (canvas) {
-            canvas.removeEventListener('mousedown', this.boundMouseDown);
-            canvas.removeEventListener('mousemove', this.boundMouseMove);
-            canvas.removeEventListener('mouseup', this.boundMouseUp);
+        const controlLayer = this.controller?.controlLayer;
+        if (controlLayer) {
+            const captureOptions = { capture: true };
+            controlLayer.removeEventListener('mousedown', this.boundMouseDown, captureOptions);
+            controlLayer.removeEventListener('mousemove', this.boundMouseMove, captureOptions);
+            controlLayer.removeEventListener('mouseup', this.boundMouseUp, captureOptions);
         }
         
         window.removeEventListener('keydown', this.boundKeyDown);
         window.removeEventListener('keyup', this.boundKeyUp);
+
+        // 确保控制器被正确恢复
+        this.enableController();
 
         // 清理框选元素
         if (this.boxSelectElement) {
@@ -699,5 +918,145 @@ export class MousePickPlugin extends BasePlugin {
         this.camera = null;
         this.scene = null;
         this.renderer = null;
+        this.controller = null;
+        
+        console.log("🧹 MousePickPlugin 已销毁");
+    }
+
+    /**
+     * 取消框选（ESC键或其他情况）
+     */
+    public cancelBoxSelection(): void {
+        if (!this.isBoxSelecting) return;
+
+        // 隐藏框选元素
+        if (this.boxSelectElement) {
+            this.boxSelectElement.style.display = 'none';
+        }
+
+        this.isBoxSelecting = false;
+        this.boxSelectArea = null;
+
+        // 恢复场景控制器
+        this.enableController();
+        console.log("🔓 框选取消，已恢复场景控制器");
+
+        // 发送取消事件
+        this.emitPickEvent('box-select-cancelled', {
+            timestamp: Date.now()
+        });
+    }
+
+    /**
+     * 彻底禁用控制器
+     */
+    private disableController(): void {
+        if (!this.controller) return;
+        
+        try {
+            // 保存控制器的原始状态
+            this.controllerOriginalState = {
+                enabled: this.controller.enabled,
+                enableRotate: this.controller.control?.enableRotate,
+                enableZoom: this.controller.control?.enableZoom,
+                enablePan: this.controller.control?.enablePan,
+                enableDamping: this.controller.control?.enableDamping,
+                autoRotate: this.controller.control?.autoRotate
+            };
+            
+            // 彻底禁用所有控制功能
+            if (this.controller.enabled !== undefined) {
+                this.controller.enabled = false;
+            }
+            
+            if (this.controller.control) {
+                this.controller.control.enabled = false;
+                this.controller.control.enableRotate = false;
+                this.controller.control.enableZoom = false;
+                this.controller.control.enablePan = false;
+                this.controller.control.enableDamping = false;
+                this.controller.control.autoRotate = false;
+            }
+            
+            console.log("🔒 控制器已彻底禁用", this.controllerOriginalState);
+        } catch (error) {
+            console.warn("⚠️ 禁用控制器时发生错误:", error);
+        }
+    }
+
+    /**
+     * 启用控制器
+     */
+    private enableController(): void {
+        if (!this.controller) return;
+        
+        try {
+            // 恢复控制器的原始状态
+            if (this.controllerOriginalState.enabled !== undefined) {
+                this.controller.enabled = this.controllerOriginalState.enabled;
+            }
+            
+            if (this.controller.control) {
+                this.controller.control.enabled = true;
+                
+                if (this.controllerOriginalState.enableRotate !== undefined) {
+                    this.controller.control.enableRotate = this.controllerOriginalState.enableRotate;
+                }
+                if (this.controllerOriginalState.enableZoom !== undefined) {
+                    this.controller.control.enableZoom = this.controllerOriginalState.enableZoom;
+                }
+                if (this.controllerOriginalState.enablePan !== undefined) {
+                    this.controller.control.enablePan = this.controllerOriginalState.enablePan;
+                }
+                if (this.controllerOriginalState.enableDamping !== undefined) {
+                    this.controller.control.enableDamping = this.controllerOriginalState.enableDamping;
+                }
+                if (this.controllerOriginalState.autoRotate !== undefined) {
+                    this.controller.control.autoRotate = this.controllerOriginalState.autoRotate;
+                }
+            }
+            
+            console.log("🔓 控制器已恢复", this.controllerOriginalState);
+            
+            // 清空保存的状态
+            this.controllerOriginalState = {};
+        } catch (error) {
+            console.warn("⚠️ 恢复控制器时发生错误:", error);
+        }
+    }
+
+    /**
+     * 调试控制器状态
+     */
+    public debugControllerState(): void {
+        console.log("🔍 控制器状态调试信息:");
+        console.log("- Ctrl键状态:", this.isCtrlPressed ? "按下" : "未按下");
+        console.log("- 框选状态:", this.isBoxSelecting ? "进行中" : "未进行");
+        
+        if (this.controller) {
+            console.log("- 控制器存在:", true);
+            console.log("- 控制器enabled:", this.controller.enabled);
+            
+            if (this.controller.control) {
+                console.log("- OrbitControls存在:", true);
+                console.log("- OrbitControls.enabled:", this.controller.control.enabled);
+                console.log("- OrbitControls.enableRotate:", this.controller.control.enableRotate);
+                console.log("- OrbitControls.enableZoom:", this.controller.control.enableZoom);
+                console.log("- OrbitControls.enablePan:", this.controller.control.enablePan);
+            } else {
+                console.log("- OrbitControls存在:", false);
+            }
+            
+            if (this.controller.controlLayer) {
+                console.log("- controlLayer存在:", true);
+                console.log("- controlLayer.style.pointerEvents:", this.controller.controlLayer.style.pointerEvents);
+            } else {
+                console.log("- controlLayer存在:", false);
+            }
+        } else {
+            console.log("- 控制器存在:", false);
+        }
+        
+        console.log("- 保存的原始状态:", this.controllerOriginalState);
     }
 }
