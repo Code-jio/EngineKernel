@@ -40,7 +40,7 @@ const DEFAULT_CONFIGS = {
             alpha: false,
             precision: "mediump",
             powerPreference: "high-performance",
-            physicallyCorrectLights: false,
+            physicallyCorrectLights: true,
             shadowMapEnabled: false,
             toneMapping: THREE.LinearToneMapping,
             toneMappingExposure: 1.0,
@@ -301,10 +301,12 @@ export class BaseScene extends BasePlugin {
         this.scene = new THREE.Scene()
         this.scene.background = new THREE.Color(0xffffff)
 
-
+        // 适应Three.js r155+物理正确光照系统的光照强度
+        // 环境光强度需要降低，因为新的光照系统更加真实
+        this.ambientLight = new THREE.AmbientLight(0xffffff, 0.4) // 从0.7降低到0.4
         
-        this.ambientLight = new THREE.AmbientLight(0xffffff, 0.7) // 环境光(颜色, 强度) 不影响阴影(自发光)
-        this.directionalLight = new THREE.DirectionalLight(0xffffff, 1) // 平行光(颜色, 强度) 影响阴影(自发光)
+        // 平行光强度也需要调整
+        this.directionalLight = new THREE.DirectionalLight(0xffffff, 0.8) // 从1降低到0.8
         this.directionalLight.position.set(1000, 1000, 1000) // 设置平行光位置
         
         // 根据配置决定是否启用阴影
@@ -345,13 +347,14 @@ export class BaseScene extends BasePlugin {
         const usedPreset = meta.userData.preset || 'balanced'
         console.log(`✅ BaseScene初始化完成 - 使用预设: ${usedPreset}`, {
             相机类型: cameraOption.type,
+            光照系统: 'Three.js r155+ 物理正确光照',
             阴影系统: this.rendererAdvancedConfig.shadowMapEnabled ? '启用' : '禁用',
             性能监控: this.performanceMonitor.enabled ? '启用' : '禁用',
             Debug模式: this.debugConfig.enabled ? '启用' : '禁用',
             色调映射: this.getToneMappingName(this.rendererAdvancedConfig.toneMapping),
             像素比率: this.rendererAdvancedConfig.pixelRatio
         })
-        
+
         // 如果启用了debug模式，则添加辅助器
         if (this.debugConfig.enabled) {
             this.addDebugHelpers()
@@ -501,8 +504,9 @@ export class BaseScene extends BasePlugin {
     private applyRendererAdvancedConfig(): void {
         const config = this.rendererAdvancedConfig
         
-        // 物理正确光照
-        this.renderer.useLegacyLights = !config.physicallyCorrectLights
+        // Three.js r155+ 移除了 useLegacyLights 属性
+        // 新版本默认使用物理正确的光照，无需手动设置
+        console.log('🔧 使用Three.js r155+物理正确光照系统')
         
         // 输出颜色空间
         this.renderer.outputColorSpace = config.outputColorSpace as any
