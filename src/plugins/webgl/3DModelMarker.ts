@@ -52,6 +52,7 @@ interface ModelMarkerConfig {
   position?: Array<number> | THREE.Vector3 // 模型位置，支持数组或Vector3对象
   rotation?: Array<number> | THREE.Euler // 模型旋转，支持数组或Euler对象
   scale?: Array<number> | THREE.Vector3 // 模型缩放，支持数组或Vector3对象
+  show?: boolean // 是否显示模型
   autoLoad?: boolean // 是否自动加载
   enableAnimations?: boolean // 是否启用动画
   // 性能优化配置
@@ -89,7 +90,6 @@ interface ModelInstance {
     curve?: THREE.CatmullRomCurve3
   }
   isLoaded: boolean
-  isVisible: boolean
 }
 
 export class ModelMarker extends BasePlugin {
@@ -108,6 +108,7 @@ export class ModelMarker extends BasePlugin {
     
     // 设置默认配置
     this.defaultConfig = {
+      show: true, // 默认显示模型
       autoLoad: true,
       enableAnimations: true,
       enablePhysics: false,
@@ -190,8 +191,7 @@ export class ModelMarker extends BasePlugin {
       model: new THREE.Group(),
       config: finalConfig,
       animations: [],
-      isLoaded: false,
-      isVisible: true
+      isLoaded: false
     }
 
     // 设置初始变换（使用默认值）
@@ -224,6 +224,9 @@ export class ModelMarker extends BasePlugin {
     } else {
       instance.model.scale.set(1, 1, 1)
     }
+
+    // 设置初始可见性
+    instance.model.visible = finalConfig.show !== false
 
     // 性能优化设置
     if (finalConfig.enableFrustumCulling) {
@@ -917,7 +920,6 @@ export class ModelMarker extends BasePlugin {
     if (!instance) return false
 
     instance.model.visible = visible
-    instance.isVisible = visible
 
     eventBus.emit('model:visibilityChanged', { modelId, visible })
     return true
@@ -989,7 +991,7 @@ export class ModelMarker extends BasePlugin {
         id: instance.id,
         name: instance.name,
         isLoaded: instance.isLoaded,
-        isVisible: instance.isVisible,
+        isVisible: instance.model.visible,
         transform: this.getTransform(id),
         hasAnimations: instance.animations.length > 0,
         hasKeyframeAnimation: !!instance.keyframeAnimation,
@@ -1012,7 +1014,7 @@ export class ModelMarker extends BasePlugin {
       id: instance.id,
       name: instance.name,
       isLoaded: instance.isLoaded,
-      isVisible: instance.isVisible,
+      isVisible: instance.model.visible,
       transform: this.getTransform(modelId),
       animations: instance.animations.map(anim => ({
         name: anim.name,
