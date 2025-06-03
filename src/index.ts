@@ -6,7 +6,7 @@ import BaseCore from "./core/baseCore";
 export { 
     eventBus, 
     pluginManager, 
-    BaseCore 
+    BaseCore,
 };
 
 export * from './plugins'; // 导出所有插件模块

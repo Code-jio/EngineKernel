@@ -41,7 +41,7 @@ export class BaseControls extends BasePlugin {
         element.style.width = window.innerWidth + 'px';
         element.style.height = window.innerHeight + 'px';
         element.style.pointerEvents = 'auto';
-        // element.style.zIndex = '0'; // 在CSS3D层下面
+        // element.style.zIndex = '1'; // 在CSS3D层下面
         element.style.background = 'transparent';
 
         // 将控制层添加到DOM

@@ -101,7 +101,7 @@ interface MarkerInstance {
   }
 }
 
-export class TextMarker extends BasePlugin {
+export class TextMarkerPlugin extends BasePlugin {
   private scene: THREE.Scene | null = null
   private camera: THREE.Camera | null = null
   private renderer: THREE.WebGLRenderer | null = null
