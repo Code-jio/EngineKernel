@@ -5,7 +5,7 @@ export { CameraPlugin } from './webgl/cameraPlugin';
 export { GLMonitor } from './webgl/glMonitor';
 export { LODPlugin } from './webgl/lod';
 export { BaseControls } from './webgl/baseControl';
-export { BaseControls as orbitControls } from './webgl/baseControl';
+// export { BaseControls as orbitControls } from './webgl/baseControl';
 export { Performance } from './webgl/performance';
 export { RenderLoop } from './webgl/renderLoop';
 export { ResourceReaderPlugin } from './webgl/resourceReaderPlugin';
