@@ -52,7 +52,10 @@ const DEFAULT_CONFIGS = {
         debugConfig: {
             enabled: false,
             gridHelper: false,
-            axesHelper: false
+            axesHelper: false,
+            gridSize: 10000, 
+            gridDivisions: 100, 
+            axesSize: 1000
         }
     },
     
@@ -84,9 +87,9 @@ const DEFAULT_CONFIGS = {
             enabled: false,
             gridHelper: true,
             axesHelper: true,
-            gridSize: 100,
-            gridDivisions: 100,
-            axesSize: 100
+            gridSize: 10000, 
+            gridDivisions: 100, 
+            axesSize: 1000
         }
     },
     
@@ -119,9 +122,9 @@ const DEFAULT_CONFIGS = {
             enabled: false,
             gridHelper: true,
             axesHelper: true,
-            gridSize: 200,
-            gridDivisions: 20,
-            axesSize: 100
+            gridSize: 10000, 
+            gridDivisions: 100, 
+            axesSize: 1000
         }
     },
     
@@ -152,9 +155,9 @@ const DEFAULT_CONFIGS = {
             enabled: true,
             gridHelper: true,
             axesHelper: true,
-            gridSize: 100,
-            gridDivisions: 100,
-            axesSize: 100
+            gridSize: 10000, 
+            gridDivisions: 100, 
+            axesSize: 1000
         }
     }
 }
@@ -266,8 +269,8 @@ export class BaseScene extends BasePlugin {
             enabled: finalConfig.debugConfig?.enabled || false,
             gridHelper: finalConfig.debugConfig?.gridHelper || false,
             axesHelper: finalConfig.debugConfig?.axesHelper || false,
-            gridSize: finalConfig.debugConfig?.gridSize || 100,
-            gridDivisions: finalConfig.debugConfig?.gridDivisions || 100,
+            gridSize: finalConfig.debugConfig?.gridSize || 100000,  // 网格总大小：每格10单位×10000格=100000单位
+            gridDivisions: finalConfig.debugConfig?.gridDivisions || 10000,  // 网格分割数：10000格
             axesSize: finalConfig.debugConfig?.axesSize || 100
         }
 

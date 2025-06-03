@@ -90,7 +90,7 @@ export class SkyBox extends BasePlugin {
         if (config.type === SkyBoxType.PROCEDURAL_SKY) {
             config.skyConfig = {
                 turbidity: userData.turbidity || 10,
-                rayleigh: userData.rayleigh || 2,
+                rayleigh: userData.rayleigh || 3,
                 mieCoefficient: userData.mieCoefficient || 0.005,
                 mieDirectionalG: userData.mieDirectionalG || 0.7,
                 sunPosition: userData.sunPosition || { x: 1, y: 1, z: 1 },
@@ -103,6 +103,7 @@ export class SkyBox extends BasePlugin {
             const phi = THREE.MathUtils.degToRad(90 - config.skyConfig.elevation!)
             const theta = THREE.MathUtils.degToRad(config.skyConfig.azimuth!)
             this.sun.setFromSphericalCoords(1, phi, theta)
+            this.skyMaterial?.material.uniforms["sunPosition"].value.copy(this.sun)
             
             // 设置渲染器
             this.renderer.toneMappingExposure = config.skyConfig.exposure!
@@ -229,18 +230,8 @@ export class SkyBox extends BasePlugin {
                 if (config.mieDirectionalG !== undefined) {
                     this.skyMaterial.mieDirectionalG.value = config.mieDirectionalG
                 }
-                
-                // 设置太阳位置
-                if (config.sunPosition) {
-                    this.skyMaterial.setSunPosition(
-                        config.sunPosition.x,
-                        config.sunPosition.y,
-                        config.sunPosition.z
-                    )
-                } else {
-                    // 使用计算的太阳位置
-                    this.skyMaterial.setSunPosition(this.sun.x, this.sun.y, this.sun.z)
-                }
+
+                this.skyMaterial.material.uniforms["sunPosition"].value.copy(this.sun)
             }
 
             // 设置天空盒大小
