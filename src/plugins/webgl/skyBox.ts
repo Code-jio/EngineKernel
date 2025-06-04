@@ -1,4 +1,5 @@
 import { THREE, BasePlugin } from "../basePlugin"
+import { RGBELoader } from "../../utils/three-imports"
 import eventBus from '../../eventBus/eventBus'
 import { Sky } from "../../glsl/sky"
 
@@ -7,6 +8,7 @@ enum SkyBoxType {
     CUBE_TEXTURE = 'cubeTexture',           // 立方体贴图
     PROCEDURAL_SKY = 'proceduralSky',       // 程序化天空
     ENVIRONMENT_MAP = 'environmentMap',     // 环境贴图
+    HDR_ENVIRONMENT = 'hdrEnvironment',     // HDR环境贴图
     // 未来可扩展：
     // SKY_DOME = 'skyDome',                // 天空穹顶
     // LAYERED_SKY = 'layeredSky'           // 分层天空
@@ -21,6 +23,10 @@ interface SkyBoxConfig {
     
     // 环境贴图配置
     envMapPath?: string
+    
+    // HDR环境贴图配置
+    hdrMapPath?: string
+    hdrIntensity?: number
     
     // 程序化天空配置
     skyConfig?: {
@@ -38,6 +44,7 @@ interface SkyBoxConfig {
 export class SkyBox extends BasePlugin {
     private cubeTextureLoader: THREE.CubeTextureLoader
     private textureLoader: THREE.TextureLoader
+    private rgbeLoader: RGBELoader
     private scene: THREE.Scene
     private camera: THREE.PerspectiveCamera
     private renderer: THREE.WebGLRenderer
@@ -58,6 +65,7 @@ export class SkyBox extends BasePlugin {
         // 初始化加载器
         this.cubeTextureLoader = new THREE.CubeTextureLoader()
         this.textureLoader = new THREE.TextureLoader()
+        this.rgbeLoader = new RGBELoader()
         
         // 保存引用
         this.scene = meta.userData.scene
@@ -84,6 +92,12 @@ export class SkyBox extends BasePlugin {
         // 环境贴图配置
         if (config.type === SkyBoxType.ENVIRONMENT_MAP && userData.envMapPath) {
             config.envMapPath = userData.envMapPath
+        }
+
+        // HDR环境贴图配置
+        if (config.type === SkyBoxType.HDR_ENVIRONMENT && userData.hdrMapPath) {
+            config.hdrMapPath = userData.hdrMapPath
+            config.hdrIntensity = userData.hdrIntensity || 1.0
         }
 
         // 程序化天空配置
@@ -135,6 +149,9 @@ export class SkyBox extends BasePlugin {
             case SkyBoxType.ENVIRONMENT_MAP:
                 this.createEnvironmentMapSkyBox()
                 break
+            case SkyBoxType.HDR_ENVIRONMENT:
+                this.createHDREnvironmentSkyBox()
+                break
             case SkyBoxType.PROCEDURAL_SKY:
                 this.createProceduralSkyBox()
                 break
@@ -163,7 +180,7 @@ export class SkyBox extends BasePlugin {
                     side: THREE.BackSide,
                 })
                 this.mesh = new THREE.Mesh(geometry, material)
-                this.mesh.scale.setScalar(45000)
+                this.mesh.scale.setScalar(100000)
                 
                 eventBus.emit("skybox-ready", { type: SkyBoxType.CUBE_TEXTURE })
                 
@@ -178,6 +195,7 @@ export class SkyBox extends BasePlugin {
         )
     }
 
+    // 
     private createEnvironmentMapSkyBox() {
         if (!this.config.envMapPath) {
             console.error("环境贴图天空盒缺少贴图路径")
@@ -207,6 +225,57 @@ export class SkyBox extends BasePlugin {
         )
     }
 
+    // HDR环境贴图天空盒
+    private createHDREnvironmentSkyBox() {
+        if (!this.config.hdrMapPath) {
+            console.error("HDR环境贴图天空盒缺少HDR文件路径")
+            return
+        }
+
+        this.rgbeLoader.load(
+            this.config.hdrMapPath,
+            texture => {
+                // 设置纹理参数
+                texture.mapping = THREE.EquirectangularReflectionMapping
+                
+                // 设置为场景背景
+                this.scene.background = texture
+                this.scene.environment = texture
+                
+                // 设置曝光度和色调映射
+                this.renderer.toneMapping = THREE.ACESFilmicToneMapping
+                this.renderer.toneMappingExposure = this.config.hdrIntensity || 1.0
+                
+                // 创建天空盒网格（可选，用于调试）
+                const geometry = new THREE.SphereGeometry(this.config.size! / 2, 64, 32)
+                const material = new THREE.MeshBasicMaterial({
+                    map: texture,
+                    side: THREE.BackSide,
+                })
+                this.mesh = new THREE.Mesh(geometry, material)
+                this.mesh.renderOrder = -1000  // 确保在最后渲染
+                
+                eventBus.emit("skybox-ready", { 
+                    type: SkyBoxType.HDR_ENVIRONMENT,
+                    texture: texture 
+                })
+                
+                console.log("HDR环境天空盒加载成功")
+                
+                // 自动添加到场景
+                this.addToScene()
+            },
+            progress => {
+                console.log("HDR文件加载进度:", (progress.loaded / progress.total * 100).toFixed(2) + '%')
+            },
+            err => {
+                console.error("HDR环境贴图天空盒加载失败:", err)
+                eventBus.emit("skybox-error", err)
+            }
+        )
+    }
+
+    // 程序化天空盒
     private createProceduralSkyBox() {
         try {
             
@@ -235,7 +304,7 @@ export class SkyBox extends BasePlugin {
             }
 
             // 设置天空盒大小
-            this.mesh.scale.setScalar(45000)
+            this.mesh.scale.setScalar(100000)
             
             eventBus.emit("skybox-ready", { type: SkyBoxType.PROCEDURAL_SKY })
             

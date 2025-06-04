@@ -7,6 +7,7 @@ import * as THREE from 'three';
 // 常用扩展模块
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader';
+import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import { CSS3DRenderer, CSS3DObject } from 'three/examples/jsm/renderers/CSS3DRenderer';
 import Stats from 'three/examples/jsm/libs/stats.module';
@@ -21,6 +22,7 @@ export {
     THREE,
     GLTFLoader,
     DRACOLoader,
+    RGBELoader,
     OrbitControls,
     CSS3DRenderer,
     CSS3DObject,
