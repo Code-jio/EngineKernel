@@ -62,41 +62,183 @@ export class ResourceReaderPlugin extends BasePlugin {
   private maxConcurrentLoads: number = 3
   private taskIdCounter: number = 0
 
+  // 默认配置参数
+  private static readonly DEFAULT_CONFIG: ResourceReaderConfig = {
+    url: '',                           // 基础URL
+    maxCacheSize: 1000 * 1024 * 1024,  // 1000MB缓存
+    maxConcurrentLoads: 3,             // 最大并发加载数
+    enableDraco: true,                 // 启用DRACO解压
+    dracoPath: '/draco/',              // DRACO解码器路径
+    supportedFormats: ['gltf', 'glb'], // 支持的格式
+    autoDispose: true                  // 自动释放过期资源
+  }
+
+  /**
+   * 创建带有默认配置的ResourceReaderPlugin实例
+   * @param config 可选的配置参数
+   * @returns ResourceReaderPlugin实例
+   */
+  static create(config: Partial<ResourceReaderConfig> = {}): ResourceReaderPlugin {
+    return new ResourceReaderPlugin(config)
+  }
+
+  /**
+   * 创建禁用DRACO的ResourceReaderPlugin实例
+   * @param config 可选的配置参数
+   * @returns ResourceReaderPlugin实例
+   */
+  static createBasic(config: Partial<ResourceReaderConfig> = {}): ResourceReaderPlugin {
+    return new ResourceReaderPlugin({
+      ...config,
+      enableDraco: false
+    })
+  }
+
+  /**
+   * 创建高性能配置的ResourceReaderPlugin实例
+   * @param config 可选的配置参数
+   * @returns ResourceReaderPlugin实例
+   */
+  static createHighPerformance(config: Partial<ResourceReaderConfig> = {}): ResourceReaderPlugin {
+    return new ResourceReaderPlugin({
+      ...config,
+      maxCacheSize: 500 * 1024 * 1024, // 500MB缓存
+      maxConcurrentLoads: 6,            // 更高并发
+      enableDraco: true,
+      autoDispose: false                // 禁用自动释放
+    })
+  }
+
   constructor(userData: any = {}) {
     super(userData)
     
+    // 合并用户配置和默认配置
     this.config = {
-      url: userData.url || '',
-      maxCacheSize: userData.maxCacheSize || this.maxCacheSize,
-      maxConcurrentLoads: userData.maxConcurrentLoads || this.maxConcurrentLoads,
-      enableDraco: userData.enableDraco !== false,
-      dracoPath: userData.dracoPath || '/draco/',
-      supportedFormats: userData.supportedFormats || ['gltf', 'glb'],
-      autoDispose: userData.autoDispose !== false,
+      ...ResourceReaderPlugin.DEFAULT_CONFIG,
       ...userData
     }
 
+    // 验证和修正配置
+    // this.validateAndNormalizeConfig()
+
+    // 应用配置到实例变量
     this.baseUrl = this.config.url || ''
     this.maxCacheSize = this.config.maxCacheSize!
     this.maxConcurrentLoads = this.config.maxConcurrentLoads!
     
+    console.log('🔧 ResourceReaderPlugin配置:', {
+      baseUrl: this.baseUrl || '(无)',
+      maxCacheSize: `${(this.maxCacheSize / 1024 / 1024).toFixed(1)}MB`,
+      maxConcurrentLoads: this.maxConcurrentLoads,
+      enableDraco: this.config.enableDraco,
+      dracoPath: this.config.dracoPath,
+      supportedFormats: this.config.supportedFormats,
+      autoDispose: this.config.autoDispose
+    })
+    
     this.initializeLoaders(this.config)
+  }
+
+  /**
+   * 验证和标准化配置参数
+   */
+  private validateAndNormalizeConfig(): void {
+    // 验证缓存大小
+    if (this.config.maxCacheSize! < 10 * 1024 * 1024) {
+      console.warn('⚠️ 缓存大小过小，建议至少10MB，已调整为10MB')
+      this.config.maxCacheSize = 10 * 1024 * 1024
+    }
+    if (this.config.maxCacheSize! > 2 * 1024 * 1024 * 1024) {
+      console.warn('⚠️ 缓存大小过大，建议不超过2GB，已调整为2GB')
+      this.config.maxCacheSize = 2 * 1024 * 1024 * 1024
+    }
+
+    // 验证并发数
+    if (this.config.maxConcurrentLoads! < 1) {
+      console.warn('⚠️ 并发数不能小于1，已调整为1')
+      this.config.maxConcurrentLoads = 1
+    }
+    if (this.config.maxConcurrentLoads! > 10) {
+      console.warn('⚠️ 并发数过大可能影响性能，建议不超过10')
+    }
+
+    // 标准化DRACO路径
+    if (this.config.dracoPath && !this.config.dracoPath.endsWith('/')) {
+      this.config.dracoPath += '/'
+    }
+
+    // 验证支持的格式
+    if (!this.config.supportedFormats || this.config.supportedFormats.length === 0) {
+      console.warn('⚠️ 未指定支持的格式，使用默认格式')
+      this.config.supportedFormats = ['gltf', 'glb']
+    }
   }
 
   /**
    * 初始化加载器
    */
   private initializeLoaders(config: ResourceReaderConfig): void {
+    // 初始化GLTF加载器
     this.gltfLoader = new GLTFLoader()
     
-    // 配置DRACO解压器
+    // 直接初始化并设置DRACO解压器
     const enableDraco = config.enableDraco !== false
     if (enableDraco) {
-      this.dracoLoader = new DRACOLoader()
-      const dracoPath = config.dracoPath || '/draco/'
-      this.dracoLoader.setDecoderPath(dracoPath)
-      this.gltfLoader.setDRACOLoader(this.dracoLoader)
-      console.log('🔧 DRACO解压器已启用')
+      console.log('🔧 直接初始化DRACO解压器')
+      
+      try {
+        this.dracoLoader = new DRACOLoader()
+        const dracoPath = config.dracoPath || '/draco/'
+        this.dracoLoader.setDecoderPath(dracoPath)
+        
+        // 直接设置DRACO解压器到GLTF加载器
+        this.gltfLoader.setDRACOLoader(this.dracoLoader)
+        
+        console.log('✅ DRACO解压器已设置到GLTFLoader，路径:', dracoPath)
+        console.log('✅ 所有GLTF/GLB文件将自动支持DRACO解压')
+        
+        // 验证DRACO解码器是否可用
+        this.verifyDracoDecoder(dracoPath)
+      } catch (error) {
+        console.warn('⚠️ DRACO解压器初始化失败:', error)
+        console.warn('⚠️ 将使用基础GLTF加载器，压缩模型可能无法加载')
+        this.dracoLoader = null
+      }
+    } else {
+      console.log('ℹ️ DRACO解压器已禁用，仅支持未压缩模型')
+      this.dracoLoader = null
+    }
+  }
+
+  /**
+   * 验证DRACO解码器文件是否存在
+   */
+  private async verifyDracoDecoder(dracoPath: string): Promise<void> {
+    try {
+      const testUrls = [
+        `${dracoPath}draco_decoder.wasm`,
+        `${dracoPath}draco_decoder.js`,
+        `${dracoPath}draco_wasm_wrapper.js`
+      ]
+      
+      // 检查关键文件是否存在（仅在开发环境）
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🔍 验证DRACO解码器文件...')
+        for (const url of testUrls) {
+          try {
+            const response = await fetch(url, { method: 'HEAD' })
+            if (response.ok) {
+              console.log(`✅ DRACO文件存在: ${url}`)
+            } else {
+              console.warn(`⚠️ DRACO文件不存在: ${url}`)
+            }
+          } catch (error) {
+            console.warn(`⚠️ 无法验证DRACO文件: ${url}`, error)
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('⚠️ DRACO解码器验证失败:', error)
     }
   }
 
@@ -270,18 +412,20 @@ export class ResourceReaderPlugin extends BasePlugin {
   }
 
   /**
-   * 执行具体的加载操作
+   * 执行具体的加载操作 - 直接使用配置好的GLTFLoader
    */
   private executeLoad(task: LoadingTask): void {
     task.status = 'loading'
     this.activeLoads.add(task.id)
 
     console.log(`🔄 开始加载: ${task.url}`)
+    console.log(`🔧 使用${this.dracoLoader ? 'DRACO增强' : '基础'}GLTFLoader`)
     
     this.gltfLoader.load(
       task.url,
       // onLoad
       (gltf: any) => {
+        console.log(`✅ 模型加载成功: ${task.url}`)
         this.onLoadComplete(task, gltf)
       },
       // onProgress
@@ -290,10 +434,15 @@ export class ResourceReaderPlugin extends BasePlugin {
       },
       // onError
       (error: any) => {
+        console.error(`❌ 模型加载失败: ${task.url}`)
         this.onLoadError(task, error as Error)
       }
     )
   }
+
+
+
+
 
   /**
    * 加载完成处理
@@ -356,10 +505,46 @@ export class ResourceReaderPlugin extends BasePlugin {
     task.status = 'error'
     task.error = error
     
-    console.error(`❌ 模型加载失败: ${task.url}`, error)
+    // 详细的错误分析
+    let errorCategory = 'unknown'
+    let suggestion = ''
+    
+    if (error.message.includes('DRACO') || error.message.includes('draco')) {
+      errorCategory = 'draco'
+      suggestion = '建议检查DRACO解码器文件是否存在于/draco/目录'
+    } else if (error.message.includes('404') || error.message.includes('Not Found')) {
+      errorCategory = 'not_found'
+      suggestion = '请检查模型文件路径是否正确'
+    } else if (error.message.includes('JSON') || error.message.includes('Unexpected token')) {
+      errorCategory = 'format'
+      suggestion = '可能收到了HTML页面而不是模型文件，请检查服务器配置'
+    } else if (error.message.includes('network') || error.message.includes('fetch')) {
+      errorCategory = 'network'
+      suggestion = '网络连接问题，请检查网络状态'
+    }
+    
+    console.error(`❌ 模型加载失败: ${task.url}`)
+    console.error(`🔍 错误类型: ${errorCategory}`)
+    console.error(`💡 建议: ${suggestion}`)
+    console.error(`📋 错误详情:`, error)
+    
+    // 如果是DRACO相关错误，提供额外信息
+    if (errorCategory === 'draco') {
+      console.error('🔧 DRACO故障排除:')
+      console.error('   1. 检查 /draco/ 目录是否存在')
+      console.error('   2. 确认以下文件存在:')
+      console.error('      - draco_decoder.wasm')
+      console.error('      - draco_decoder.js') 
+      console.error('      - draco_wasm_wrapper.js')
+      console.error('   3. 检查服务器是否正确提供WASM文件')
+    }
     
     if (task.onError) {
-      task.onError(error)
+      // 创建增强的错误对象
+      const enhancedError = new Error(`${error.message} (类型: ${errorCategory})`)
+      enhancedError.name = error.name
+      enhancedError.stack = error.stack
+      task.onError(enhancedError)
     }
 
     this.activeLoads.delete(task.id)
@@ -367,7 +552,9 @@ export class ResourceReaderPlugin extends BasePlugin {
     eventBus.emit('resource:error', {
       taskId: task.id,
       url: task.url,
-      error: error.message
+      error: error.message,
+      category: errorCategory,
+      suggestion
     })
 
     // 处理队列中的下一个任务
@@ -576,6 +763,7 @@ export class ResourceReaderPlugin extends BasePlugin {
     maxSize: number
     itemCount: number
     utilization: number
+    dracoEnabled: boolean
   } {
     const size = this.getCurrentCacheSize()
     const itemCount = this.resourceCache.size
@@ -585,7 +773,23 @@ export class ResourceReaderPlugin extends BasePlugin {
       size,
       maxSize: this.maxCacheSize,
       itemCount,
-      utilization
+      utilization,
+      dracoEnabled: !!this.dracoLoader
+    }
+  }
+
+  /**
+   * 获取加载器配置信息
+   */
+  public getLoaderInfo(): { 
+    dracoEnabled: boolean
+    dracoPath: string | undefined
+    supportedFormats: string[]
+  } {
+    return {
+      dracoEnabled: !!this.dracoLoader,
+      dracoPath: this.config.dracoPath,
+      supportedFormats: this.config.supportedFormats || ['gltf', 'glb']
     }
   }
 
