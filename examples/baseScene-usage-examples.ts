@@ -11,7 +11,7 @@ const minimalScene = BaseScene.createMinimal()
 
 // 2. 指定容器的最简创建
 const container = document.getElementById('my-canvas') as HTMLCanvasElement
-const minimalSceneWithContainer = BaseScene.createMinimal(container || undefined)
+const minimalSceneWithContainer = BaseScene.createMinimal()
 
 // ===============================================
 // 🎯 预设配置创建场景

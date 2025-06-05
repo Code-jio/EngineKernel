@@ -29,7 +29,7 @@ try {
     existingCanvas.height = 600
     document.body.appendChild(existingCanvas)
     
-    const existingScene = BaseScene.createMinimal(existingCanvas)
+    const existingScene = BaseScene.createMinimal()
     console.log('✅ 使用现有canvas成功')
     console.log('Canvas信息:', {
         tagName: existingScene.rendererInstance.domElement.tagName,

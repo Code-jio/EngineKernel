@@ -1,7 +1,56 @@
 import { THREE, BasePlugin } from "../basePlugin"
 import eventBus from "../../eventBus/eventBus"
 import { PipelineManager } from "../../core/pipelineManager"
+import { FloorConfig, FloorManager } from "./floorManager"
 import * as TWEEN from '@tweenjs/tween.js'
+
+/**
+ * BaseScene - 基础场景插件（增强版）
+ * 
+ * 🏢 地板功能使用示例：
+ * 
+ * // 1. 创建带水面地板的场景
+ * const scene = BaseScene.createWithFloor('water', 20000)
+ * 
+ * // 2. 动态切换地板类型
+ * scene.setFloorType('grid')  // 切换到网格地板
+ * scene.setWaterFloor(30000)  // 设置水面地板
+ * scene.setStaticFloor(10000, { color: 0x654321 })  // 设置静态地板
+ * 
+ * // 3. 使用贴图的地板
+ * scene.setStaticFloorWithTexture(15000, './textures/floor.jpg')  // 单贴图地板
+ * scene.setStaticFloorWithPBR(20000, {  // PBR地板
+ *     diffuse: './textures/floor_diffuse.jpg',
+ *     normal: './textures/floor_normal.jpg',
+ *     roughness: './textures/floor_roughness.jpg',
+ *     metallic: './textures/floor_metallic.jpg'
+ * })
+ * scene.setWaterFloorWithTexture(25000, './textures/water_normals.jpg')  // 水面法线贴图
+ * 
+ * // 4. 配置地板参数
+ * scene.updateFloorConfig({
+ *     waterConfig: { 
+ *         color: 0x004466, 
+ *         distortionScale: 5.0 
+ *     }
+ * })
+ * 
+ * // 5. 切换地板显示
+ * scene.toggleFloor(false)  // 隐藏地板
+ * scene.toggleFloor(true)   // 显示地板
+ * 
+ * // 6. 获取地板信息
+ * const floorInfo = scene.getFloorInfo()
+ * console.log('地板信息:', floorInfo)
+ * 
+ * 支持的地板类型：
+ * - water: 水面地板（参照three.js webgl_shaders_ocean）
+ * - static: 静态贴图地板（支持PBR材质）
+ * - reflection: 实时反射地板
+ * - grid: 网格地板（程序生成）
+ * - glow: 发光地板（带脉冲动画）
+ * - infinite: 无限地板（跟随相机）
+ */
 
 // 性能监控接口
 interface PerformanceStats {
@@ -23,6 +72,10 @@ interface PerformanceStats {
     geometries: number
     programs: number
 }
+
+
+
+
 
 // 默认配置预设
 const DEFAULT_CONFIGS = {
@@ -57,6 +110,19 @@ const DEFAULT_CONFIGS = {
             gridSize: 10000, 
             gridDivisions: 100, 
             axesSize: 1000
+        },
+        floorConfig: {
+            enabled: true,
+            type: 'static' as const,
+            size: 10000,
+            position: [0, 0, 0] as [number, number, number],
+            staticConfig: {
+                color: 0x808080,
+                opacity: 1.0,
+                roughness: 0.9,
+                metalness: 0.1,
+                tiling: [50, 50] as [number, number]
+            }
         }
     },
     
@@ -91,6 +157,21 @@ const DEFAULT_CONFIGS = {
             gridSize: 10000, 
             gridDivisions: 100, 
             axesSize: 1000
+        },
+        floorConfig: {
+            enabled: true,
+            type: 'water' as const,
+            size: 20000,
+            position: [0, 0, 0] as [number, number, number],
+            waterConfig: {
+                color: 0x001e0f,
+                sunColor: 0xffffff,
+                distortionScale: 3.7,
+                textureWidth: 512,
+                textureHeight: 512,
+                alpha: 1.0,
+                time: 0
+            }
         }
     },
     
@@ -126,6 +207,19 @@ const DEFAULT_CONFIGS = {
             gridSize: 10000, 
             gridDivisions: 100, 
             axesSize: 1000
+        },
+        floorConfig: {
+            enabled: true,
+            type: 'reflection' as const,
+            size: 30000,
+            position: [0, 0, 0] as [number, number, number],
+            reflectionConfig: {
+                reflectivity: 0.8,
+                color: 0x404040,
+                roughness: 0.1,
+                metalness: 0.9,
+                mixStrength: 0.7
+            }
         }
     },
     
@@ -159,6 +253,20 @@ const DEFAULT_CONFIGS = {
             gridSize: 10000, 
             gridDivisions: 100, 
             axesSize: 1000
+        },
+        floorConfig: {
+            enabled: true,
+            type: 'grid' as const,
+            size: 10000,
+            position: [0, 0, 0] as [number, number, number],
+            gridConfig: {
+                gridSize: 100,
+                lineWidth: 0.1,
+                primaryColor: 0x444444,
+                secondaryColor: 0x888888,
+                opacity: 0.8,
+                divisions: 10
+            }
         }
     }
 }
@@ -180,6 +288,10 @@ export class BaseScene extends BasePlugin {
     private renderer: THREE.WebGLRenderer
     private pipelineManager: PipelineManager
     private directionalLight: THREE.DirectionalLight
+    
+    // 地板管理器
+    private floorManager: FloorManager
+    private floorConfig: FloorConfig
     
     // 性能监控相关
     private performanceMonitor: {
@@ -316,6 +428,15 @@ export class BaseScene extends BasePlugin {
         this.scene = new THREE.Scene()
         this.scene.background = new THREE.Color(0xffffff)
 
+        // 初始化地板管理器和配置
+        this.floorManager = new FloorManager(this.scene)
+        this.floorConfig = finalConfig.floorConfig || {
+            enabled: false,
+            type: 'none',
+            size: 1000,
+            position: [0, 0, 0]
+        }
+
         // 适应Three.js r155+物理正确光照系统的光照强度
         // 环境光强度需要降低，因为新的光照系统更加真实
         this.ambientLight = new THREE.AmbientLight(0xffffff, 0.4) // 从0.7降低到0.4
@@ -366,6 +487,7 @@ export class BaseScene extends BasePlugin {
             阴影系统: this.rendererAdvancedConfig.shadowMapEnabled ? '启用' : '禁用',
             性能监控: this.performanceMonitor.enabled ? '启用' : '禁用',
             Debug模式: this.debugConfig.enabled ? '启用' : '禁用',
+            地板系统: this.floorConfig.enabled ? `启用(${this.floorConfig.type})` : '禁用',
             色调映射: this.getToneMappingName(this.rendererAdvancedConfig.toneMapping),
             像素比率: this.rendererAdvancedConfig.pixelRatio
         })
@@ -373,6 +495,11 @@ export class BaseScene extends BasePlugin {
         // 如果启用了debug模式，则添加辅助器
         if (this.debugConfig.enabled) {
             this.addDebugHelpers()
+        }
+
+        // 创建地板
+        if (this.floorConfig.enabled) {
+            this.floorManager.createFloor(this.floorConfig, this.renderer)
         }
             
         } catch (error: any) {
@@ -673,9 +800,19 @@ export class BaseScene extends BasePlugin {
         })
         
         eventBus.on("update", () => {
+            const deltaTime = performance.now()
+            
             // 性能监控
             if (this.performanceMonitor.enabled) {
                 this.updatePerformanceStats()
+            }
+            
+            // 更新地板动画
+            this.floorManager.updateFloor(deltaTime, this.camera)
+            
+            // 更新反射（如果是反射地板或水面地板）
+            if (this.floorConfig.type === 'reflection' || this.floorConfig.type === 'water') {
+                this.floorManager.updateReflection(this.camera, this.renderer)
             }
             
             // 渲染场景
@@ -889,6 +1026,134 @@ export class BaseScene extends BasePlugin {
     }
 
     /**
+     * 静态工厂方法 - 创建带自定义地板的场景
+     */
+    static createWithFloor(floorType: FloorConfig['type'], floorSize: number = 10000, customConfig: any = {}): BaseScene {
+        const floorConfig: Partial<FloorConfig> = {
+            enabled: true,
+            type: floorType,
+            size: floorSize,
+            position: [0, 0, 0]
+        }
+
+        // 根据地板类型设置默认配置
+        switch (floorType) {
+            case 'water':
+                floorConfig.waterConfig = {
+                    color: 0x001e0f,
+                    sunColor: 0xffffff,
+                    distortionScale: 3.7,
+                    textureWidth: 512,
+                    textureHeight: 512,
+                    alpha: 1.0,
+                    time: 0,
+                    ...customConfig.waterConfig
+                }
+                break
+            case 'static':
+                floorConfig.staticConfig = {
+                    color: 0x808080,
+                    opacity: 1.0,
+                    roughness: 0.8,
+                    metalness: 0.2,
+                    tiling: [20, 20],
+                    ...customConfig.staticConfig
+                }
+                break
+            case 'grid':
+                floorConfig.gridConfig = {
+                    gridSize: 100,
+                    lineWidth: 0.1,
+                    primaryColor: 0x444444,
+                    secondaryColor: 0x888888,
+                    opacity: 0.8,
+                    divisions: 10,
+                    ...customConfig.gridConfig
+                }
+                break
+        }
+
+        return new BaseScene({
+            userData: {
+                preset: 'balanced',
+                floorConfig,
+                ...customConfig
+            }
+        })
+    }
+
+    /**
+     * 静态工厂方法 - 创建带贴图地板的场景
+     * @param floorType 地板类型
+     * @param textureUrl 贴图地址
+     * @param floorSize 地板大小
+     * @param customConfig 自定义配置
+     */
+    static createWithTexturedFloor(
+        floorType: 'static' | 'water', 
+        textureUrl: string, 
+        floorSize: number = 10000, 
+        customConfig: any = {}
+    ): BaseScene {
+        const scene = new BaseScene({
+            userData: {
+                preset: 'balanced',
+                floorConfig: {
+                    enabled: false, // 先禁用，后面通过方法设置
+                    type: 'none',
+                    size: 1000,
+                    position: [0, 0, 0]
+                },
+                ...customConfig
+            }
+        })
+
+        // 创建后立即设置带贴图的地板
+        if (floorType === 'static') {
+            scene.setStaticFloorWithTexture(floorSize, textureUrl, customConfig.staticConfig)
+        } else if (floorType === 'water') {
+            scene.setWaterFloorWithTexture(floorSize, textureUrl, customConfig.waterConfig)
+        }
+
+        return scene
+    }
+
+    /**
+     * 静态工厂方法 - 创建带PBR贴图地板的场景
+     * @param textures PBR贴图集合
+     * @param floorSize 地板大小
+     * @param customConfig 自定义配置
+     */
+    static createWithPBRFloor(
+        textures: {
+            diffuse?: string
+            normal?: string
+            roughness?: string
+            metallic?: string
+        },
+        floorSize: number = 10000,
+        customConfig: any = {}
+    ): BaseScene {
+        const scene = new BaseScene({
+            userData: {
+                preset: 'balanced',
+                floorConfig: {
+                    enabled: false,
+                    type: 'none',
+                    size: 1000,
+                    position: [0, 0, 0]
+                },
+                ...customConfig
+            }
+        })
+
+        // 创建后立即设置PBR地板
+        scene.setStaticFloorWithPBR(floorSize, textures, customConfig.staticConfig)
+
+        return scene
+    }
+
+    /**
      * 获取所有可用的配置预设
      */
     static getAvailablePresets(): string[] {
@@ -905,6 +1170,9 @@ export class BaseScene extends BasePlugin {
     destroy() {
         // 清理Debug辅助器
         this.removeDebugHelpers()
+        
+        // 清理地板
+        this.floorManager.destroy()
         
         window.removeEventListener("resize", this.handleResize)
         this.renderer.dispose()
@@ -1075,6 +1343,255 @@ export class BaseScene extends BasePlugin {
                 size: this.debugConfig.axesSize
             }
         }
+    }
+
+    // ================================
+    // 地板管理相关方法
+    // ================================
+
+    /**
+     * 设置地板类型
+     * @param type 地板类型
+     * @param config 可选的配置参数
+     */
+    public setFloorType(type: FloorConfig['type'], config?: Partial<FloorConfig>): void {
+        this.floorConfig.type = type
+        if (config) {
+            Object.assign(this.floorConfig, config)
+        }
+        this.floorManager.createFloor(this.floorConfig, this.renderer)
+        console.log(`🏢 地板已切换为: ${type}`)
+    }
+
+    /**
+     * 更新地板配置
+     * @param config 新的配置参数
+     */
+    public updateFloorConfig(config: Partial<FloorConfig>): void {
+        Object.assign(this.floorConfig, config)
+        if (this.floorConfig.enabled) {
+            this.floorManager.createFloor(this.floorConfig, this.renderer)
+        }
+    }
+
+    /**
+     * 切换地板显示状态
+     * @param enabled 是否启用地板
+     */
+    public toggleFloor(enabled: boolean): void {
+        this.floorConfig.enabled = enabled
+        if (enabled) {
+            this.floorManager.createFloor(this.floorConfig, this.renderer)
+        } else {
+            this.floorManager.removeFloor()
+        }
+        console.log(`🏢 地板${enabled ? '已启用' : '已禁用'}`)
+    }
+
+    /**
+     * 获取地板信息
+     */
+    public getFloorInfo(): any {
+        return {
+            config: this.floorConfig,
+            floorInfo: this.floorManager.getFloorInfo()
+        }
+    }
+
+    /**
+     * 获取当前地板配置
+     */
+    public getFloorConfig(): FloorConfig {
+        return { ...this.floorConfig }
+    }
+
+    /**
+     * 预设地板配置 - 水面地板
+     */
+    public setWaterFloor(size: number = 20000, config?: Partial<FloorConfig['waterConfig']>): void {
+        this.setFloorType('water', {
+            size,
+            waterConfig: {
+                color: 0x001e0f,
+                sunColor: 0xffffff,
+                distortionScale: 3.7,
+                textureWidth: 512,
+                textureHeight: 512,
+                alpha: 1.0,
+                time: 0,
+                ...config
+            }
+        })
+    }
+
+    /**
+     * 预设地板配置 - 水面地板（带贴图）
+     * @param size 地板大小
+     * @param waterNormalsUrl 水面法线贴图地址
+     * @param config 其他配置参数
+     */
+    public setWaterFloorWithTexture(
+        size: number = 20000, 
+        waterNormalsUrl: string, 
+        config?: Partial<FloorConfig['waterConfig']>
+    ): void {
+        this.setFloorType('water', {
+            size,
+            waterConfig: {
+                color: 0x001e0f,
+                sunColor: 0xffffff,
+                distortionScale: 3.7,
+                textureWidth: 512,
+                textureHeight: 512,
+                alpha: 1.0,
+                time: 0,
+                waterNormalsUrl,
+                ...config
+            }
+        })
+    }
+
+    /**
+     * 预设地板配置 - 静态地板
+     */
+    public setStaticFloor(size: number = 10000, config?: Partial<FloorConfig['staticConfig']>): void {
+        this.setFloorType('static', {
+            size,
+            staticConfig: {
+                color: 0x808080,
+                opacity: 1.0,
+                roughness: 0.8,
+                metalness: 0.2,
+                tiling: [20, 20],
+                ...config
+            }
+        })
+    }
+
+    /**
+     * 预设地板配置 - 静态地板（带贴图）
+     * @param size 地板大小
+     * @param textureUrl 主贴图地址
+     * @param config 其他配置参数
+     */
+    public setStaticFloorWithTexture(
+        size: number = 10000, 
+        textureUrl: string, 
+        config?: Partial<FloorConfig['staticConfig']>
+    ): void {
+        this.setFloorType('static', {
+            size,
+            staticConfig: {
+                color: 0xffffff, // 使用白色以显示贴图原色
+                opacity: 1.0,
+                roughness: 0.8,
+                metalness: 0.2,
+                tiling: [20, 20],
+                texture: textureUrl,
+                ...config
+            }
+        })
+    }
+
+    /**
+     * 预设地板配置 - PBR静态地板（完整贴图）
+     * @param size 地板大小
+     * @param textures 贴图集合
+     * @param config 其他配置参数
+     */
+    public setStaticFloorWithPBR(
+        size: number = 10000,
+        textures: {
+            diffuse?: string      // 漫反射贴图
+            normal?: string       // 法线贴图
+            roughness?: string    // 粗糙度贴图
+            metallic?: string     // 金属度贴图
+        },
+        config?: Partial<FloorConfig['staticConfig']>
+    ): void {
+        this.setFloorType('static', {
+            size,
+            staticConfig: {
+                color: 0xffffff,
+                opacity: 1.0,
+                roughness: 0.8,
+                metalness: 0.2,
+                tiling: [10, 10],
+                texture: textures.diffuse,
+                normalMap: textures.normal,
+                roughnessMap: textures.roughness,
+                metallicMap: textures.metallic,
+                ...config
+            }
+        })
+    }
+
+    /**
+     * 预设地板配置 - 网格地板
+     */
+    public setGridFloor(size: number = 10000, config?: Partial<FloorConfig['gridConfig']>): void {
+        this.setFloorType('grid', {
+            size,
+            gridConfig: {
+                gridSize: 100,
+                lineWidth: 0.1,
+                primaryColor: 0x444444,
+                secondaryColor: 0x888888,
+                opacity: 0.8,
+                divisions: 10,
+                ...config
+            }
+        })
+    }
+
+    /**
+     * 预设地板配置 - 反射地板
+     */
+    public setReflectionFloor(size: number = 30000, config?: Partial<FloorConfig['reflectionConfig']>): void {
+        this.setFloorType('reflection', {
+            size,
+            reflectionConfig: {
+                reflectivity: 0.8,
+                color: 0x404040,
+                roughness: 0.1,
+                metalness: 0.9,
+                mixStrength: 0.7,
+                ...config
+            }
+        })
+    }
+
+    /**
+     * 预设地板配置 - 发光地板
+     */
+    public setGlowFloor(size: number = 10000, config?: Partial<FloorConfig['glowConfig']>): void {
+        this.setFloorType('glow', {
+            size,
+            glowConfig: {
+                color: 0x0088ff,
+                intensity: 1.0,
+                emissiveColor: 0x0044aa,
+                emissiveIntensity: 2.0,
+                pulseSpeed: 1.0,
+                ...config
+            }
+        })
+    }
+
+    /**
+     * 预设地板配置 - 无限地板
+     */
+    public setInfiniteFloor(size: number = 10000, config?: Partial<FloorConfig['infiniteConfig']>): void {
+        this.setFloorType('infinite', {
+            size,
+            infiniteConfig: {
+                followCamera: true,
+                updateDistance: 100,
+                gridSize: 10,
+                fadeDistance: size * 0.4,
+                ...config
+            }
+        })
     }
 
     /**
