@@ -3,6 +3,15 @@ import { THREE, BasePlugin } from "../basePlugin"
 import eventBus from '../../eventBus/eventBus'
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader"
 import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader"
+import { 
+  TaskScheduler, 
+  TaskPriority, 
+  TaskStatus, 
+  TaskConfig, 
+  TaskResult, 
+  AsyncTask,
+  QueueConfig 
+} from './asyncTaskScheduler'
 
 /**
  * 预期功能要求：
@@ -51,10 +60,13 @@ interface ResourceReaderConfig {
 export class ResourceReaderPlugin extends BasePlugin {
   public gltfLoader!: GLTFLoader
   private dracoLoader: DRACOLoader | null = null
+  private taskScheduler!: TaskScheduler<THREE.Group>
+  private resourceCache: Map<string, CacheItem> = new Map()
+  
+  // 保留旧接口的兼容性
   private loadingTasks: Map<string, LoadingTask> = new Map()
   private loadingQueue: LoadingTask[] = []
   private activeLoads: Set<string> = new Set()
-  private resourceCache: Map<string, CacheItem> = new Map()
   
   private config: ResourceReaderConfig
   private baseUrl: string = ''
@@ -137,6 +149,7 @@ export class ResourceReaderPlugin extends BasePlugin {
     })
     
     this.initializeLoaders(this.config)
+    this.initializeTaskScheduler()
   }
 
   /**
@@ -212,6 +225,63 @@ export class ResourceReaderPlugin extends BasePlugin {
   }
 
   /**
+   * 初始化任务调度器
+   */
+  private initializeTaskScheduler(): void {
+    const queueConfig: Partial<QueueConfig> = {
+      maxConcurrentTasks: this.maxConcurrentLoads,
+      maxQueueSize: 200,
+      defaultTimeout: 60000,
+      defaultRetryCount: 3,
+      priorityWeights: {
+        [TaskPriority.LOW]: 1,
+        [TaskPriority.NORMAL]: 2,
+        [TaskPriority.HIGH]: 4,
+        [TaskPriority.URGENT]: 8
+      }
+    }
+
+    // 创建模型加载执行器
+    const modelExecutor = async (task: AsyncTask<THREE.Group>): Promise<THREE.Group> => {
+      return new Promise((resolve, reject) => {
+        console.log(`🔄 开始异步加载: ${task.config.url}`)
+        
+        this.gltfLoader.load(
+          task.config.url,
+          // onLoad
+          (gltf: any) => {
+            console.log(`✅ 异步加载成功: ${task.config.url}`)
+            resolve(gltf.scene)
+          },
+          // onProgress
+          (progress: any) => {
+            if (progress.lengthComputable) {
+              const percentage = (progress.loaded / progress.total) * 100
+              eventBus.emit('task:progress', {
+                taskId: task.config.id,
+                loaded: progress.loaded,
+                total: progress.total,
+                percentage,
+                stage: 'loading'
+              })
+            }
+          },
+          // onError
+          (error: any) => {
+            console.error(`❌ 异步加载失败: ${task.config.url}`, error)
+            reject(error)
+          }
+        )
+      })
+    }
+
+    this.taskScheduler = new TaskScheduler<THREE.Group>(modelExecutor, queueConfig)
+    this.taskScheduler.start()
+    
+    console.log('🚀 异步任务调度器已初始化并启动')
+  }
+
+  /**
    * 验证DRACO解码器文件是否存在
    */
   private async verifyDracoDecoder(dracoPath: string): Promise<void> {
@@ -271,7 +341,144 @@ export class ResourceReaderPlugin extends BasePlugin {
   }
 
   /**
-   * 加载GLTF/GLB模型 - 主要的加载方法
+   * 异步加载GLTF/GLB模型 - 新的推荐方法
+   */
+  public async loadModelAsync(
+    url: string,
+    priority: TaskPriority = TaskPriority.NORMAL,
+    options: {
+      timeout?: number
+      retryCount?: number
+      category?: string
+      metadata?: any
+    } = {}
+  ): Promise<THREE.Group> {
+    const fullUrl = this.resolveUrl(url)
+    
+    // 检查缓存
+    const cached = this.getCachedResource(fullUrl)
+    if (cached) {
+      console.log(`📦 从缓存异步加载模型: ${url}`)
+      eventBus.emit('resource:loaded', { url: fullUrl, fromCache: true })
+      return cached.model.clone()
+    }
+
+    // 创建任务配置
+    const taskConfig: TaskConfig = {
+      id: this.generateTaskId(),
+      url: fullUrl,
+      priority,
+      timeout: options.timeout,
+      retryCount: options.retryCount,
+      category: options.category || 'model',
+      metadata: options.metadata
+    }
+
+    try {
+      console.log(`📥 添加异步加载任务: ${url} (优先级: ${TaskPriority[priority]})`)
+      
+      // 调度任务
+      const result = await this.taskScheduler.schedule(taskConfig)
+      
+      if (result.success && result.data) {
+        // 添加到缓存
+        this.addToCache(fullUrl, result.data)
+        
+        eventBus.emit('resource:loaded', { 
+          url: fullUrl, 
+          model: result.data, 
+          loadTime: result.executionTime,
+          fromCache: false 
+        })
+        
+        return result.data
+      } else {
+        throw result.error || new Error('Load failed')
+      }
+    } catch (error) {
+      console.error(`❌ 异步加载失败: ${url}`, error)
+      eventBus.emit('resource:error', {
+        url: fullUrl,
+        error: error instanceof Error ? error.message : String(error)
+      })
+      throw error
+    }
+  }
+
+  /**
+   * 批量异步加载模型
+   */
+  public async loadBatchAsync(
+    urls: string[], 
+    priority: TaskPriority = TaskPriority.NORMAL,
+    options: {
+      timeout?: number
+      retryCount?: number
+      category?: string
+    } = {}
+  ): Promise<Array<{ url: string, model?: THREE.Group, error?: Error }>> {
+    console.log(`📥 开始批量异步加载 ${urls.length} 个模型`)
+    
+    const taskConfigs = urls.map(url => ({
+      id: this.generateTaskId(),
+      url: this.resolveUrl(url),
+      priority,
+      timeout: options.timeout,
+      retryCount: options.retryCount,
+      category: options.category || 'batch',
+      metadata: { originalUrl: url }
+    }))
+
+    try {
+      const results = await this.taskScheduler.scheduleBatch(taskConfigs)
+      
+      return results.map((result, index) => {
+        const originalUrl = urls[index]
+        
+        if (result.success && result.data) {
+          // 添加到缓存
+          this.addToCache(taskConfigs[index].url, result.data)
+          
+          return {
+            url: originalUrl,
+            model: result.data
+          }
+        } else {
+          return {
+            url: originalUrl,
+            error: result.error || new Error('Load failed')
+          }
+        }
+      })
+    } catch (error) {
+      console.error('❌ 批量异步加载失败', error)
+      throw error
+    }
+  }
+
+  /**
+   * 取消异步加载任务
+   */
+  public cancelAsyncLoad(taskId: string): boolean {
+    return this.taskScheduler.cancel(taskId)
+  }
+
+  /**
+   * 获取异步任务状态
+   */
+  public getAsyncTaskStatus(taskId: string): TaskStatus | null {
+    return this.taskScheduler.getTaskStatus(taskId)
+  }
+
+  /**
+   * 获取调度器状态
+   */
+  public getSchedulerStatus() {
+    return this.taskScheduler.getStatus()
+  }
+
+  /**
+   * 加载GLTF/GLB模型 - 兼容旧接口
    */
   public loadModel(
     url: string, 
@@ -830,7 +1037,12 @@ export class ResourceReaderPlugin extends BasePlugin {
    * 销毁插件
    */
   dispose(): void {
-    // 取消所有加载任务
+    // 销毁异步任务调度器
+    if (this.taskScheduler) {
+      this.taskScheduler.destroy()
+    }
+
+    // 取消所有加载任务（兼容旧接口）
     const taskIds = Array.from(this.loadingTasks.keys())
     for (const taskId of taskIds) {
       this.cancelLoad(taskId)

@@ -9,6 +9,7 @@ export { BaseControls } from './webgl/baseControl';
 export { Performance } from './webgl/performance';
 export { RenderLoop } from './webgl/renderLoop';
 export { ResourceReaderPlugin } from './webgl/resourceReaderPlugin';
+export { TaskPriority, TaskStatus, TaskScheduler } from './webgl/asyncTaskScheduler';
 export { SkyBox, SkyBoxType} from './webgl/skyBox';
 export { WebGLContextLose } from './webgl/webglContextLose';
 export { CSS3DRenderPlugin } from './webgl/css3DRender';
