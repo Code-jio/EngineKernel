@@ -1,5 +1,5 @@
 import { THREE, BasePlugin } from "../basePlugin"
-import { RGBELoader } from "../../utils/three-imports"
+import { RGBELoader, EXRLoader } from "../../utils/three-imports"
 import eventBus from '../../eventBus/eventBus'
 import { Sky } from "../../glsl/sky"
 
@@ -28,6 +28,11 @@ interface SkyBoxConfig {
     hdrMapPath?: string
     hdrIntensity?: number
     
+    // EXR环境贴图配置
+    exrMapPath?: string
+    exrIntensity?: number
+    exrDataType?: 'HalfFloat' | 'Float'  // EXR数据类型
+    
     // 程序化天空配置
     skyConfig?: {
         turbidity?: number          // 大气浑浊度
@@ -45,6 +50,7 @@ export class SkyBox extends BasePlugin {
     private cubeTextureLoader: THREE.CubeTextureLoader
     private textureLoader: THREE.TextureLoader
     private rgbeLoader: RGBELoader
+    private exrLoader: EXRLoader
     private scene: THREE.Scene
     private camera: THREE.PerspectiveCamera
     private renderer: THREE.WebGLRenderer
@@ -66,6 +72,7 @@ export class SkyBox extends BasePlugin {
         this.cubeTextureLoader = new THREE.CubeTextureLoader()
         this.textureLoader = new THREE.TextureLoader()
         this.rgbeLoader = new RGBELoader()
+        this.exrLoader = new EXRLoader()
         
         // 保存引用
         this.scene = meta.userData.scene
@@ -98,6 +105,26 @@ export class SkyBox extends BasePlugin {
         if (config.type === SkyBoxType.HDR_ENVIRONMENT && userData.hdrMapPath) {
             config.hdrMapPath = userData.hdrMapPath
             config.hdrIntensity = userData.hdrIntensity || 1.0
+        }
+
+        // EXR环境贴图配置
+        if (config.type === SkyBoxType.HDR_ENVIRONMENT && userData.exrMapPath) {
+            config.exrMapPath = userData.exrMapPath
+            config.exrIntensity = userData.exrIntensity || 1.0
+            config.exrDataType = userData.exrDataType || 'HalfFloat'
+        }
+
+        // 支持通用环境贴图路径用于HDR_ENVIRONMENT（自动检测格式）
+        if (config.type === SkyBoxType.HDR_ENVIRONMENT && !config.hdrMapPath && !config.exrMapPath && userData.envMapPath) {
+            config.envMapPath = userData.envMapPath
+            // 根据文件扩展名设置默认强度
+            const fileExt = userData.envMapPath.toLowerCase().split('.').pop()
+            if (fileExt === 'exr') {
+                config.exrIntensity = userData.intensity || userData.exrIntensity || 1.0
+                config.exrDataType = userData.exrDataType || 'HalfFloat'
+            } else {
+                config.hdrIntensity = userData.intensity || userData.hdrIntensity || 1.0
+            }
         }
 
         // 程序化天空配置
@@ -225,54 +252,110 @@ export class SkyBox extends BasePlugin {
         )
     }
 
-    // HDR环境贴图天空盒
+    // HDR/EXR环境贴图天空盒
     private createHDREnvironmentSkyBox() {
-        if (!this.config.hdrMapPath) {
-            console.error("HDR环境贴图天空盒缺少HDR文件路径")
+        // 检查配置 - 支持多种配置方式
+        const filePath = this.config.hdrMapPath || this.config.exrMapPath || this.config.envMapPath
+        if (!filePath) {
+            console.error("HDR环境贴图天空盒缺少文件路径")
             return
         }
 
+        // 根据文件扩展名自动选择加载器
+        const fileExtension = filePath.toLowerCase().split('.').pop()
+        const isEXR = fileExtension === 'exr'
+        const isHDR = fileExtension === 'hdr' || fileExtension === 'pic'
+
+        if (!isEXR && !isHDR) {
+            console.error("不支持的HDR文件格式，仅支持 .hdr、.pic 和 .exr 格式")
+            return
+        }
+
+        if (isEXR) {
+            this.loadEXREnvironment(filePath)
+        } else {
+            this.loadHDREnvironment(filePath)
+        }
+    }
+
+    // 加载HDR格式环境贴图
+    private loadHDREnvironment(filePath: string) {
+        console.log("开始加载HDR环境贴图:", filePath)
+        
         this.rgbeLoader.load(
-            this.config.hdrMapPath,
+            filePath,
             texture => {
-                // 设置纹理参数
-                texture.mapping = THREE.EquirectangularReflectionMapping
-                
-                // 设置为场景背景
-                this.scene.background = texture
-                this.scene.environment = texture
-                
-                // 设置曝光度和色调映射
-                this.renderer.toneMapping = THREE.ACESFilmicToneMapping
-                this.renderer.toneMappingExposure = this.config.hdrIntensity || 1.0
-                
-                // 创建天空盒网格（可选，用于调试）
-                const geometry = new THREE.SphereGeometry(this.config.size! / 2, 64, 32)
-                const material = new THREE.MeshBasicMaterial({
-                    map: texture,
-                    side: THREE.BackSide,
-                })
-                this.mesh = new THREE.Mesh(geometry, material)
-                this.mesh.renderOrder = -1000  // 确保在最后渲染
-                
-                eventBus.emit("skybox-ready", { 
-                    type: SkyBoxType.HDR_ENVIRONMENT,
-                    texture: texture 
-                })
-                
-                console.log("HDR环境天空盒加载成功")
-                
-                // 自动添加到场景
-                this.addToScene()
+                this.setupEnvironmentTexture(texture, 'HDR', this.config.hdrIntensity || 1.0)
             },
             progress => {
                 console.log("HDR文件加载进度:", (progress.loaded / progress.total * 100).toFixed(2) + '%')
             },
             err => {
-                console.error("HDR环境贴图天空盒加载失败:", err)
+                console.error("HDR环境贴图加载失败:", err)
                 eventBus.emit("skybox-error", err)
             }
         )
+    }
+
+    // 加载EXR格式环境贴图
+    private loadEXREnvironment(filePath: string) {
+        console.log("开始加载EXR环境贴图:", filePath)
+        
+        // 设置EXR数据类型
+        if (this.config.exrDataType === 'Float') {
+            this.exrLoader.setDataType(THREE.FloatType)
+        } else {
+            this.exrLoader.setDataType(THREE.HalfFloatType) // 默认使用HalfFloat以节省内存
+        }
+        
+        this.exrLoader.load(
+            filePath,
+            texture => {
+                this.setupEnvironmentTexture(texture, 'EXR', this.config.exrIntensity || 1.0)
+            },
+            progress => {
+                console.log("EXR文件加载进度:", (progress.loaded / progress.total * 100).toFixed(2) + '%')
+            },
+            err => {
+                console.error("EXR环境贴图加载失败:", err)
+                eventBus.emit("skybox-error", err)
+            }
+        )
+    }
+
+    // 设置环境纹理（HDR和EXR通用）
+    private setupEnvironmentTexture(texture: THREE.DataTexture, format: string, intensity: number) {
+        // 设置纹理参数
+        texture.mapping = THREE.EquirectangularReflectionMapping
+        
+        // 设置为场景背景
+        this.scene.background = texture
+        this.scene.environment = texture
+        
+        // 设置曝光度和色调映射
+        this.renderer.toneMapping = THREE.ACESFilmicToneMapping
+        this.renderer.toneMappingExposure = intensity
+        
+        // 创建天空盒网格（可选，用于调试）
+        const geometry = new THREE.SphereGeometry(this.config.size! / 2, 64, 32)
+        const material = new THREE.MeshBasicMaterial({
+            map: texture,
+            side: THREE.BackSide,
+        })
+        this.mesh = new THREE.Mesh(geometry, material)
+        this.mesh.renderOrder = -1000  // 确保在最后渲染
+        
+        eventBus.emit("skybox-ready", { 
+            type: SkyBoxType.HDR_ENVIRONMENT,
+            texture: texture,
+            format: format,
+            intensity: intensity
+        })
+        
+        console.log(`${format}环境天空盒加载成功，强度: ${intensity}`)
+        
+        // 自动添加到场景
+        this.addToScene()
     }
 
     // 程序化天空盒

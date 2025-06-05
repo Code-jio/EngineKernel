@@ -33,7 +33,7 @@ interface CacheItem {
   url: string
   model: THREE.Group
   timestamp: number
-  size: number
+//   size: number
   lastAccessed: number
 }
 
@@ -68,7 +68,7 @@ export class ResourceReaderPlugin extends BasePlugin {
     maxCacheSize: 1000 * 1024 * 1024,  // 1000MB缓存
     maxConcurrentLoads: 3,             // 最大并发加载数
     enableDraco: true,                 // 启用DRACO解压
-    dracoPath: '/draco/',              // DRACO解码器路径
+    dracoPath: '/draco/gltf/',              // DRACO解码器路径
     supportedFormats: ['gltf', 'glb'], // 支持的格式
     autoDispose: true                  // 自动释放过期资源
   }
@@ -190,6 +190,7 @@ export class ResourceReaderPlugin extends BasePlugin {
         this.dracoLoader = new DRACOLoader()
         const dracoPath = config.dracoPath || '/draco/'
         this.dracoLoader.setDecoderPath(dracoPath)
+        this.dracoLoader.setDecoderConfig({ type: 'js' })
         
         // 直接设置DRACO解压器到GLTF加载器
         this.gltfLoader.setDRACOLoader(this.dracoLoader)
@@ -198,7 +199,7 @@ export class ResourceReaderPlugin extends BasePlugin {
         console.log('✅ 所有GLTF/GLB文件将自动支持DRACO解压')
         
         // 验证DRACO解码器是否可用
-        this.verifyDracoDecoder(dracoPath)
+        // this.verifyDracoDecoder(dracoPath)
       } catch (error) {
         console.warn('⚠️ DRACO解压器初始化失败:', error)
         console.warn('⚠️ 将使用基础GLTF加载器，压缩模型可能无法加载')
@@ -434,15 +435,11 @@ export class ResourceReaderPlugin extends BasePlugin {
       },
       // onError
       (error: any) => {
-        console.error(`❌ 模型加载失败: ${task.url}`)
-        this.onLoadError(task, error as Error)
+        console.error(`❌ 模型加载失败: ${task.url}`, error)
+        // this.onLoadError(task, error as Error)
       }
     )
   }
-
-
-
-
 
   /**
    * 加载完成处理
@@ -509,16 +506,19 @@ export class ResourceReaderPlugin extends BasePlugin {
     let errorCategory = 'unknown'
     let suggestion = ''
     
-    if (error.message.includes('DRACO') || error.message.includes('draco')) {
+    // 安全地获取错误消息
+    const errorMessage = error && error.message ? String(error.message) : ''
+
+    if (errorMessage.includes('DRACO') || errorMessage.includes('draco')) {
       errorCategory = 'draco'
       suggestion = '建议检查DRACO解码器文件是否存在于/draco/目录'
-    } else if (error.message.includes('404') || error.message.includes('Not Found')) {
+    } else if (errorMessage.includes('404') || errorMessage.includes('Not Found')) {
       errorCategory = 'not_found'
       suggestion = '请检查模型文件路径是否正确'
-    } else if (error.message.includes('JSON') || error.message.includes('Unexpected token')) {
+    } else if (errorMessage.includes('JSON') || errorMessage.includes('Unexpected token')) {
       errorCategory = 'format'
       suggestion = '可能收到了HTML页面而不是模型文件，请检查服务器配置'
-    } else if (error.message.includes('network') || error.message.includes('fetch')) {
+    } else if (errorMessage.includes('network') || errorMessage.includes('fetch')) {
       errorCategory = 'network'
       suggestion = '网络连接问题，请检查网络状态'
     }
@@ -541,9 +541,9 @@ export class ResourceReaderPlugin extends BasePlugin {
     
     if (task.onError) {
       // 创建增强的错误对象
-      const enhancedError = new Error(`${error.message} (类型: ${errorCategory})`)
-      enhancedError.name = error.name
-      enhancedError.stack = error.stack
+      const enhancedError = new Error(`${errorMessage} (类型: ${errorCategory})`)
+      enhancedError.name = error && error.name ? error.name : 'Error'
+      enhancedError.stack = error && error.stack ? error.stack : undefined
       task.onError(enhancedError)
     }
 
@@ -552,7 +552,7 @@ export class ResourceReaderPlugin extends BasePlugin {
     eventBus.emit('resource:error', {
       taskId: task.id,
       url: task.url,
-      error: error.message,
+      error: errorMessage,
       category: errorCategory,
       suggestion
     })
@@ -589,21 +589,21 @@ export class ResourceReaderPlugin extends BasePlugin {
    * 添加到缓存
    */
   private addToCache(url: string, model: THREE.Group): void {
-    const size = this.estimateModelSize(model)
+    // const size = this.estimateModelSize(model)
     
     // 检查缓存容量
-    this.ensureCacheSpace(size)
+    // this.ensureCacheSpace(size)
     
     const cacheItem: CacheItem = {
       url,
       model: model.clone(), // 存储克隆以避免引用问题
       timestamp: Date.now(),
-      size,
+    //   size,
       lastAccessed: Date.now()
     }
     
     this.resourceCache.set(url, cacheItem)
-    console.log(`💾 模型已缓存: ${url} (${(size / 1024).toFixed(2)}KB)`)
+    // console.log(`💾 模型已缓存: ${url} (${(size / 1024).toFixed(2)}KB)`)
   }
 
   /**
@@ -622,11 +622,11 @@ export class ResourceReaderPlugin extends BasePlugin {
    * 确保缓存空间足够
    */
   private ensureCacheSpace(requiredSize: number): void {
-    const currentSize = this.getCurrentCacheSize()
+    // const currentSize = this.getCurrentCacheSize()
     
-    if (currentSize + requiredSize <= this.maxCacheSize) {
-      return
-    }
+    // if (currentSize + requiredSize <= this.maxCacheSize) {
+    //   return
+    // }
 
     // 按最后访问时间排序，移除最旧的
     const entries: [string, CacheItem][] = []
@@ -649,7 +649,7 @@ export class ResourceReaderPlugin extends BasePlugin {
         }
       })
       
-      freedSpace += item.size
+    //   freedSpace += item.size
       console.log(`🗑️ 清理缓存: ${url}`)
       
       if (freedSpace >= requiredSize) {
@@ -689,14 +689,13 @@ export class ResourceReaderPlugin extends BasePlugin {
   /**
    * 获取当前缓存大小
    */
-  private getCurrentCacheSize(): number {
-    let total = 0
-    this.resourceCache.forEach((item) => {
-      total += item.size
-    })
-    return total
-  }
-
+  //   private getCurrentCacheSize(): number {
+  //     let total = 0
+  //     this.resourceCache.forEach((item) => {
+  //       total += item.size
+  //     })
+  //     return total
+  //   }
   /**
    * 清理特定资源
    */
@@ -759,21 +758,21 @@ export class ResourceReaderPlugin extends BasePlugin {
    * 获取缓存状态
    */
   public getCacheStatus(): {
-    size: number
+    // size: number
     maxSize: number
     itemCount: number
-    utilization: number
+    // utilization: number
     dracoEnabled: boolean
   } {
-    const size = this.getCurrentCacheSize()
+    // const size = this.getCurrentCacheSize()
     const itemCount = this.resourceCache.size
-    const utilization = (size / this.maxCacheSize) * 100
+    // const utilization = (size / this.maxCacheSize) * 100
 
     return {
-      size,
+    //   size,
       maxSize: this.maxCacheSize,
       itemCount,
-      utilization,
+    //   utilization,
       dracoEnabled: !!this.dracoLoader
     }
   }

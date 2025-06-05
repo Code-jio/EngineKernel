@@ -1,6 +1,7 @@
 import { THREE, BasePlugin } from "../basePlugin"
 import eventBus from "../../eventBus/eventBus"
 import { PipelineManager } from "../../core/pipelineManager"
+import * as TWEEN from '@tweenjs/tween.js'
 
 // 性能监控接口
 interface PerformanceStats {
@@ -162,6 +163,15 @@ const DEFAULT_CONFIGS = {
     }
 }
 
+interface CameraFlyToOptions {
+    position: THREE.Vector3;          // Target position for the camera
+    lookAt?: THREE.Vector3;          // Target point for the camera to look at. If undefined, looks at options.position.
+    duration?: number;               // Duration of the animation in milliseconds
+    easing?: (amount: number) => number; // TWEEN.js easing function
+    onUpdate?: () => void; // Callback on each animation frame
+    onComplete?: () => void;         // Callback when animation finishes
+}
+
 export class BaseScene extends BasePlugin {
     private camera: THREE.PerspectiveCamera | THREE.OrthographicCamera // 默认透视相机
     private aspectRatio = window.innerWidth / window.innerHeight
@@ -208,6 +218,8 @@ export class BaseScene extends BasePlugin {
         gridHelper: THREE.GridHelper | null
         axesHelper: THREE.AxesHelper | null
     }
+    
+    private _flyTween: any = null;
     
     constructor(meta: any) {
         super(meta)
@@ -1063,5 +1075,112 @@ export class BaseScene extends BasePlugin {
                 size: this.debugConfig.axesSize
             }
         }
+    }
+
+    /**
+     * 视角飞入
+     * 平滑动画地将相机移动到目标位置并朝向目标点
+     * @param options 相机飞行配置参数
+     */
+    public cameraFlyTo(options: CameraFlyToOptions): void {
+        // 默认参数设置
+        const defaultOptions = {
+            duration: 2000, // 动画时长（毫秒）
+            easing: TWEEN.Easing.Quadratic.InOut, // 默认缓动函数
+            lookAt: options.position, // 默认朝向目标点为目标位置
+        };
+        // 合并用户参数和默认参数
+        const finalOptions = { ...defaultOptions, ...options };
+
+        // 检查相机是否初始化
+        if (!this.camera) {
+            console.error("cameraFlyTo: Camera is not initialized.");
+            return;
+        }
+        // 检查目标位置类型
+        if (!(finalOptions.position instanceof THREE.Vector3)) {
+            console.error('cameraFlyTo: options.position 必须是 THREE.Vector3');
+            return;
+        }
+        // 检查目标朝向类型
+        if (!(finalOptions.lookAt instanceof THREE.Vector3)) {
+            finalOptions.lookAt = finalOptions.position.clone();
+        }
+
+        const camera = this.camera as THREE.PerspectiveCamera;
+        const startPosition = camera.position.clone(); // 起始相机位置
+        const endPosition = finalOptions.position;     // 目标相机位置
+        let startLookAt: THREE.Vector3;
+
+        // 获取当前相机朝向点（优先使用controls.target）
+        if ((this as any).controls && (this as any).controls.target instanceof THREE.Vector3) {
+            startLookAt = (this as any).controls.target.clone();
+        } else {
+            // 若无controls，取相机前方一点作为朝向
+            startLookAt = new THREE.Vector3(0, 0, -1);
+            startLookAt.applyQuaternion(camera.quaternion);
+            startLookAt.add(camera.position);
+            console.warn("cameraFlyTo: OrbitControls or similar not found or target not set. Using calculated startLookAt.");
+        }
+
+        const endLookAt = finalOptions.lookAt.clone(); // 目标朝向点
+
+        // 用于tween插值的临时对象
+        const tweenCoords = {
+            camX: startPosition.x,
+            camY: startPosition.y,
+            camZ: startPosition.z,
+            lookX: startLookAt.x,
+            lookY: startLookAt.y,
+            lookZ: startLookAt.z,
+        };
+
+        // 动画互斥：如有上一个飞行动画，先停止
+        if (this._flyTween) {
+            this._flyTween.stop();
+        }
+
+        // 创建tween动画
+        this._flyTween = new TWEEN.Tween(tweenCoords)
+            .to({
+                camX: endPosition.x,
+                camY: endPosition.y,
+                camZ: endPosition.z,
+                lookX: endLookAt.x,
+                lookY: endLookAt.y,
+                lookZ: endLookAt.z,
+            }, finalOptions.duration)
+            .easing(finalOptions.easing)
+            .onUpdate(() => {
+                // 每帧更新相机位置和朝向
+                camera.position.set(tweenCoords.camX, tweenCoords.camY, tweenCoords.camZ);
+                const currentLookAt = new THREE.Vector3(tweenCoords.lookX, tweenCoords.lookY, tweenCoords.lookZ);
+                // 若有controls，更新controls.target
+                if ((this as any).controls && (this as any).controls.target instanceof THREE.Vector3) {
+                    (this as any).controls.target.copy(currentLookAt);
+                }
+                camera.lookAt(currentLookAt);
+                // 用户自定义更新回调
+                finalOptions.onUpdate?.()
+            })
+            .onComplete(() => {
+                // 动画结束，确保相机和controls到达最终状态
+                camera.position.copy(endPosition);
+                const finalLookAtTarget = endLookAt.clone();
+                if ((this as any).controls && (this as any).controls.target instanceof THREE.Vector3) {
+                    (this as any).controls.target.copy(finalLookAtTarget);
+                }
+                camera.lookAt(finalLookAtTarget);
+                if ((this as any).controls && typeof (this as any).controls.update === 'function') {
+                    (this as any).controls.update();
+                }
+                // 用户自定义完成回调
+                if (finalOptions.onComplete) {
+                    finalOptions.onComplete();
+                }
+                this._flyTween = null;
+                console.log("Camera flight complete.");
+            })
+            .start();
     }
 }

@@ -1,5 +1,6 @@
 import { THREE, BasePlugin } from "../basePlugin"
 import eventBus from '../../eventBus/eventBus'
+import * as TWEEN from '@tweenjs/tween.js'
 
 export class RenderLoop extends BasePlugin {
     private clock: THREE.Clock
@@ -16,6 +17,7 @@ export class RenderLoop extends BasePlugin {
     initialize() {
         const render = () => {
             eventBus.emit("update") // 触发更新事件
+            TWEEN.update() // tween动画更新
             this.animationID = requestAnimationFrame(render); // 需要持续循环
         };
         this.animationID = requestAnimationFrame(render);
