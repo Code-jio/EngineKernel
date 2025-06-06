@@ -256,7 +256,7 @@ export class AsyncQueue<T = any> {
     // 按优先级插入队列
     this.insertByPriority(task)
     
-    console.log(`📋 任务已加入队列: ${taskConfig.id} (优先级: ${TaskPriority[taskConfig.priority]})`)
+    // console.log(`📋 任务已加入队列: ${taskConfig.id} (优先级: ${TaskPriority[taskConfig.priority]})`)
     
     eventBus.emit('queue:enqueue', {
       taskId: task.config.id,
@@ -283,7 +283,7 @@ export class AsyncQueue<T = any> {
       this.queue.splice(index, 1)
       task.status = TaskStatus.QUEUED
       
-      console.log(`📤 任务出队列: ${task.config.id}`)
+      // console.log(`📤 任务出队列: ${task.config.id}`)
       
       eventBus.emit('queue:dequeue', {
         taskId: task.config.id,
@@ -396,7 +396,7 @@ export class AsyncQueue<T = any> {
     const queueIndex = this.queue.findIndex(task => task.config.id === taskId)
     if (queueIndex !== -1) {
       this.queue.splice(queueIndex, 1)
-      console.log(`❌ 任务已从队列移除: ${taskId}`)
+      // console.log(`❌ 任务已从队列移除: ${taskId}`)
       return true
     }
 
@@ -406,7 +406,7 @@ export class AsyncQueue<T = any> {
       runningTask.abortController.abort()
       runningTask.status = TaskStatus.CANCELLED
       this.runningTasks.delete(taskId)
-      console.log(`❌ 运行中任务已取消: ${taskId}`)
+      // console.log(`❌ 运行中任务已取消: ${taskId}`)
       return true
     }
 
@@ -468,7 +468,7 @@ export class AsyncQueue<T = any> {
     })
     this.runningTasks.clear()
 
-    console.log('🧹 队列已清空')
+    // console.log('🧹 队列已清空')
   }
 
 
@@ -501,7 +501,7 @@ export class TaskScheduler<T = any> {
     }
 
     this.isRunning = true
-    console.log('🚀 异步任务调度器已启动')
+    // console.log('🚀 异步任务调度器已启动')
     this.processQueue()
   }
 
@@ -510,7 +510,7 @@ export class TaskScheduler<T = any> {
    */
   stop(): void {
     this.isRunning = false
-    console.log('⏹️ 异步任务调度器已停止')
+    // console.log('⏹️ 异步任务调度器已停止')
   }
 
   /**
@@ -599,7 +599,7 @@ export class TaskScheduler<T = any> {
       this.queue.markAsCompleted(task.config.id, result)
       task.resolve(result)
       
-      console.log(`✅ 任务执行成功: ${task.config.id} (${result.executionTime}ms)`)
+      // console.log(`✅ 任务执行成功: ${task.config.id} (${result.executionTime}ms)`)
       
       eventBus.emit('task:completed', result)
       
@@ -611,7 +611,7 @@ export class TaskScheduler<T = any> {
         task.retryCount++
         task.status = TaskStatus.PENDING
         
-        console.log(`🔄 任务重试: ${task.config.id} (第${task.retryCount}次)`)
+        // console.log(`🔄 任务重试: ${task.config.id} (第${task.retryCount}次)`)
         
         // 重新加入队列
         this.queue.insertByPriority(task)
@@ -648,6 +648,6 @@ export class TaskScheduler<T = any> {
   destroy(): void {
     this.stop()
     this.queue.clear()
-    console.log('�� 任务调度器已销毁')
+    // console.log('�� 任务调度器已销毁')
   }
 } 
