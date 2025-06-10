@@ -656,6 +656,12 @@ export class ResourceReaderPlugin extends BasePlugin {
     task.progress = 100
     task.model = gltf.scene
     
+    // 从URL提取文件名并设置模型名称
+    const fileName = this.extractFileNameFromUrl(task.url)
+    if (gltf.scene && !gltf.scene.name) {
+      gltf.scene.name = fileName
+    }
+    
     // 添加到缓存
     this.addToCache(task.url, gltf.scene)
     
@@ -674,7 +680,8 @@ export class ResourceReaderPlugin extends BasePlugin {
       url: task.url, 
       model: gltf.scene, 
       loadTime,
-      fromCache: false 
+      fromCache: false,
+      fileName: fileName
     })
 
     // 处理队列中的下一个任务
@@ -790,6 +797,34 @@ export class ResourceReaderPlugin extends BasePlugin {
    */
   private generateTaskId(): string {
     return `task_${++this.taskIdCounter}_${Date.now()}`
+  }
+
+  /**
+   * 从URL中提取文件名（不包含扩展名）
+   */
+  private extractFileNameFromUrl(url: string): string {
+    if (!url) {
+      return `model_${Date.now()}`
+    }
+
+    try {
+      // 处理各种URL格式
+      const urlPath = url.includes('?') ? url.split('?')[0] : url
+      const pathParts = urlPath.split('/')
+      const fullFileName = pathParts[pathParts.length - 1]
+      
+      // 移除文件扩展名
+      const dotIndex = fullFileName.lastIndexOf('.')
+      const fileNameWithoutExt = dotIndex > 0 ? fullFileName.substring(0, dotIndex) : fullFileName
+      
+      // 清理文件名，移除特殊字符
+      const cleanFileName = fileNameWithoutExt.replace(/[^a-zA-Z0-9\u4e00-\u9fa5_-]/g, '_')
+      
+      return cleanFileName || `model_${Date.now()}`
+    } catch (error) {
+      console.warn('文件名提取失败，使用默认名称:', error)
+      return `model_${Date.now()}`
+    }
   }
 
   /**

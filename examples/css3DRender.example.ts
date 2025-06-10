@@ -22,8 +22,12 @@ export class CSS3DExample {
     }
 
     private async init() {
-        // 🔧 直接调用插件的init方法
-        await this.plugin.init()
+        // 🔧 调用插件的init方法，传入必要的核心接口
+        const mockCoreInterface = {
+            scene: null,
+            camera: this.camera
+        }
+        await this.plugin.init(mockCoreInterface)
 
         // 设置相机位置
         this.camera.position.set(0, 0, 5)

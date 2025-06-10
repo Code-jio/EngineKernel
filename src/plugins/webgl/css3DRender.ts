@@ -409,4 +409,144 @@ export class CSS3DRenderPlugin extends BasePlugin {
     getCSS3DRenderer(): CSS3DRenderer | null {
         return this.css3Drenderer
     }
+
+    /**
+     * 创建CSS3D对象 - 兼容旧API
+     * @param options 配置选项
+     * @returns 对象ID
+     */
+    createObject(options: CSS3DConfig): string {
+        return this.createCSS3DObject(options)
+    }
+
+    /**
+     * 移动对象到指定位置
+     * @param id 对象ID
+     * @param x X坐标
+     * @param y Y坐标
+     * @param z Z坐标
+     * @returns 是否成功
+     */
+    moveObject(id: string, x: number, y: number, z: number): boolean {
+        const item = this.items.get(id)
+        if (!item) return false
+
+        try {
+            item.object.position.set(x, y, z)
+            this.markNeedsRender()
+            return true
+        } catch (error) {
+            console.error(`移动对象失败 (ID: ${id}):`, error)
+            return false
+        }
+    }
+
+    /**
+     * 缩放对象
+     * @param id 对象ID
+     * @param scale 缩放比例
+     * @returns 是否成功
+     */
+    scaleObject(id: string, scale: number): boolean {
+        const item = this.items.get(id)
+        if (!item) return false
+
+        try {
+            item.object.scale.setScalar(scale)
+            this.markNeedsRender()
+            return true
+        } catch (error) {
+            console.error(`缩放对象失败 (ID: ${id}):`, error)
+            return false
+        }
+    }
+
+    /**
+     * 旋转对象
+     * @param id 对象ID
+     * @param x X轴旋转角度
+     * @param y Y轴旋转角度
+     * @param z Z轴旋转角度
+     * @returns 是否成功
+     */
+    rotateObject(id: string, x: number, y: number, z: number): boolean {
+        const item = this.items.get(id)
+        if (!item) return false
+
+        try {
+            item.object.rotation.set(x, y, z)
+            this.markNeedsRender()
+            return true
+        } catch (error) {
+            console.error(`旋转对象失败 (ID: ${id}):`, error)
+            return false
+        }
+    }
+
+    /**
+     * 动画移动对象到目标位置
+     * @param id 对象ID
+     * @param targetPosition 目标位置 [x, y, z]
+     * @param duration 动画时长（毫秒）
+     * @returns 是否成功启动动画
+     */
+    animateMove(id: string, targetPosition: [number, number, number], duration: number = 1000): boolean {
+        const item = this.items.get(id)
+        if (!item) return false
+
+        try {
+            const startPosition = item.object.position.clone()
+            const endPosition = new THREE.Vector3(targetPosition[0], targetPosition[1], targetPosition[2])
+            
+            // 简单的动画实现
+            const startTime = Date.now()
+            
+            const animate = () => {
+                const elapsed = Date.now() - startTime
+                const progress = Math.min(elapsed / duration, 1)
+                
+                // 线性插值
+                const currentPosition = startPosition.clone().lerp(endPosition, progress)
+                item.object.position.copy(currentPosition)
+                this.markNeedsRender()
+                
+                if (progress < 1) {
+                    requestAnimationFrame(animate)
+                }
+            }
+            
+            animate()
+            return true
+        } catch (error) {
+            console.error(`动画移动对象失败 (ID: ${id}):`, error)
+            return false
+        }
+    }
+
+    /**
+     * 渲染场景 - 兼容旧API
+     * @param camera 相机
+     */
+    render(camera: THREE.Camera): void {
+        if (this.css3Drenderer && this.mainScene) {
+            this.css3Drenderer.render(this.mainScene, camera)
+        }
+    }
+
+    /**
+     * 初始化插件 - 重写基类方法
+     * @param coreInterface 核心接口
+     */
+    async init(coreInterface?: any): Promise<void> {
+        // 调用基类的init方法
+        await super.init(coreInterface)
+        
+        // 如果提供了核心接口，更新场景和相机引用
+        if (coreInterface) {
+            this.mainScene = coreInterface.scene || this.mainScene
+            this.camera = coreInterface.camera || this.camera
+        }
+        
+        console.log('🎨 CSS3D渲染插件初始化完成')
+    }
 }
