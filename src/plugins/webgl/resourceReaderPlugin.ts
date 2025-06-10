@@ -14,6 +14,174 @@ import {
 } from './asyncTaskScheduler'
 
 /**
+ * 从URL中提取文件名（不包含扩展名）
+ */
+function extractFileNameFromPath(filePath: string): string {
+  if (!filePath) {
+    return `model_${Date.now()}`
+  }
+
+  try {
+    // 处理各种路径格式
+    const cleanPath = filePath.replace(/\\/g, '/')
+    const pathParts = cleanPath.split('/')
+    const fullFileName = pathParts[pathParts.length - 1]
+    
+    // 移除文件扩展名
+    const dotIndex = fullFileName.lastIndexOf('.')
+    const fileNameWithoutExt = dotIndex > 0 ? fullFileName.substring(0, dotIndex) : fullFileName
+    
+    // 清理文件名，移除特殊字符
+    const cleanFileName = fileNameWithoutExt.replace(/[^a-zA-Z0-9\u4e00-\u9fa5_-]/g, '_')
+    
+    return cleanFileName || `model_${Date.now()}`
+  } catch (error) {
+    console.warn('文件名提取失败，使用默认名称:', error)
+    return `model_${Date.now()}`
+  }
+}
+
+/**
+ * 检查是否为建筑模型
+ */
+function isBuildingModel(fileName: string): boolean {
+  return fileName.toLowerCase().includes('building')
+}
+
+/**
+ * 处理建筑模型的特殊结构组织
+ */
+function processBuildingModel(model: THREE.Group, fileName: string): void {
+  // 标记为可交互建筑模型
+  model.userData.isBuildingModel = true
+  model.userData.isInteractive = true
+  
+  // 创建外立面组和楼层组
+  const facadeGroup = new THREE.Group()
+  const floorsGroup = new THREE.Group()
+  
+  facadeGroup.name = `${fileName}_facadeGroup`
+  floorsGroup.name = `${fileName}_floorsGroup`
+  
+  // 收集需要重新组织的子节点
+  const facadeNodes: THREE.Object3D[] = []
+  const floorNodes: THREE.Object3D[] = []
+  const otherNodes: THREE.Object3D[] = []
+  
+  // 遍历所有子节点，根据名称特征进行分类
+  model.traverse((child) => {
+    if (child !== model && child.parent === model) {
+      const childName = child.name || ''
+      
+      // 检查是否为外立面节点（包含MASK关键字）
+      if (childName.toUpperCase().includes('MASK')) {
+        facadeNodes.push(child)
+      }
+      // 检查是否为楼层节点（包含数字加F的模式，如1F, 2F, 10F等）
+      else if (/\d+F/i.test(childName)) {
+        floorNodes.push(child)
+      }
+      // 其他节点保持原样
+      else {
+        otherNodes.push(child)
+      }
+    }
+  })
+  
+  // 将外立面节点添加到外立面组
+  facadeNodes.forEach(node => {
+    // 保持原有的变换矩阵
+    const worldMatrix = new THREE.Matrix4()
+    node.updateMatrixWorld()
+    worldMatrix.copy(node.matrixWorld)
+    
+    facadeGroup.add(node)
+    
+    // 恢复世界变换
+    facadeGroup.updateMatrixWorld()
+    const parentWorldMatrix = new THREE.Matrix4()
+    parentWorldMatrix.copy(facadeGroup.matrixWorld).invert()
+    node.matrix.multiplyMatrices(parentWorldMatrix, worldMatrix)
+    node.matrix.decompose(node.position, node.quaternion, node.scale)
+  })
+  
+  // 将楼层节点添加到楼层组
+  floorNodes.forEach(node => {
+    // 保持原有的变换矩阵
+    const worldMatrix = new THREE.Matrix4()
+    node.updateMatrixWorld()
+    worldMatrix.copy(node.matrixWorld)
+    
+    floorsGroup.add(node)
+    
+    // 恢复世界变换
+    floorsGroup.updateMatrixWorld()
+    const parentWorldMatrix = new THREE.Matrix4()
+    parentWorldMatrix.copy(floorsGroup.matrixWorld).invert()
+    node.matrix.multiplyMatrices(parentWorldMatrix, worldMatrix)
+    node.matrix.decompose(node.position, node.quaternion, node.scale)
+  })
+  
+  // 将外立面组和楼层组添加到模型中（如果有相应的节点）
+  if (facadeNodes.length > 0) {
+    model.add(facadeGroup)
+    console.log(`🏢 建筑模型 ${fileName}: 已创建外立面组，包含 ${facadeNodes.length} 个节点`)
+  }
+  
+  if (floorNodes.length > 0) {
+    model.add(floorsGroup)
+    console.log(`🏗️ 建筑模型 ${fileName}: 已创建楼层组，包含 ${floorNodes.length} 个节点`)
+  }
+  
+  // 记录处理结果
+  model.userData.facadeCount = facadeNodes.length
+  model.userData.floorCount = floorNodes.length
+  model.userData.otherCount = otherNodes.length
+  
+  console.log(`🏛️ 建筑模型处理完成: ${fileName}`)
+  console.log(`   - 外立面节点: ${facadeNodes.length} 个`)
+  console.log(`   - 楼层节点: ${floorNodes.length} 个`) 
+  console.log(`   - 其他节点: ${otherNodes.length} 个`)
+}
+
+/**
+ * 处理模型名称设置和建筑模型特殊逻辑
+ */
+function processLoadedModel(model: THREE.Group, url: string): THREE.Group {
+  // 1. 提取文件名并设置为模型名称
+  const fileName = extractFileNameFromPath(url)
+  model.name = fileName
+  
+  // 2. 检查是否为建筑模型
+  const isBuildingModelFlag = isBuildingModel(fileName)
+  
+  if (isBuildingModelFlag) {
+    // 3. 处理建筑模型的特殊结构
+    processBuildingModel(model, fileName)
+  } else {
+    // 4. 对于非建筑模型，按原有逻辑设置子对象名称
+    let childIndex = 0
+    model.traverse((child) => {
+      if (child !== model) { // 跳过根对象本身
+        if (child.type === 'Mesh') {
+          child.name = `${fileName}_mesh_${childIndex}`
+        } else if (child.type === 'Group') {
+          child.name = `${fileName}_group_${childIndex}`
+        } else if (child.type === 'Object3D') {
+          child.name = `${fileName}_object_${childIndex}`
+        } else {
+          child.name = `${fileName}_${child.type.toLowerCase()}_${childIndex}`
+        }
+        childIndex++
+      }
+    })
+  }
+  
+  console.log(`🏷️ 模型名称设置完成: ${fileName}${isBuildingModelFlag ? ' (建筑模型)' : ''}`)
+  return model
+}
+
+/**
  * 预期功能要求：
  * 1.后端请求到的模型资源文件自动加载到场景中，维护一个资源文件的缓存池
  * 2.每一个模型的加载都形成一个异步任务，维护这个任务队列，加载完成后，通过eventBus进行发布，在主文件中进行订阅，进行资源的加载
@@ -251,7 +419,11 @@ export class ResourceReaderPlugin extends BasePlugin {
           // onLoad
           (gltf: any) => {
             console.log(`✅ 异步加载成功: ${task.config.url}`)
-            resolve(gltf.scene)
+            
+            // 处理模型：设置名称和建筑模型特殊逻辑
+            const processedModel = processLoadedModel(gltf.scene, task.config.url)
+            
+            resolve(processedModel)
           },
           // onProgress
           (progress: any) => {
@@ -654,20 +826,18 @@ export class ResourceReaderPlugin extends BasePlugin {
   private onLoadComplete(task: LoadingTask, gltf: any): void {
     task.status = 'completed'
     task.progress = 100
-    task.model = gltf.scene
     
-    // 从URL提取文件名并设置模型名称
-    const fileName = this.extractFileNameFromUrl(task.url)
-    if (gltf.scene && !gltf.scene.name) {
-      gltf.scene.name = fileName
-    }
+    // 处理模型：设置名称和建筑模型特殊逻辑
+    const processedModel = processLoadedModel(gltf.scene, task.url)
+    task.model = processedModel
     
     // 添加到缓存
-    this.addToCache(task.url, gltf.scene)
+    this.addToCache(task.url, processedModel)
     
-    // 执行回调
+    // 执行回调，将处理后的模型放回gltf对象
     if (task.onComplete) {
-      task.onComplete(gltf)
+      const enhancedGltf = { ...gltf, scene: processedModel }
+      task.onComplete(enhancedGltf)
     }
 
     // 清理并处理下一个任务
@@ -678,10 +848,10 @@ export class ResourceReaderPlugin extends BasePlugin {
     
     eventBus.emit('resource:loaded', { 
       url: task.url, 
-      model: gltf.scene, 
+      model: processedModel, 
       loadTime,
       fromCache: false,
-      fileName: fileName
+      fileName: processedModel.name
     })
 
     // 处理队列中的下一个任务
@@ -799,33 +969,7 @@ export class ResourceReaderPlugin extends BasePlugin {
     return `task_${++this.taskIdCounter}_${Date.now()}`
   }
 
-  /**
-   * 从URL中提取文件名（不包含扩展名）
-   */
-  private extractFileNameFromUrl(url: string): string {
-    if (!url) {
-      return `model_${Date.now()}`
-    }
 
-    try {
-      // 处理各种URL格式
-      const urlPath = url.includes('?') ? url.split('?')[0] : url
-      const pathParts = urlPath.split('/')
-      const fullFileName = pathParts[pathParts.length - 1]
-      
-      // 移除文件扩展名
-      const dotIndex = fullFileName.lastIndexOf('.')
-      const fileNameWithoutExt = dotIndex > 0 ? fullFileName.substring(0, dotIndex) : fullFileName
-      
-      // 清理文件名，移除特殊字符
-      const cleanFileName = fileNameWithoutExt.replace(/[^a-zA-Z0-9\u4e00-\u9fa5_-]/g, '_')
-      
-      return cleanFileName || `model_${Date.now()}`
-    } catch (error) {
-      console.warn('文件名提取失败，使用默认名称:', error)
-      return `model_${Date.now()}`
-    }
-  }
 
   /**
    * 添加到缓存
