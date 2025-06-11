@@ -60,8 +60,8 @@ function processBuildingModel(model: THREE.Group, fileName: string): void {
   const facadeGroup = new THREE.Group()
   const floorsGroup = new THREE.Group()
   
-  facadeGroup.name = `${fileName}_facadeGroup`
-  floorsGroup.name = `${fileName}_floorsGroup`
+  facadeGroup.name = `${fileName}_facade`
+  floorsGroup.name = `${fileName}_floors`
   
   // 收集需要重新组织的子节点
   const facadeNodes: THREE.Object3D[] = []
@@ -195,23 +195,6 @@ function processLoadedModel(model: THREE.Group, url: string): THREE.Group {
   if (isBuildingModelFlag) {
     // 3. 处理建筑模型的特殊结构
     processBuildingModel(model, fileName)
-  } else {
-    // 4. 对于非建筑模型，按原有逻辑设置子对象名称
-    let childIndex = 0
-    model.traverse((child) => {
-      if (child !== model) { // 跳过根对象本身
-        if (child.type === 'Mesh') {
-          child.name = `${fileName}_mesh_${childIndex}`
-        } else if (child.type === 'Group') {
-          child.name = `${fileName}_group_${childIndex}`
-        } else if (child.type === 'Object3D') {
-          child.name = `${fileName}_object_${childIndex}`
-        } else {
-          child.name = `${fileName}_${child.type.toLowerCase()}_${childIndex}`
-        }
-        childIndex++
-      }
-    })
   }
   
   console.log(`🏷️ 模型名称设置完成: ${fileName}${isBuildingModelFlag ? ' (建筑模型)' : ''}`)

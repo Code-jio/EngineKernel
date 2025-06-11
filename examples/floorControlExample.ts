@@ -5,7 +5,7 @@
  */
 
 import { BaseScene } from '../src/plugins/webgl/baseScene'
-import { FloorControlPlugin, FloorState } from '../src/plugins/webgl/floorControlPlugin'
+import { FloorControlPlugin, FloorState } from '../src/plugins/webgl/BuildingControlPlugin'
 import { THREE } from '../src/plugins/basePlugin'
 
 export class FloorControlExample {
