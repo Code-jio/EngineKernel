@@ -197,17 +197,12 @@ export class SkyBox extends BasePlugin {
         this.cubeTextureLoader.load(
             this.config.texturePaths,
             texture => {
-                const geometry = new THREE.BoxGeometry(
-                    this.config.size!,
-                    this.config.size!,
-                    this.config.size!
-                )
+                const geometry = new THREE.BoxGeometry(200000, 200000, 200000)
                 const material = new THREE.MeshBasicMaterial({
                     envMap: texture,
                     side: THREE.BackSide,
                 })
                 this.mesh = new THREE.Mesh(geometry, material)
-                this.mesh.scale.setScalar(100000)
                 this.mesh.name = "skyBox"
                 this.mesh.userData.skyBoxType = this.config.type
                 
@@ -234,7 +229,7 @@ export class SkyBox extends BasePlugin {
         this.textureLoader.load(
             this.config.envMapPath,
             texture => {
-                const geometry = new THREE.SphereGeometry(this.config.size! / 2, 64, 32)
+                const geometry = new THREE.SphereGeometry(100000, 64, 32)
                 const material = new THREE.MeshBasicMaterial({
                     map: texture,
                     side: THREE.BackSide,
@@ -348,17 +343,20 @@ export class SkyBox extends BasePlugin {
         // 设置纹理参数
         texture.mapping = THREE.EquirectangularReflectionMapping
         
-        // 设置为场景背景和环境光照
-        this.scene.background = texture
-        this.scene.environment = texture
-        
         // 设置曝光度和色调映射
         this.renderer.toneMapping = THREE.ACESFilmicToneMapping
         this.renderer.toneMappingExposure = intensity
         
-        // HDR环境贴图不需要额外的mesh，因为scene.background已经提供了背景渲染
-        // 这样可以避免重复渲染同样的贴图，节省性能和内存
-        this.mesh = null
+        // 创建天空盒mesh - 统一半径100000
+        const geometry = new THREE.SphereGeometry(100000, 64, 32)
+        const material = new THREE.MeshBasicMaterial({
+            map: texture,
+            side: THREE.BackSide,
+        })
+        this.mesh = new THREE.Mesh(geometry, material)
+        this.mesh.renderOrder = -1000  // 确保在最后渲染
+        this.mesh.name = "skyBox"
+        this.mesh.userData.skyBoxType = this.config.type
         
         eventBus.emit("skybox-ready", { 
             type: SkyBoxType.HDR_ENVIRONMENT,
@@ -367,7 +365,10 @@ export class SkyBox extends BasePlugin {
             intensity: intensity
         })
         
-        console.log(`${format}环境天空盒加载成功，强度: ${intensity}，已优化为仅使用scene.background`)
+        console.log(`${format}环境天空盒加载成功，强度: ${intensity}，半径: 100000`)
+        
+        // 自动添加到场景
+        this.addToScene()
     }
 
     // 程序化天空盒
@@ -400,7 +401,7 @@ export class SkyBox extends BasePlugin {
                 this.skyMaterial.material.uniforms["sunPosition"].value.copy(this.sun)
             }
 
-            // 设置天空盒大小
+            // 设置天空盒大小 - 统一半径100000
             this.mesh.scale.setScalar(100000)
             
             eventBus.emit("skybox-ready", { type: SkyBoxType.PROCEDURAL_SKY })
@@ -480,9 +481,7 @@ export class SkyBox extends BasePlugin {
     getSkyBoxInfo() {
         return {
             type: this.config.type,
-            isLoaded: this.config.type === SkyBoxType.HDR_ENVIRONMENT 
-                ? (this.scene.background !== null) 
-                : (this.mesh !== null),
+            isLoaded: this.mesh !== null,
             config: this.config
         }
     }

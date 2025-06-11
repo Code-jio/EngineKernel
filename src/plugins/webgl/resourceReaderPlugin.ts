@@ -56,7 +56,7 @@ function processBuildingModel(model: THREE.Group, fileName: string): void {
   model.userData.isBuildingModel = true
   model.userData.isInteractive = true
   
-  // 创建外立面组和楼层组
+  // 创建外立面组和楼层总组
   const facadeGroup = new THREE.Group()
   const floorsGroup = new THREE.Group()
   
@@ -65,8 +65,14 @@ function processBuildingModel(model: THREE.Group, fileName: string): void {
   
   // 收集需要重新组织的子节点
   const facadeNodes: THREE.Object3D[] = []
-  const floorNodes: THREE.Object3D[] = []
+  const floorNodesByLevel: Map<number, THREE.Object3D[]> = new Map()
   const otherNodes: THREE.Object3D[] = []
+  
+  // 提取楼层号的函数
+  function extractFloorNumber(name: string): number | null {
+    const match = name.match(/(\d+)F/i)
+    return match ? parseInt(match[1]) : null
+  }
   
   // 遍历所有子节点，根据名称特征进行分类
   model.traverse((child) => {
@@ -79,7 +85,13 @@ function processBuildingModel(model: THREE.Group, fileName: string): void {
       }
       // 检查是否为楼层节点（包含数字加F的模式，如1F, 2F, 10F等）
       else if (/\d+F/i.test(childName)) {
-        floorNodes.push(child)
+        const floorNumber = extractFloorNumber(childName)
+        if (floorNumber !== null) {
+          if (!floorNodesByLevel.has(floorNumber)) {
+            floorNodesByLevel.set(floorNumber, [])
+          }
+          floorNodesByLevel.get(floorNumber)!.push(child)
+        }
       }
       // 其他节点保持原样
       else {
@@ -105,42 +117,67 @@ function processBuildingModel(model: THREE.Group, fileName: string): void {
     node.matrix.decompose(node.position, node.quaternion, node.scale)
   })
   
-  // 将楼层节点添加到楼层组
-  floorNodes.forEach(node => {
-    // 保持原有的变换矩阵
-    const worldMatrix = new THREE.Matrix4()
-    node.updateMatrixWorld()
-    worldMatrix.copy(node.matrixWorld)
+  // 为每个楼层创建独立的组
+  const floorGroups: THREE.Group[] = []
+  const sortedFloorNumbers = Array.from(floorNodesByLevel.keys()).sort((a, b) => a - b)
+  
+  sortedFloorNumbers.forEach(floorNumber => {
+    const floorGroup = new THREE.Group()
+    floorGroup.name = `${fileName}_floor_${floorNumber}_group`
     
-    floorsGroup.add(node)
+    // 添加楼层元数据
+    floorGroup.userData.floorNumber = floorNumber
+    floorGroup.userData.isFloorGroup = true
+    floorGroup.userData.buildingName = fileName
     
-    // 恢复世界变换
-    floorsGroup.updateMatrixWorld()
-    const parentWorldMatrix = new THREE.Matrix4()
-    parentWorldMatrix.copy(floorsGroup.matrixWorld).invert()
-    node.matrix.multiplyMatrices(parentWorldMatrix, worldMatrix)
-    node.matrix.decompose(node.position, node.quaternion, node.scale)
+    const floorNodes = floorNodesByLevel.get(floorNumber)!
+    
+    // 将该楼层的所有节点添加到楼层组中
+    floorNodes.forEach(node => {
+      // 保持原有的变换矩阵
+      const worldMatrix = new THREE.Matrix4()
+      node.updateMatrixWorld()
+      worldMatrix.copy(node.matrixWorld)
+      
+      floorGroup.add(node)
+      
+      // 恢复世界变换
+      floorGroup.updateMatrixWorld()
+      const parentWorldMatrix = new THREE.Matrix4()
+      parentWorldMatrix.copy(floorGroup.matrixWorld).invert()
+      node.matrix.multiplyMatrices(parentWorldMatrix, worldMatrix)
+      node.matrix.decompose(node.position, node.quaternion, node.scale)
+    })
+    
+    // 将楼层组添加到楼层总组中
+    floorsGroup.add(floorGroup)
+    floorGroups.push(floorGroup)
+    
+    console.log(`🏗️ 建筑模型 ${fileName}: 已创建 ${floorNumber} 楼组，包含 ${floorNodes.length} 个节点`)
   })
   
-  // 将外立面组和楼层组添加到模型中（如果有相应的节点）
+  // 将外立面组和楼层总组添加到模型中（如果有相应的节点）
   if (facadeNodes.length > 0) {
     model.add(facadeGroup)
     console.log(`🏢 建筑模型 ${fileName}: 已创建外立面组，包含 ${facadeNodes.length} 个节点`)
   }
   
-  if (floorNodes.length > 0) {
+  if (floorGroups.length > 0) {
     model.add(floorsGroup)
-    console.log(`🏗️ 建筑模型 ${fileName}: 已创建楼层组，包含 ${floorNodes.length} 个节点`)
+    console.log(`🏗️ 建筑模型 ${fileName}: 已创建楼层总组，包含 ${floorGroups.length} 个楼层`)
   }
   
   // 记录处理结果
   model.userData.facadeCount = facadeNodes.length
-  model.userData.floorCount = floorNodes.length
+  model.userData.floorCount = Array.from(floorNodesByLevel.values()).reduce((total, nodes) => total + nodes.length, 0)
+  model.userData.floorLevels = sortedFloorNumbers
+  model.userData.floorGroups = floorGroups
   model.userData.otherCount = otherNodes.length
   
   console.log(`🏛️ 建筑模型处理完成: ${fileName}`)
   console.log(`   - 外立面节点: ${facadeNodes.length} 个`)
-  console.log(`   - 楼层节点: ${floorNodes.length} 个`) 
+  console.log(`   - 楼层总数: ${model.userData.floorCount} 个节点`)
+  console.log(`   - 楼层数量: ${floorGroups.length} 层 (${sortedFloorNumbers.join(', ')})`)
   console.log(`   - 其他节点: ${otherNodes.length} 个`)
 }
 

@@ -106,7 +106,7 @@ const DEFAULT_CONFIGS = {
             type: "perspective",
             fov: 45,
             near: 0.1,
-            far: 100000,
+            far: 500000,
             position: [200, 200, 200],
             lookAt: [0, 0, 0]
         },
@@ -154,7 +154,7 @@ const DEFAULT_CONFIGS = {
             type: "perspective",
             fov: 45,
             near: 0.01,
-            far: 100000,
+            far: 500000,
             position: [300, 300, 300],
             lookAt: [0, 0, 0]
         },
@@ -203,7 +203,7 @@ const DEFAULT_CONFIGS = {
             type: "perspective",
             fov: 45,
             near: 0.001,
-            far: 100000,
+            far: 500000,
             position: [500, 500, 500],
             lookAt: [0, 0, 0]
         },
@@ -251,7 +251,7 @@ const DEFAULT_CONFIGS = {
             type: "perspective",
             fov: 60,
             near: 0.01,
-            far: 100000,
+            far: 500000,
             position: [100, 100, 100],
             lookAt: [0, 0, 0]
         },
