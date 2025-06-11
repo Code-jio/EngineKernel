@@ -208,6 +208,8 @@ export class SkyBox extends BasePlugin {
                 })
                 this.mesh = new THREE.Mesh(geometry, material)
                 this.mesh.scale.setScalar(100000)
+                this.mesh.name = "skyBox"
+                this.mesh.userData.skyBoxType = this.config.type
                 
                 eventBus.emit("skybox-ready", { type: SkyBoxType.CUBE_TEXTURE })
                 
@@ -238,6 +240,8 @@ export class SkyBox extends BasePlugin {
                     side: THREE.BackSide,
                 })
                 this.mesh = new THREE.Mesh(geometry, material)
+                this.mesh.name = "skyBox"
+                this.mesh.userData.skyBoxType = this.config.type
                 
                 eventBus.emit("skybox-ready", { type: SkyBoxType.ENVIRONMENT_MAP })
                 
@@ -258,6 +262,9 @@ export class SkyBox extends BasePlugin {
         const filePath = this.config.hdrMapPath || this.config.exrMapPath || this.config.envMapPath
         if (!filePath) {
             console.error("HDR环境贴图天空盒缺少文件路径")
+            console.warn("⚠️ 缺少HDR文件路径，自动回退到程序化天空")
+            this.config.type = SkyBoxType.PROCEDURAL_SKY
+            this.createProceduralSkyBox()
             return
         }
 
@@ -268,6 +275,9 @@ export class SkyBox extends BasePlugin {
 
         if (!isEXR && !isHDR) {
             console.error("不支持的HDR文件格式，仅支持 .hdr、.pic 和 .exr 格式")
+            console.warn("⚠️ 不支持的HDR文件格式，自动回退到程序化天空")
+            this.config.type = SkyBoxType.PROCEDURAL_SKY
+            this.createProceduralSkyBox()
             return
         }
 
@@ -292,7 +302,12 @@ export class SkyBox extends BasePlugin {
             },
             err => {
                 console.error("HDR环境贴图加载失败:", err)
+                console.warn("⚠️ HDR加载失败，自动回退到程序化天空")
                 eventBus.emit("skybox-error", err)
+                
+                // 自动回退到程序化天空
+                this.config.type = SkyBoxType.PROCEDURAL_SKY
+                this.createProceduralSkyBox()
             }
         )
     }
@@ -318,7 +333,12 @@ export class SkyBox extends BasePlugin {
             },
             err => {
                 console.error("EXR环境贴图加载失败:", err)
+                console.warn("⚠️ EXR加载失败，自动回退到程序化天空")
                 eventBus.emit("skybox-error", err)
+                
+                // 自动回退到程序化天空
+                this.config.type = SkyBoxType.PROCEDURAL_SKY
+                this.createProceduralSkyBox()
             }
         )
     }
@@ -328,7 +348,7 @@ export class SkyBox extends BasePlugin {
         // 设置纹理参数
         texture.mapping = THREE.EquirectangularReflectionMapping
         
-        // 设置为场景背景
+        // 设置为场景背景和环境光照
         this.scene.background = texture
         this.scene.environment = texture
         
@@ -336,14 +356,9 @@ export class SkyBox extends BasePlugin {
         this.renderer.toneMapping = THREE.ACESFilmicToneMapping
         this.renderer.toneMappingExposure = intensity
         
-        // 创建天空盒网格（可选，用于调试）
-        const geometry = new THREE.SphereGeometry(this.config.size! / 2, 64, 32)
-        const material = new THREE.MeshBasicMaterial({
-            map: texture,
-            side: THREE.BackSide,
-        })
-        this.mesh = new THREE.Mesh(geometry, material)
-        this.mesh.renderOrder = -1000  // 确保在最后渲染
+        // HDR环境贴图不需要额外的mesh，因为scene.background已经提供了背景渲染
+        // 这样可以避免重复渲染同样的贴图，节省性能和内存
+        this.mesh = null
         
         eventBus.emit("skybox-ready", { 
             type: SkyBoxType.HDR_ENVIRONMENT,
@@ -352,10 +367,7 @@ export class SkyBox extends BasePlugin {
             intensity: intensity
         })
         
-        console.log(`${format}环境天空盒加载成功，强度: ${intensity}`)
-        
-        // 自动添加到场景
-        this.addToScene()
+        console.log(`${format}环境天空盒加载成功，强度: ${intensity}，已优化为仅使用scene.background`)
     }
 
     // 程序化天空盒
@@ -365,6 +377,8 @@ export class SkyBox extends BasePlugin {
             // 创建Sky实例
             this.skyMaterial = new Sky()
             this.mesh = this.skyMaterial.getMesh()  // 使用组合模式的mesh
+            this.mesh.name = "skyBox"
+            this.mesh.userData.skyBoxType = this.config.type
             
             // 应用配置参数
             if (this.config.skyConfig) {
@@ -403,6 +417,9 @@ export class SkyBox extends BasePlugin {
     private addToScene() {
         if (this.mesh) {
             this.scene.add(this.mesh)
+            console.log(`天空盒mesh已添加到场景: ${this.mesh.name}`)
+        } else {
+            console.log("天空盒使用scene.background方式，无需添加mesh到场景")
         }
     }
 
@@ -463,7 +480,9 @@ export class SkyBox extends BasePlugin {
     getSkyBoxInfo() {
         return {
             type: this.config.type,
-            isLoaded: this.mesh !== null,
+            isLoaded: this.config.type === SkyBoxType.HDR_ENVIRONMENT 
+                ? (this.scene.background !== null) 
+                : (this.mesh !== null),
             config: this.config
         }
     }

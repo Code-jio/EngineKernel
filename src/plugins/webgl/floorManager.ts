@@ -192,6 +192,7 @@ export class FloorManager {
         
         const mesh = new THREE.Mesh(geometry, waterMaterial)
         mesh.rotation.x = -Math.PI / 2
+        mesh.name = "FLOOR"
         
         return mesh
     }
@@ -383,6 +384,7 @@ export class FloorManager {
         
         const mesh = new THREE.Mesh(geometry, material)
         mesh.rotation.x = -Math.PI / 2
+        mesh.name = "FLOOR"
         
         return mesh
     }
@@ -397,6 +399,7 @@ export class FloorManager {
         })
         const mesh = new THREE.Mesh(geometry, material)
         mesh.rotation.x = -Math.PI / 2
+        mesh.name = "FLOOR"
         return mesh
     }
 
@@ -410,6 +413,7 @@ export class FloorManager {
         })
         const mesh = new THREE.Mesh(geometry, material)
         mesh.rotation.x = -Math.PI / 2
+        mesh.name = "FLOOR"
         return mesh
     }
 
@@ -422,6 +426,7 @@ export class FloorManager {
         })
         const mesh = new THREE.Mesh(geometry, material)
         mesh.rotation.x = -Math.PI / 2
+        mesh.name = "FLOOR"
         return mesh
     }
 
@@ -435,6 +440,7 @@ export class FloorManager {
         })
         const mesh = new THREE.Mesh(geometry, material)
         mesh.rotation.x = -Math.PI / 2
+        mesh.name = "FLOOR"
         return mesh
     }
     

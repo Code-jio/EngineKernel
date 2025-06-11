@@ -103,9 +103,9 @@ export class BaseControls {
         this.control.minDistance = 1
         this.control.maxDistance = this.boundaryRadius * 0.8 // 80%的边界半径
         
-        // 极角限制（垂直旋转）- 防止翻转
+        // 极角限制（垂直旋转）- 防止相机潜入地下
         this.control.minPolarAngle = 0.1 // 接近但不到顶部
-        this.control.maxPolarAngle = Math.PI - 0.1 // 接近但不到底部
+        this.control.maxPolarAngle = Math.PI / 2 - 0.01 // 最多只能平视地面，不能潜入地下
         
         // // 启用阻尼
         // this.control.enableDamping = false

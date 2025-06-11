@@ -138,11 +138,12 @@ const DEFAULT_CONFIGS = {
             size: 10000,
             position: [0, 0, 0] as [number, number, number],
             staticConfig: {
-                color: 0x808080,
-                opacity: 1.0,
-                roughness: 0.9,
-                metalness: 0.1,
-                tiling: [50, 50] as [number, number]
+                color: 0x808080, // 基础颜色
+                opacity: 1.0, // 不透明度
+                roughness: 0.9, // 粗糙度
+                metalness: 0.1, // 金属度
+                tiling: [50, 50] as [number, number], // 贴图平铺
+                texture: './textures/floor.png',
             }
         }
     },
