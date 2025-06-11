@@ -173,10 +173,11 @@ export class MousePickPlugin extends BasePlugin {
      * 初始化事件监听器
      */
     private initializeEventListeners(): void {
-        const controlLayer = this.controller?.controlLayer
+        const controlLayer = this.controller?.getControlLayer ? this.controller.getControlLayer() : null
 
         if (!controlLayer) {
             console.error("❌ controlLayer元素不存在，无法绑定事件监听器")
+            console.warn("请确保传入的controller实例具有getControlLayer()方法")
             return
         }
 
@@ -876,7 +877,7 @@ export class MousePickPlugin extends BasePlugin {
      */
     public destroy(): void {
         // 移除事件监听器
-        const controlLayer = this.controller?.controlLayer
+        const controlLayer = this.controller?.getControlLayer ? this.controller.getControlLayer() : null
         if (controlLayer) {
             const captureOptions = { capture: true }
             controlLayer.removeEventListener("mousedown", this.boundMouseDown, captureOptions)
@@ -1035,12 +1036,13 @@ export class MousePickPlugin extends BasePlugin {
                 console.log("- OrbitControls存在:", false)
             }
 
-            if (this.controller.controlLayer) {
-                console.log("- controlLayer存在:", true)
-                console.log("- controlLayer.style.pointerEvents:", this.controller.controlLayer.style.pointerEvents)
-            } else {
-                console.log("- controlLayer存在:", false)
-            }
+                    const controlLayer = this.controller?.getControlLayer ? this.controller.getControlLayer() : null
+        if (controlLayer) {
+            console.log("- controlLayer存在:", true)
+            console.log("- controlLayer.style.pointerEvents:", controlLayer.style.pointerEvents)
+        } else {
+            console.log("- controlLayer存在:", false)
+        }
         } else {
             console.log("- 控制器存在:", false)
         }

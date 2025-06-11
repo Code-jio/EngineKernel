@@ -1,10 +1,10 @@
-// 轨道控制器插件
-import { THREE, BasePlugin } from "../basePlugin"
+// 轨道控制器类
+import { THREE } from "../basePlugin"
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js"
 import eventBus from '../../eventBus/eventBus'
 import * as TWEEN from "@tweenjs/tween.js"
 
-export type OrbitControlPluginOptions = {
+export type OrbitControlOptions = {
     damping?: boolean
     dampingFactor?: number
     minDistance?: number
@@ -29,38 +29,37 @@ interface CameraFlyToOptions {
     onComplete?: () => void
 }
 
-export class BaseControls extends BasePlugin {
+export class BaseControls {
     private control: OrbitControls
-    private camera: THREE.PerspectiveCamera
+    private camera: THREE.PerspectiveCamera | THREE.OrthographicCamera
     private boundaryRadius: number = 20000 // 默认边界半径
     private controlLayer: HTMLElement
+    private currentMode: '2D' | '3D' = '3D' // 当前相机模式
+    private saved3DLimits: any = null // 保存3D模式的限制
     
-    constructor(meta:any) {
-        super(meta)
+    constructor(camera: THREE.PerspectiveCamera | THREE.OrthographicCamera, domElement?: HTMLElement, options?: OrbitControlOptions) {
         
         // 获取相机
-        this.camera = meta.userData.camera as THREE.PerspectiveCamera
+        this.camera = camera
         if (!this.camera) {
             throw new Error("轨道控制器需要相机实例")
         }
 
         // 创建控制器专用层
-        let element = document.createElement('div');
-        element.className = 'base-control-layer'
-        element.style.position = 'fixed';
-        element.style.top = '0';
-        element.style.left = '0';
-        element.style.width = window.innerWidth + 'px';
-        element.style.height = window.innerHeight + 'px';
-        element.style.pointerEvents = 'auto';
-        element.style.zIndex = '1001'; // 在CSS3D层上面
-        element.style.background = 'transparent';
-
-        // 将控制层添加到DOM
-        
-        if (meta.userData.domElement) {
-            this.controlLayer = meta.userData.domElement
-        }else{
+        if (domElement) {
+            this.controlLayer = domElement
+        } else {
+            let element = document.createElement('div');
+            element.className = 'base-control-layer'
+            element.style.position = 'fixed';
+            element.style.top = '0';
+            element.style.left = '0';
+            element.style.width = window.innerWidth + 'px';
+            element.style.height = window.innerHeight + 'px';
+            element.style.pointerEvents = 'auto';
+            element.style.zIndex = '1001'; // 在CSS3D层上面
+            element.style.background = 'transparent';
+            
             this.controlLayer = element
             document.body.appendChild(this.controlLayer);
         }
@@ -72,11 +71,7 @@ export class BaseControls extends BasePlugin {
         
         // 保存初始相机位置（在OrbitControls可能修改之前）
         const initialCameraPosition = this.camera.position.clone()
-        const initialTargetPosition = new THREE.Vector3()
-        if (meta.userData.cameraConfig?.lookAt) {
-            const lookAt = meta.userData.cameraConfig.lookAt as [number, number, number]
-            initialTargetPosition.set(lookAt[0], lookAt[1], lookAt[2])
-        }
+        const initialTargetPosition = new THREE.Vector3(0, 0, 0)
         
         // 监听相机变化，限制移动范围
         this.control.addEventListener("change", () => {
@@ -85,14 +80,22 @@ export class BaseControls extends BasePlugin {
         })
         
         // 应用用户配置
-        if (meta.userData.orbitControlOptions) {
-            this.configure(meta.userData.orbitControlOptions)
+        if (options) {
+            this.configure(options)
         }
         
         // 恢复初始相机位置（确保用户设置的位置生效）
         this.camera.position.copy(initialCameraPosition)
         this.control.target.copy(initialTargetPosition)
         this.control.update()
+        
+        // 根据相机类型确定初始模式
+        this.currentMode = this.camera instanceof THREE.OrthographicCamera ? '2D' : '3D'
+        
+        // 如果是2D模式，应用2D限制
+        if (this.currentMode === '2D') {
+            this.apply2DLimits()
+        }
     }
     
     private setupDefaultLimits() {
@@ -116,6 +119,131 @@ export class BaseControls extends BasePlugin {
         // 缩放设置
         this.control.enableZoom = true
         this.control.zoomSpeed = 1.0
+        
+        // 保存3D模式的限制
+        this.saved3DLimits = {
+            minPolarAngle: this.control.minPolarAngle,
+            maxPolarAngle: this.control.maxPolarAngle,
+            minAzimuthAngle: this.control.minAzimuthAngle,
+            maxAzimuthAngle: this.control.maxAzimuthAngle,
+            enableRotate: this.control.enableRotate
+        }
+    }
+    
+    /**
+     * 应用2D模式的控制限制
+     */
+    private apply2DLimits(): void {
+        // 2D模式：固定俯视角度，禁用旋转
+        this.control.minPolarAngle = Math.PI / 2 - 0.01 // 接近90度
+        this.control.maxPolarAngle = Math.PI / 2 + 0.01 // 接近90度
+        
+        // 禁用水平旋转（或严格限制）
+        this.control.minAzimuthAngle = -0.01
+        this.control.maxAzimuthAngle = 0.01
+        
+        // 启用缩放和平移
+        this.control.enableZoom = true
+        this.control.enablePan = true
+        this.control.enableRotate = true // 保持启用但通过角度限制
+        
+        console.log('🎥 已应用2D控制限制（俯视模式）')
+    }
+    
+    /**
+     * 恢复3D模式的控制限制
+     */
+    private apply3DLimits(): void {
+        if (this.saved3DLimits) {
+            this.control.minPolarAngle = this.saved3DLimits.minPolarAngle
+            this.control.maxPolarAngle = this.saved3DLimits.maxPolarAngle
+            this.control.minAzimuthAngle = this.saved3DLimits.minAzimuthAngle
+            this.control.maxAzimuthAngle = this.saved3DLimits.maxAzimuthAngle
+            this.control.enableRotate = this.saved3DLimits.enableRotate
+        }
+        
+        // 启用所有控制
+        this.control.enableZoom = true
+        this.control.enablePan = true
+        this.control.enableRotate = true
+        
+        console.log('🎥 已恢复3D控制限制（透视模式）')
+    }
+    
+    /**
+     * 切换控制器绑定的相机
+     * @param newCamera 新的相机实例
+     * @param mode 相机模式 '2D' 或 '3D'
+     */
+    public switchCamera(newCamera: THREE.PerspectiveCamera | THREE.OrthographicCamera, mode: '2D' | '3D'): void {
+        if (!newCamera) {
+            console.error('❌ switchCamera: 新相机不能为空')
+            return
+        }
+        
+        // 保存当前控制器状态
+        const currentTarget = this.control.target.clone()
+        
+        // 销毁当前控制器
+        this.control.dispose()
+        
+        // 更新相机引用
+        this.camera = newCamera
+        this.currentMode = mode
+        
+        // 创建新的控制器
+        this.control = new OrbitControls(this.camera, this.controlLayer)
+        
+        // 恢复控制器状态
+        this.control.target.copy(currentTarget)
+        
+        // 重新设置基础限制
+        this.setupDefaultLimits()
+        
+        // 根据模式应用相应的限制
+        if (mode === '2D') {
+            this.apply2DLimits()
+        } else {
+            this.apply3DLimits()
+        }
+        
+        // 重新绑定事件监听器
+        this.control.addEventListener("change", () => {
+            this.enforceMovementBounds()
+            eventBus.emit("camera-moved")
+        })
+        
+        // 更新控制器
+        this.control.update()
+        
+        console.log(`🔄 控制器已切换到${mode}模式`)
+    }
+    
+    /**
+     * 获取当前相机模式
+     */
+    public getCurrentMode(): '2D' | '3D' {
+        return this.currentMode
+    }
+    
+    /**
+     * 设置2D模式特定的俯视角度
+     * @param angle 俯视角度（弧度，默认Math.PI/2为完全俯视）
+     */
+    public set2DViewAngle(angle: number = Math.PI / 2): void {
+        if (this.currentMode === '2D') {
+            const tolerance = 0.01
+            this.control.minPolarAngle = angle - tolerance
+            this.control.maxPolarAngle = angle + tolerance
+            this.control.update()
+        }
+    }
+    
+    /**
+     * 获取控制器图层元素
+     */
+    public getControlLayer(): HTMLElement {
+        return this.controlLayer
     }
     
     private enforceMovementBounds() {
@@ -251,7 +379,7 @@ export class BaseControls extends BasePlugin {
         this.control.update()
     }
 
-    public configure(options: OrbitControlPluginOptions) {
+    public configure(options: OrbitControlOptions) {
         // if (options.damping !== undefined) {
         //     this.control.enableDamping = options.damping
         // }
