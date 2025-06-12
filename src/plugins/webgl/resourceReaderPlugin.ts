@@ -45,159 +45,26 @@ function extractFileNameFromPath(filePath: string): string {
  * 检查是否为建筑模型
  */
 function isBuildingModel(fileName: string): boolean {
-  return fileName.toLowerCase().includes('building')
-}
-
-/**
- * 处理建筑模型的特殊结构组织
- */
-function processBuildingModel(model: THREE.Group, fileName: string): void {
-  // 标记为可交互建筑模型
-  model.userData.isBuildingModel = true
-  model.userData.isInteractive = true
-  
-  // 创建外立面组和楼层总组
-  const facadeGroup = new THREE.Group()
-  const floorsGroup = new THREE.Group()
-  
-  facadeGroup.name = `${fileName}_facade`
-  floorsGroup.name = `${fileName}_floors`
-  
-  // 收集需要重新组织的子节点
-  const facadeNodes: THREE.Object3D[] = []
-  const floorNodesByLevel: Map<number, THREE.Object3D[]> = new Map()
-  const otherNodes: THREE.Object3D[] = []
-  
-  // 提取楼层号的函数
-  function extractFloorNumber(name: string): number | null {
-    const match = name.match(/(\d+)F/i)
-    return match ? parseInt(match[1]) : null
-  }
-  
-  // 遍历所有子节点，根据名称特征进行分类
-  model.traverse((child) => {
-    if (child !== model && child.parent === model) {
-      const childName = child.name || ''
-      
-      // 检查是否为外立面节点（包含MASK关键字）
-      if (childName.toUpperCase().includes('MASK')) {
-        facadeNodes.push(child)
-      }
-      // 检查是否为楼层节点（包含数字加F的模式，如1F, 2F, 10F等）
-      else if (/\d+F/i.test(childName)) {
-        const floorNumber = extractFloorNumber(childName)
-        if (floorNumber !== null) {
-          if (!floorNodesByLevel.has(floorNumber)) {
-            floorNodesByLevel.set(floorNumber, [])
-          }
-          floorNodesByLevel.get(floorNumber)!.push(child)
-        }
-      }
-      // 其他节点保持原样
-      else {
-        otherNodes.push(child)
-      }
-    }
-  })
-  
-  // 将外立面节点添加到外立面组
-  facadeNodes.forEach(node => {
-    // 保持原有的变换矩阵
-    const worldMatrix = new THREE.Matrix4()
-    node.updateMatrixWorld()
-    worldMatrix.copy(node.matrixWorld)
-    
-    facadeGroup.add(node)
-    
-    // 恢复世界变换
-    facadeGroup.updateMatrixWorld()
-    const parentWorldMatrix = new THREE.Matrix4()
-    parentWorldMatrix.copy(facadeGroup.matrixWorld).invert()
-    node.matrix.multiplyMatrices(parentWorldMatrix, worldMatrix)
-    node.matrix.decompose(node.position, node.quaternion, node.scale)
-  })
-  
-  // 为每个楼层创建独立的组
-  const floorGroups: THREE.Group[] = []
-  const sortedFloorNumbers = Array.from(floorNodesByLevel.keys()).sort((a, b) => a - b)
-  
-  sortedFloorNumbers.forEach(floorNumber => {
-    const floorGroup = new THREE.Group()
-    floorGroup.name = `${fileName}_floor_${floorNumber}_group`
-    
-    // 添加楼层元数据
-    floorGroup.userData.floorNumber = floorNumber
-    floorGroup.userData.isFloorGroup = true
-    floorGroup.userData.buildingName = fileName
-    
-    const floorNodes = floorNodesByLevel.get(floorNumber)!
-    
-    // 将该楼层的所有节点添加到楼层组中
-    floorNodes.forEach(node => {
-      // 保持原有的变换矩阵
-      const worldMatrix = new THREE.Matrix4()
-      node.updateMatrixWorld()
-      worldMatrix.copy(node.matrixWorld)
-      
-      floorGroup.add(node)
-      
-      // 恢复世界变换
-      floorGroup.updateMatrixWorld()
-      const parentWorldMatrix = new THREE.Matrix4()
-      parentWorldMatrix.copy(floorGroup.matrixWorld).invert()
-      node.matrix.multiplyMatrices(parentWorldMatrix, worldMatrix)
-      node.matrix.decompose(node.position, node.quaternion, node.scale)
-    })
-    
-    // 将楼层组添加到楼层总组中
-    floorsGroup.add(floorGroup)
-    floorGroups.push(floorGroup)
-    
-    console.log(`🏗️ 建筑模型 ${fileName}: 已创建 ${floorNumber} 楼组，包含 ${floorNodes.length} 个节点`)
-  })
-  
-  // 将外立面组和楼层总组添加到模型中（如果有相应的节点）
-  if (facadeNodes.length > 0) {
-    model.add(facadeGroup)
-    console.log(`🏢 建筑模型 ${fileName}: 已创建外立面组，包含 ${facadeNodes.length} 个节点`)
-  }
-  
-  if (floorGroups.length > 0) {
-    model.add(floorsGroup)
-    console.log(`🏗️ 建筑模型 ${fileName}: 已创建楼层总组，包含 ${floorGroups.length} 个楼层`)
-  }
-  
-  // 记录处理结果
-  model.userData.facadeCount = facadeNodes.length
-  model.userData.floorCount = Array.from(floorNodesByLevel.values()).reduce((total, nodes) => total + nodes.length, 0)
-  model.userData.floorLevels = sortedFloorNumbers
-  model.userData.floorGroups = floorGroups
-  model.userData.otherCount = otherNodes.length
-  
-  console.log(`🏛️ 建筑模型处理完成: ${fileName}`)
-  console.log(`   - 外立面节点: ${facadeNodes.length} 个`)
-  console.log(`   - 楼层总数: ${model.userData.floorCount} 个节点`)
-  console.log(`   - 楼层数量: ${floorGroups.length} 层 (${sortedFloorNumbers.join(', ')})`)
-  console.log(`   - 其他节点: ${otherNodes.length} 个`)
+  // 检查原始文件名是否包含大写的BUILDING关键字
+  return fileName.includes('MAIN_BUILDING')
 }
 
 /**
  * 处理模型名称设置和建筑模型特殊逻辑
  */
 function processLoadedModel(model: THREE.Group, url: string): THREE.Group {
-  // 1. 提取文件名并设置为模型名称
   const fileName = extractFileNameFromPath(url)
+  
+  if (!model.userData) {
+    model.userData = {}
+  }
+  model.userData.modelName = fileName
+  
   model.name = fileName
   
-  // 2. 检查是否为建筑模型
   const isBuildingModelFlag = isBuildingModel(fileName)
   
-  if (isBuildingModelFlag) {
-    // 3. 处理建筑模型的特殊结构
-    processBuildingModel(model, fileName)
-  }
-  
-  console.log(`🏷️ 模型名称设置完成: ${fileName}${isBuildingModelFlag ? ' (建筑模型)' : ''}`)
+  console.log(`🏷️ 模型名称设置完成: ${fileName}${isBuildingModelFlag ? ' (建筑模型)' : ''} (存储在userData.modelName中)`)
   return model
 }
 
@@ -988,8 +855,6 @@ export class ResourceReaderPlugin extends BasePlugin {
   private generateTaskId(): string {
     return `task_${++this.taskIdCounter}_${Date.now()}`
   }
-
-
 
   /**
    * 添加到缓存

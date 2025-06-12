@@ -550,7 +550,7 @@ export class MousePickPlugin extends BasePlugin {
         this.emitPickEvent("object-picked", {
             results: results.map(result => ({
                 objectId: result.object.id,
-                objectName: result.object.name,
+                objectName: this.getModelName(result.object),
                 objectType: result.objectType,
                 object:result.object,
                 worldPosition: result.point,
@@ -571,29 +571,29 @@ export class MousePickPlugin extends BasePlugin {
                     : undefined,
                 objectList: result.objectList?.map(obj => ({
                     id: obj.id,
-                    name: obj.name,
+                    name: this.getModelName(obj),
                     type: obj.type
                 })) || [], // 添加对象列表信息
             })),
             selectedObjectId: closestResult.object.id,
-            selectedObjectName: closestResult.object.name,
+            selectedObjectName: this.getModelName(closestResult.object),
             pickMode: this.isCtrlPressed ? "box-select-mode" : this.config.mode,
             timestamp: Date.now(),
             objectList: objectList.map(obj => ({
                 id: obj.id,
-                name: obj.name,
+                name: this.getModelName(obj),
                 type: obj.type
             })), // 在事件根级别添加对象列表
         })
 
         console.log("🎯 拾取成功!", {
-            objectName: closestResult.object.name || "未命名物体",
+            objectName: this.getModelName(closestResult.object),
             objectType: closestResult.objectType,
             worldPosition: closestResult.point,
             distance: closestResult.distance.toFixed(2),
             results: results.map(result => ({
                 objectId: result.object.id,
-                objectName: result.object.name,
+                objectName: this.getModelName(result.object),
                 objectType: result.objectType,
                 object:result.object,
                 worldPosition: result.point,
@@ -614,7 +614,7 @@ export class MousePickPlugin extends BasePlugin {
                     : undefined,
             })),
             selectedObjectId: closestResult.object.id,
-            selectedObjectName: closestResult.object.name,
+            selectedObjectName: this.getModelName(closestResult.object),
             pickMode: this.config.mode,
             timestamp: Date.now(),
         })
@@ -708,7 +708,7 @@ export class MousePickPlugin extends BasePlugin {
         this.emitPickEvent("box-select-finished", {
             selectedObjects: Array.from(this.selectedObjects).map(obj => ({
                 id: obj.id,
-                name: obj.name,
+                name: this.getModelName(obj),
                 type: obj.type,
                 position: obj.position,
                 rotation: obj.rotation,
@@ -721,7 +721,7 @@ export class MousePickPlugin extends BasePlugin {
         if (this.selectedObjects.size > 0) {
             console.log("选中的物体详情:", Array.from(this.selectedObjects).map(obj => ({
                 id: obj.id,
-                name: obj.name,
+                name: this.getModelName(obj),
                 type: obj.type,
                 position: obj.position,
                 rotation: obj.rotation,
@@ -935,7 +935,7 @@ export class MousePickPlugin extends BasePlugin {
         this.highlightOutline = outline
 
         console.log('✨ 对象高亮成功:', {
-            name: object.name || '未命名',
+            name: this.getModelName(object),
             type: object.type,
             id: object.id
         })
@@ -1299,8 +1299,8 @@ export class MousePickPlugin extends BasePlugin {
             current = current.parent!
         }
         
-        // 2. 检查对象名称
-        const name = object.name.toLowerCase()
+        // 2. 检查对象名称（优先使用userData.modelName）
+        const name = this.getModelName(object).toLowerCase()
         if (buildingKeywords.some(keyword => name.includes(keyword))) {
             return true
         }
@@ -1308,7 +1308,7 @@ export class MousePickPlugin extends BasePlugin {
         // 3. 向上遍历父对象查找建筑根节点
         let parent = object.parent
         while (parent && parent.type !== 'Scene') {
-            const parentName = parent.name.toLowerCase()
+            const parentName = this.getModelName(parent).toLowerCase()
             if (buildingKeywords.some(keyword => parentName.includes(keyword))) {
                 return true
             }
@@ -1338,8 +1338,8 @@ export class MousePickPlugin extends BasePlugin {
                 buildingRoot = current
             }
             
-            // 2. 检查名称关键词
-            const name = current.name.toLowerCase()
+            // 2. 检查名称关键词（优先使用userData.modelName）
+            const name = this.getModelName(current).toLowerCase()
             if (buildingKeywords.some(keyword => name.includes(keyword))) {
                 buildingRoot = current
             }
@@ -1367,12 +1367,12 @@ export class MousePickPlugin extends BasePlugin {
         ]
         
         buildingRoot.traverse((child) => {
-            const name = child.name.toLowerCase()
+            const name = this.getModelName(child).toLowerCase()
             
             // 1. 查找外立面组（可能是由ResourceReaderPlugin创建的）
             if (child.type === 'Group' && facadeKeywords.some(keyword => name.includes(keyword))) {
                 facades.push(child)
-                console.log(`🎯 找到外立面组: ${child.name} (${child.type})`)
+                console.log(`🎯 找到外立面组: ${this.getModelName(child)} (${child.type})`)
                 return // 找到外立面组，不需要继续遍历其子节点
             }
             
@@ -1380,7 +1380,7 @@ export class MousePickPlugin extends BasePlugin {
             if ((child.type === 'Mesh' || child.type === 'SkinnedMesh') && 
                 facadeKeywords.some(keyword => name.includes(keyword))) {
                 facades.push(child)
-                console.log(`🎯 找到外立面网格: ${child.name} (${child.type})`)
+                console.log(`🎯 找到外立面网格: ${this.getModelName(child)} (${child.type})`)
             }
         })
         
@@ -1477,19 +1477,19 @@ export class MousePickPlugin extends BasePlugin {
         this.emitPickEvent("building-opened", {
             building: {
                 id: buildingRoot.id,
-                name: buildingRoot.name,
+                name: this.getModelName(buildingRoot),
                 type: buildingRoot.type
             },
             hiddenFacades: facades.map(facade => ({
                 id: facade.id,
-                name: facade.name,
+                name: this.getModelName(facade),
                 type: facade.type
             })),
             timestamp: Date.now()
         })
         
         console.log('🏢 建筑已打开:', {
-            building: buildingRoot.name,
+            building: this.getModelName(buildingRoot),
             hiddenFacades: facades.length
         })
     }
@@ -1510,13 +1510,13 @@ export class MousePickPlugin extends BasePlugin {
         this.emitPickEvent("building-closed", {
             building: {
                 id: this.openedBuilding.id,
-                name: this.openedBuilding.name,
+                name: this.getModelName(this.openedBuilding),
                 type: this.openedBuilding.type
             },
             timestamp: Date.now()
         })
         
-        console.log('🏢 建筑已关闭:', this.openedBuilding.name)
+        console.log('🏢 建筑已关闭:', this.getModelName(this.openedBuilding))
         
         // 重置状态
         this.openedBuilding = null
@@ -1546,5 +1546,20 @@ export class MousePickPlugin extends BasePlugin {
         } else {
             this.openBuilding(targetObject)
         }
+    }
+
+    /**
+     * 获取对象的模型名称（优先从userData.modelName读取）
+     */
+    private getModelName(object: THREE.Object3D): string {
+        if (!object) return '未命名模型'
+        
+        // 优先使用userData.modelName
+        if (object.userData && object.userData.modelName) {
+            return object.userData.modelName
+        }
+        
+        // 向后兼容：如果userData.modelName不存在，使用object.name
+        return object.name || '未命名模型'
     }
 }

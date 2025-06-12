@@ -197,8 +197,12 @@ export class ModelMarker extends BasePlugin {
       isLoaded: false
     }
 
-    // 设置模型对象的名称
-    instance.model.name = instance.name
+    // 设置模型对象的名称（新规则：userData.modelName + 显示名称）
+    if (!instance.model.userData) {
+      instance.model.userData = {}
+    }
+    instance.model.userData.modelName = instance.name
+    instance.model.name = instance.name // 保留显示名称
 
     // 设置初始变换（使用默认值）
     if (finalConfig.position) {
@@ -387,15 +391,23 @@ export class ModelMarker extends BasePlugin {
     const loadedModel = config.enableCaching === false ? gltf.scene : gltf.scene.clone()
     instance.model.add(loadedModel)
 
-    // 设置模型名称（确保整个模型树的名称设置）
-    this.setModelNamesRecursively(instance.model, instance.name, instance.fileName)
+    // 设置模型名称（新规则：只设置根对象的userData.modelName）
+    if (!instance.model.userData) {
+      instance.model.userData = {}
+    }
+    instance.model.userData.modelName = instance.name
+    instance.model.name = instance.name // 保留显示名称
 
     // 仅在需要时保存原始模型备份
     if (config.enableAnimations !== false) {
       instance.originalModel = gltf.scene.clone()
       // 为备份模型也设置名称
       if (instance.originalModel) {
-        this.setModelNamesRecursively(instance.originalModel, `${instance.name}_backup`, instance.fileName)
+        if (!instance.originalModel.userData) {
+          instance.originalModel.userData = {}
+        }
+        instance.originalModel.userData.modelName = `${instance.name}_backup`
+        instance.originalModel.name = `${instance.name}_backup`
       }
     }
 
@@ -1257,35 +1269,6 @@ export class ModelMarker extends BasePlugin {
     } catch (error) {
       console.warn('文件名提取失败，使用默认名称:', error)
       return `model_${Date.now()}`
-    }
-  }
-
-  /**
-   * 递归设置模型及其子对象的名称
-   */
-  private setModelNamesRecursively(object: THREE.Object3D, baseName: string, fileName: string): void {
-    // 设置根对象名称
-    object.name = baseName
-    
-    // 为子对象设置名称
-    let childIndex = 0
-    object.traverse((child: THREE.Object3D) => {
-      if (child !== object) { // 跳过根对象本身
-        if (child.type === 'Mesh') {
-          child.name = `${fileName}_mesh_${childIndex}`
-        } else if (child.type === 'Group') {
-          child.name = `${fileName}_group_${childIndex}`
-        } else if (child.type === 'Object3D') {
-          child.name = `${fileName}_object_${childIndex}`
-        } else {
-          child.name = `${fileName}_${child.type.toLowerCase()}_${childIndex}`
-        }
-        childIndex++
-      }
-    })
-    
-    if (this.enableDebugMode) {
-      console.log(`🏷️ 模型名称设置完成: ${baseName}, 子对象数量: ${object.children.length}`)
     }
   }
 

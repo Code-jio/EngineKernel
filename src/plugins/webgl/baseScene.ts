@@ -113,7 +113,7 @@ const DEFAULT_CONFIGS = {
         rendererConfig: {
             antialias: false,
             alpha: false,
-            precision: "mediump",
+            precision: "highp",
             powerPreference: "high-performance",
             physicallyCorrectLights: true,
             shadowMapEnabled: false,
@@ -136,7 +136,7 @@ const DEFAULT_CONFIGS = {
             enabled: true,
             type: 'static' as const,
             size: 10000,
-            position: [0, 0, 0] as [number, number, number],
+            position: [0, -1, 0] as [number, number, number],
             staticConfig: {
                 color: 0x808080, // 基础颜色
                 opacity: 1.0, // 不透明度
@@ -184,7 +184,7 @@ const DEFAULT_CONFIGS = {
             enabled: true,
             type: 'water' as const,
             size: 20000,
-            position: [0, 0, 0] as [number, number, number],
+            position: [0, -1, 0] as [number, number, number],
             waterConfig: {
                 color: 0x001e0f,
                 sunColor: 0xffffff,
@@ -234,7 +234,7 @@ const DEFAULT_CONFIGS = {
             enabled: true,
             type: 'reflection' as const,
             size: 30000,
-            position: [0, 0, 0] as [number, number, number],
+            position: [0, -0.1, 0] as [number, number, number],
             reflectionConfig: {
                 reflectivity: 0.8,
                 color: 0x404040,
@@ -280,7 +280,7 @@ const DEFAULT_CONFIGS = {
             enabled: true,
             type: 'grid' as const,
             size: 10000,
-            position: [0, 0, 0] as [number, number, number],
+            position: [0, -0.1, 0] as [number, number, number],
             gridConfig: {
                 gridSize: 100,
                 lineWidth: 0.1,
@@ -461,7 +461,7 @@ export class BaseScene extends BasePlugin {
             enabled: false,
             type: 'none',
             size: 1000,
-            position: [0, 0, 0]
+            position: [0, -1, 0]
         }
 
         // 适应Three.js r155+物理正确光照系统的光照强度
@@ -1547,6 +1547,7 @@ export class BaseScene extends BasePlugin {
     public setWaterFloor(size: number = 20000, config?: Partial<FloorConfig['waterConfig']>): void {
         this.setFloorType('water', {
             size,
+            position: [0, -0.1, 0],
             waterConfig: {
                 color: 0x001e0f,
                 sunColor: 0xffffff,
@@ -1573,6 +1574,7 @@ export class BaseScene extends BasePlugin {
     ): void {
         this.setFloorType('water', {
             size,
+            position: [0, -0.1, 0],
             waterConfig: {
                 color: 0x001e0f,
                 sunColor: 0xffffff,
@@ -1593,6 +1595,7 @@ export class BaseScene extends BasePlugin {
     public setStaticFloor(size: number = 10000, config?: Partial<FloorConfig['staticConfig']>): void {
         this.setFloorType('static', {
             size,
+            position: [0, -1, 0],
             staticConfig: {
                 color: 0x808080,
                 opacity: 1.0,
@@ -1617,6 +1620,7 @@ export class BaseScene extends BasePlugin {
     ): void {
         this.setFloorType('static', {
             size,
+            position: [0, -1, 0],
             staticConfig: {
                 color: 0xffffff, // 使用白色以显示贴图原色
                 opacity: 1.0,
@@ -1647,6 +1651,7 @@ export class BaseScene extends BasePlugin {
     ): void {
         this.setFloorType('static', {
             size,
+            position: [0, -1, 0],
             staticConfig: {
                 color: 0xffffff,
                 opacity: 1.0,
@@ -1668,6 +1673,7 @@ export class BaseScene extends BasePlugin {
     public setGridFloor(size: number = 10000, config?: Partial<FloorConfig['gridConfig']>): void {
         this.setFloorType('grid', {
             size,
+            position: [0, -0.1, 0],
             gridConfig: {
                 gridSize: 100,
                 lineWidth: 0.1,
@@ -1686,6 +1692,7 @@ export class BaseScene extends BasePlugin {
     public setReflectionFloor(size: number = 30000, config?: Partial<FloorConfig['reflectionConfig']>): void {
         this.setFloorType('reflection', {
             size,
+            position: [0, -0.1, 0],
             reflectionConfig: {
                 reflectivity: 0.8,
                 color: 0x404040,
@@ -1703,6 +1710,7 @@ export class BaseScene extends BasePlugin {
     public setGlowFloor(size: number = 10000, config?: Partial<FloorConfig['glowConfig']>): void {
         this.setFloorType('glow', {
             size,
+            position: [0, -150, 0],
             glowConfig: {
                 color: 0x0088ff,
                 intensity: 1.0,
