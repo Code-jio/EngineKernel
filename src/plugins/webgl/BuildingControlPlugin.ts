@@ -83,7 +83,7 @@ export class BuildingControlPlugin extends BasePlugin {
 
     // 默认配置
     private config: FloorControlConfig = {
-        expandDistance: 50,
+        expandDistance: 10,
         animationDuration: 1000,
         focusOpacity: 1.0,
         unfocusOpacity: 0.3,
