@@ -86,7 +86,7 @@ export class BuildingControlPlugin extends BasePlugin {
         expandDistance: 10,
         animationDuration: 1000,
         focusOpacity: 1.0,
-        unfocusOpacity: 0.3,
+        unfocusOpacity: 0.2,
         easingFunction: 'Quadratic.InOut',
         showFacade: true,
         autoHideFacade: true
@@ -101,19 +101,13 @@ export class BuildingControlPlugin extends BasePlugin {
     }
 
     public async init(scene?: THREE.Scene): Promise<void> {
-        console.log(`🏗️ ${this.name} v${this.version} 已初始化`)
         // 如果提供了场景对象，自动发现并设置建筑模型
         if (scene) {
-            console.log('🔍 开始自动发现场景中的可交互建筑...')
             const discoveredBuildings = this.autoDiscoverBuildingsInScene(scene)
 
             if (discoveredBuildings.length > 0) {
-                console.log(`🏢 发现 ${discoveredBuildings.length} 个可交互建筑:`,
-                    discoveredBuildings.map(b => this.getModelName(b)))
-
                 // 默认使用第一个发现的建筑（可以后续扩展为支持多建筑）
                 const primaryBuilding = discoveredBuildings[0]
-                console.log(`🎯 设置主建筑: ${this.getModelName(primaryBuilding)}`)
 
                 // 设置建筑模型并进行自动配置
                 if (this.setBuildingModel(primaryBuilding)) {
@@ -152,10 +146,6 @@ export class BuildingControlPlugin extends BasePlugin {
 
         if (!this.floorsGroup) {
             console.warn('⚠️ 未找到楼层组')
-            console.log('🔍 调试信息 - 建筑模型结构:')
-            console.log('建筑模型名称:', model.name)
-            console.log('建筑模型userData:', model.userData)
-
             // 打印所有子对象的详细信息
             const childInfo: any[] = []
             model.children.forEach((child, index) => {
@@ -167,7 +157,6 @@ export class BuildingControlPlugin extends BasePlugin {
                     childrenCount: child.children ? child.children.length : 0
                 })
             })
-            console.log('所有子对象详情:', childInfo)
 
             // 尝试智能查找可能的楼层组
             this.attemptSmartFloorGroupDetection(model)
@@ -175,14 +164,12 @@ export class BuildingControlPlugin extends BasePlugin {
 
         // 如果仍然没有楼层组，创建一个并重组楼层结构
         if (!this.floorsGroup) {
-            console.log('🔧 创建楼层组并重组楼层结构...')
             this.createAndOrganizeFloorsGroup(model)
         }
 
         // 初始化楼层数据
         this.initializeFloors()
 
-        console.log(`🏗️ 建筑模型已设置，包含 ${this.floors.size} 个楼层`)
         return true
     }
 
@@ -203,7 +190,6 @@ export class BuildingControlPlugin extends BasePlugin {
                 name.includes(keyword) || modelName.includes(keyword))) {
                 this.facadeGroup = child as THREE.Group
                 const matchedKeyword = facadeKeywords.find(k => name.includes(k) || modelName.includes(k))
-                console.log(`🎯 找到外立面组: ${this.getModelName(child)} (匹配关键词: ${matchedKeyword})`)
             }
 
             // 查找楼层组（排除外立面）
@@ -211,7 +197,6 @@ export class BuildingControlPlugin extends BasePlugin {
                 name.includes(keyword) || modelName.includes(keyword))) {
                 this.floorsGroup = child as THREE.Group
                 const matchedKeyword = floorKeywords.find(k => name.includes(k) || modelName.includes(k))
-                console.log(`🎯 找到楼层组: ${this.getModelName(child)} (匹配关键词: ${matchedKeyword})`)
             }
         })
     }
@@ -220,8 +205,6 @@ export class BuildingControlPlugin extends BasePlugin {
      * 尝试智能检测楼层组（排除外立面）
      */
     private attemptSmartFloorGroupDetection(model: THREE.Group): void {
-        console.log('🔍 开始智能检测楼层组，基于子节点名称分析...')
-
         // 外立面关键词（优先检查MASK）
         const facadeKeywords = ['mask', 'facade', 'exterior', 'wall', 'curtain', '外立面', '立面', '幕墙']
 
@@ -240,8 +223,6 @@ export class BuildingControlPlugin extends BasePlugin {
 
         const facadeNodes: THREE.Object3D[] = []
 
-        console.log(`🔍 分析主建筑 "${this.getModelName(model)}" 的 ${model.children.length} 个直接子节点:`)
-
         // 遍历主建筑的直接子节点
         model.children.forEach((child, index) => {
             const name = child.name.toLowerCase()
@@ -252,8 +233,6 @@ export class BuildingControlPlugin extends BasePlugin {
             const worldPos = new THREE.Vector3()
             child.getWorldPosition(worldPos)
 
-            console.log(`  [${index}] ${modelName} (${child.type}) - Y: ${worldPos.y.toFixed(2)}`)
-
             // 1. 检查是否是外立面（优先检查MASK关键词）
             const isFacade = facadeKeywords.some(keyword =>
                 name.includes(keyword) || modelNameLower.includes(keyword)
@@ -262,12 +241,10 @@ export class BuildingControlPlugin extends BasePlugin {
             if (isFacade) {
                 facadeNodes.push(child)
                 const matchedKeyword = facadeKeywords.find(k => name.includes(k) || modelNameLower.includes(k))
-                console.log(`    ✅ 识别为外立面 (关键词: ${matchedKeyword})`)
 
                 // 设置外立面组（如果还没有设置）
                 if (!this.facadeGroup) {
                     this.facadeGroup = child as THREE.Group
-                    console.log(`    🎯 设置为外立面组`)
                 }
                 return
             }
@@ -292,15 +269,7 @@ export class BuildingControlPlugin extends BasePlugin {
                 floorNumber: floorNumber,
                 isFloorCandidate: isFloorCandidate
             })
-
-            if (isFloorCandidate) {
-                console.log(`    ✅ 潜在楼层节点 ${floorNumber ? `(${floorNumber}楼)` : '(未识别楼层号)'}`)
-            } else {
-                console.log(`    ❌ 非楼层节点`)
-            }
         })
-
-        console.log(`🔍 检测结果: ${facadeNodes.length} 个外立面节点, ${potentialFloorNodes.filter(n => n.isFloorCandidate).length} 个潜在楼层节点`)
 
         // 5. 筛选和排序楼层节点
         const floorCandidates = potentialFloorNodes.filter(node => node.isFloorCandidate)
@@ -322,11 +291,6 @@ export class BuildingControlPlugin extends BasePlugin {
             // 都没有楼层号时按Y坐标排序
             return a.y - b.y
         })
-
-        floorCandidates.forEach((candidate, index) => {
-            console.log(`  [${index + 1}] ${candidate.modelName} ${candidate.floorNumber ? `(${candidate.floorNumber}楼)` : ''} - Y: ${candidate.y.toFixed(2)}`)
-        })
-
 
         // 6. 将 floorCandidates 作为主建筑模型的楼层组，并把模型绑定到对应的楼层上
         if (floorCandidates.length > 0) {
@@ -386,8 +350,6 @@ export class BuildingControlPlugin extends BasePlugin {
      * 创建楼层组并重组楼层结构
      */
     private createAndOrganizeFloorsGroup(model: THREE.Group): void {
-        console.log('🔧 开始创建楼层组并重组楼层结构...')
-
         // 创建新的楼层组
         const floorsGroup = new THREE.Group()
         floorsGroup.name = `${model.name}_Floors`
@@ -414,21 +376,15 @@ export class BuildingControlPlugin extends BasePlugin {
 
             if (isFacade) {
                 facadeObjects.push(child)
-                console.log(`🎭 识别为外立面: ${this.getModelName(child)} (包含关键词: ${facadeKeywords.find(k => name.includes(k) || modelName.includes(k))})`)
-
                 // 如果还没有外立面组，将第一个外立面对象设为外立面组
                 if (!this.facadeGroup) {
                     this.facadeGroup = child as THREE.Group
-                    console.log(`🎯 设置外立面组: ${this.getModelName(child)}`)
                 }
             } else {
                 // 其他对象视为潜在楼层
                 potentialFloorObjects.push(child)
-                console.log(`🏗️ 识别为潜在楼层: ${this.getModelName(child)}`)
             }
         })
-
-        console.log(`🔍 找到 ${potentialFloorObjects.length} 个潜在楼层对象，${facadeObjects.length} 个外立面对象`)
 
         // 按Y坐标对潜在楼层对象进行排序
         const sortedFloorObjects = potentialFloorObjects.map(obj => {
@@ -436,8 +392,6 @@ export class BuildingControlPlugin extends BasePlugin {
             obj.getWorldPosition(worldPos)
             return { object: obj, y: worldPos.y, name: this.getModelName(obj) }
         }).sort((a, b) => a.y - b.y)
-
-        console.log('🔍 楼层对象按高度排序:', sortedFloorObjects.map(f => `${f.name} (Y: ${f.y.toFixed(2)})`))
 
         // 为每个楼层对象创建楼层组
         sortedFloorObjects.forEach((floorData, index) => {
@@ -470,20 +424,14 @@ export class BuildingControlPlugin extends BasePlugin {
 
             // 将楼层组添加到楼层组容器
             floorsGroup.add(floorGroup)
-
-            console.log(`🎯 创建楼层组: ${floorNumber}楼 (${floorGroup.name}) <- ${floorData.name}`)
         })
 
         // 将楼层组添加到建筑模型
         model.add(floorsGroup)
         this.floorsGroup = floorsGroup
 
-        console.log(`✅ 楼层重组完成，创建了 ${sortedFloorObjects.length} 个楼层组`)
-        console.log(`🏗️ 楼层组: ${floorsGroup.name}，包含 ${floorsGroup.children.length} 个楼层`)
-
         // 如果没有楼层对象，创建一个默认楼层组
         if (sortedFloorObjects.length === 0) {
-            console.log('🎯 没有找到楼层对象，创建默认楼层组')
             const defaultFloorGroup = new THREE.Group()
             defaultFloorGroup.name = 'Floor_1_Default'
             defaultFloorGroup.userData = {
@@ -505,8 +453,6 @@ export class BuildingControlPlugin extends BasePlugin {
             return
         }
 
-        console.log(`🔍 开始初始化楼层，楼层组: ${this.floorsGroup.name}, 子对象数量: ${this.floorsGroup.children.length}`)
-
         // 方法1: 查找明确标记的楼层组
         this.floorsGroup.children.forEach(child => {
             const floorGroup = child as THREE.Group
@@ -526,19 +472,16 @@ export class BuildingControlPlugin extends BasePlugin {
                 }
 
                 this.floors.set(floorNumber, floorItem)
-                console.log(`🎯 找到标记楼层: ${floorNumber}楼 (${floorGroup.name}) - 原始对象: ${floorGroup.userData.originalObject || '未知'}`)
             }
         })
 
         // 方法2: 如果没有找到明确标记的楼层，尝试智能创建楼层
         if (this.floors.size === 0) {
-            console.log('🔍 未找到明确标记的楼层，尝试智能创建楼层...')
             this.createSmartFloors()
         }
 
         // 方法3: 如果仍然没有楼层，将建筑的所有直接子对象作为楼层
         if (this.floors.size === 0 && this.currentBuildingModel) {
-            console.log('🔍 智能创建失败，尝试将建筑的所有子对象作为楼层...')
             this.createFloorsFromBuildingChildren()
         }
     }
@@ -616,7 +559,6 @@ export class BuildingControlPlugin extends BasePlugin {
     private autoDiscoverBuildingsInScene(scene: THREE.Scene): THREE.Group[] {
         const buildings: THREE.Group[] = []
 
-        console.log('🔍 查找场景顶层的可交互建筑...')
 
         // 只遍历场景的直接子对象，避免把楼层子节点误认为建筑
         scene.children.forEach((object) => {
@@ -627,7 +569,6 @@ export class BuildingControlPlugin extends BasePlugin {
             // 检查是否为标记的建筑模型
             if (object.userData && object.userData.isBuildingModel === true) {
                 buildings.push(object)
-                console.log(`🏢 发现建筑模型: ${modelName} (标记为isBuildingModel)`)
                 return
             }
 
@@ -641,7 +582,6 @@ export class BuildingControlPlugin extends BasePlugin {
                 object.userData.isInteractive = true
 
                 buildings.push(object)
-                console.log(`🏢 发现建筑模型: ${modelName} (通过名称模式识别)`)
             }
         })
 
@@ -665,7 +605,6 @@ export class BuildingControlPlugin extends BasePlugin {
         // 2. 排除设备命名模式（建筑名_nF_设备名）
         const equipmentPattern = /^.+_\d+F_.+$/i
         if (equipmentPattern.test(modelName)) {
-            console.log(`🚫 排除设备模型: ${modelName} (符合设备命名模式)`)
             return false
         }
 
@@ -677,7 +616,6 @@ export class BuildingControlPlugin extends BasePlugin {
         ]
         const isFloorName = floorPatterns.some(pattern => pattern.test(modelName))
         if (isFloorName) {
-            console.log(`🚫 排除楼层对象: ${modelName} (符合楼层命名模式)`)
             return false
         }
 
@@ -686,17 +624,14 @@ export class BuildingControlPlugin extends BasePlugin {
         const hasEquipmentKeyword = equipmentKeywords.some(keyword => upperName.includes(keyword))
 
         if (hasEquipmentKeyword) {
-            console.log(`🚫 排除设备对象: ${modelName} (包含设备关键词)`)
             return false
         }
 
         // 5. 检查对象结构特征（主建筑通常有较多子对象）
         if (object.children.length < 1) {
-            console.log(`🚫 排除空对象: ${modelName} (无子对象)`)
             return false
         }
 
-        console.log(`✅ 确认为顶层建筑模型: ${modelName}`)
         return true
     }
 
@@ -782,10 +717,7 @@ export class BuildingControlPlugin extends BasePlugin {
             return
         }
 
-        console.log('🔧 开始基于命名规则的智能设备关联...')
-
         const currentBuildingName = this.getModelName(this.currentBuildingModel).toUpperCase()
-        console.log(`🏢 当前建筑: ${currentBuildingName}`)
 
         // 1. 扫描场景中的所有独立设备模型
         const discoveredEquipment: Array<{
@@ -803,15 +735,11 @@ export class BuildingControlPlugin extends BasePlugin {
         this.findEquipmentInScene(scene, discoveredEquipment)
 
         if (discoveredEquipment.length === 0) {
-            console.log('🔧 场景中未发现符合命名规则的独立设备模型')
             return
         }
 
-        console.log(`🔧 发现 ${discoveredEquipment.length} 个潜在设备模型:`)
         discoveredEquipment.forEach((equipment, index) => {
             const info = equipment.nameInfo
-            console.log(`  [${index + 1}] ${equipment.modelName}`)
-            console.log(`      建筑: ${info.buildingName}, 楼层: ${info.floorNumber}F, 房间: ${info.roomNumber || '无'}, 设备: ${info.deviceName}`)
         })
 
         // 2. 筛选属于当前建筑的设备
@@ -821,11 +749,8 @@ export class BuildingControlPlugin extends BasePlugin {
         })
 
         if (buildingEquipment.length === 0) {
-            console.log(`🔧 没有找到属于建筑 "${currentBuildingName}" 的设备`)
             return
         }
-
-        console.log(`🔧 筛选出 ${buildingEquipment.length} 个属于当前建筑的设备`)
 
         // 3. 按楼层分组设备
         const equipmentByFloor = new Map<number, Array<typeof buildingEquipment[0]>>()
@@ -836,11 +761,6 @@ export class BuildingControlPlugin extends BasePlugin {
                 equipmentByFloor.set(floorNumber, [])
             }
             equipmentByFloor.get(floorNumber)!.push(equipment)
-        })
-
-        console.log(`🔧 设备按楼层分组:`)
-        equipmentByFloor.forEach((equipmentList, floorNumber) => {
-            console.log(`  ${floorNumber}楼: ${equipmentList.length} 个设备`)
         })
 
         // 4. 将设备关联到对应楼层
@@ -856,8 +776,6 @@ export class BuildingControlPlugin extends BasePlugin {
                 return
             }
 
-            console.log(`🔧 开始关联 ${floorNumber}楼的 ${equipmentList.length} 个设备...`)
-
             equipmentList.forEach((equipment) => {
                 try {
                     // 将设备从场景中移除并添加到楼层组中
@@ -868,16 +786,6 @@ export class BuildingControlPlugin extends BasePlugin {
                     totalSkipped++
                 }
             })
-        })
-
-        console.log(`🔧 设备关联完成: 成功 ${totalAssociated} 个, 跳过 ${totalSkipped} 个`)
-
-        // 5. 更新楼层信息
-        this.floors.forEach((floor) => {
-            if (floor.associatedEquipment.length > 0) {
-                console.log(`📊 ${floor.floorNumber}楼关联了 ${floor.associatedEquipment.length} 个设备:`, 
-                    floor.associatedEquipment.map((eq) => this.getModelName(eq)))
-            }
         })
     }
 
@@ -895,13 +803,9 @@ export class BuildingControlPlugin extends BasePlugin {
         }
         modelName: string
     }>): void {
-        console.log('🔍 开始扫描场景中的独立设备模型...')
-        
         scene.children.forEach((object) => {
             this.findEquipmentInObject(object, equipmentList)
         })
-        
-        console.log(`🔍 场景扫描完成，共发现 ${equipmentList.length} 个设备模型`)
     }
 
     /**
@@ -922,7 +826,6 @@ export class BuildingControlPlugin extends BasePlugin {
 
         // 如果是建筑模型，跳过其内部结构（避免把楼层误认为设备）
         if (object instanceof THREE.Group && object.userData?.isBuildingModel) {
-            console.log(`🏢 跳过建筑内部结构: ${modelName}`)
             return
         }
 
@@ -933,12 +836,6 @@ export class BuildingControlPlugin extends BasePlugin {
                 object: object,
                 nameInfo: nameInfo,
                 modelName: modelName
-            })
-            console.log(`🔧 发现独立设备模型: ${modelName}`, {
-                建筑: nameInfo.buildingName,
-                楼层: `${nameInfo.floorNumber}F`,
-                房间: nameInfo.roomNumber || '无',
-                设备: nameInfo.deviceName
             })
             return // 找到设备后不再遍历其子对象
         }
@@ -955,7 +852,6 @@ export class BuildingControlPlugin extends BasePlugin {
      * 将设备关联到指定楼层
      */
     private associateEquipmentToFloor(equipment: THREE.Object3D, floor: FloorItem, modelName: string): void {
-        console.log(`🔧 正在关联设备 "${modelName}" 到 ${floor.floorNumber}楼`)
         // 记录关联关系
         floor.associatedEquipment.push(equipment)
     }
@@ -985,8 +881,6 @@ export class BuildingControlPlugin extends BasePlugin {
         // 按Y坐标排序（从低到高）
         potentialFloors.sort((a, b) => a.y - b.y)
 
-        console.log('🔍 找到潜在楼层对象:', potentialFloors.map(f => `${f.name} (Y: ${f.y.toFixed(2)})`))
-
         // 创建楼层数据
         potentialFloors.forEach((floorData, index) => {
             const floorNumber = index + 1 // 从1楼开始
@@ -1004,12 +898,10 @@ export class BuildingControlPlugin extends BasePlugin {
             }
 
             this.floors.set(floorNumber, floorItem)
-            console.log(`🎯 创建智能楼层: ${floorNumber}楼 (${floorData.name}) - 位置: (${originalPosition.x.toFixed(2)}, ${originalPosition.y.toFixed(2)}, ${originalPosition.z.toFixed(2)}) - 世界Y: ${floorData.y.toFixed(2)}`)
         })
 
         // 如果仍然没有楼层，创建一个默认楼层
         if (this.floors.size === 0 && this.floorsGroup.children.length === 0) {
-            console.log('🎯 创建默认楼层（整个建筑作为一层）')
             const floorItem: FloorItem = {
                 group: this.floorsGroup,
                 floorNumber: 1,
@@ -1030,8 +922,6 @@ export class BuildingControlPlugin extends BasePlugin {
     private createFloorsFromBuildingChildren(): void {
         if (!this.currentBuildingModel) return
 
-        console.log('🔍 将建筑的所有子对象作为楼层处理...')
-
         // 收集所有可能的楼层对象（排除外立面，特别是mask）
         const potentialFloors: { object: THREE.Object3D, y: number, name: string }[] = []
         const facadeKeywords = ['mask', 'facade', 'exterior', 'wall', 'curtain', '外立面', '立面', '幕墙']
@@ -1046,7 +936,6 @@ export class BuildingControlPlugin extends BasePlugin {
             )
 
             if (isFacade) {
-                console.log(`🚫 跳过外立面对象: ${this.getModelName(child)} (包含关键词: ${facadeKeywords.find(k => name.includes(k) || modelName.includes(k))})`)
                 return
             }
 
@@ -1065,8 +954,6 @@ export class BuildingControlPlugin extends BasePlugin {
         // 按Y坐标排序（从低到高）
         potentialFloors.sort((a, b) => a.y - b.y)
 
-        console.log('🔍 从建筑子对象中找到潜在楼层:', potentialFloors.map(f => `${f.name} (Y: ${f.y.toFixed(2)})`))
-
         // 创建楼层数据
         potentialFloors.forEach((floorData, index) => {
             const floorNumber = index + 1 // 从1楼开始
@@ -1084,12 +971,10 @@ export class BuildingControlPlugin extends BasePlugin {
             }
 
             this.floors.set(floorNumber, floorItem)
-            console.log(`🎯 从建筑子对象创建楼层: ${floorNumber}楼 (${floorData.name}) - 位置: (${originalPosition.x.toFixed(2)}, ${originalPosition.y.toFixed(2)}, ${originalPosition.z.toFixed(2)}) - 世界Y: ${floorData.y.toFixed(2)}`)
         })
 
         // 如果仍然没有楼层，创建一个默认楼层
         if (this.floors.size === 0) {
-            console.log('🎯 创建默认楼层（整个建筑作为一层）')
             const floorItem: FloorItem = {
                 group: this.currentBuildingModel,
                 floorNumber: 1,
@@ -1146,18 +1031,15 @@ export class BuildingControlPlugin extends BasePlugin {
      */
     public expandFloors(): Promise<void> {
         if (this.currentState === FloorState.EXPANDED) {
-            console.log('🏗️ 楼层已经是展开状态')
             return Promise.resolve()
         }
 
         // 检查是否有楼层可以展开
         if (this.floors.size === 0) {
-            console.warn('⚠️ 没有可展开的楼层')
             return Promise.resolve()
         }
 
         if (this.floors.size === 1) {
-            console.log('🏗️ 只有一个楼层，无需展开')
             return Promise.resolve()
         }
 
@@ -1178,7 +1060,6 @@ export class BuildingControlPlugin extends BasePlugin {
             const lowestFloor = this.floors.get(lowestFloorNumber)!
             const baseY = lowestFloor.originalPosition.y
 
-            console.log(`🏗️ 开始展开楼层，最低楼层: ${lowestFloorNumber}楼，基准Y坐标: ${baseY.toFixed(2)}`)
 
             floorNumbers.forEach((floorNumber, index) => {
                 const floor = this.floors.get(floorNumber)!
@@ -1196,8 +1077,6 @@ export class BuildingControlPlugin extends BasePlugin {
                     floor.originalPosition.z
                 )
 
-                console.log(`🏗️ ${floorNumber}楼 - 楼层偏移: ${floorOffset}, 目标Y: ${targetY.toFixed(2)} (原始Y: ${floor.originalPosition.y.toFixed(2)}, 间距: ${this.config.expandDistance})`)
-
                 // 同时移动楼层和关联的设备
                 animations.push(this.animateFloorPosition(floor))
                 animations.push(this.animateEquipmentWithFloor(floor))
@@ -1205,7 +1084,6 @@ export class BuildingControlPlugin extends BasePlugin {
 
             Promise.all(animations).then(() => {
                 this.events.onExpandComplete?.()
-                console.log('🏗️ 楼层展开动画完成')
                 resolve()
             })
         })
@@ -1216,7 +1094,6 @@ export class BuildingControlPlugin extends BasePlugin {
      */
     public collapseFloors(): Promise<void> {
         if (this.currentState === FloorState.NORMAL) {
-            console.log('🏗️ 楼层已经是正常状态')
             return Promise.resolve()
         }
 
@@ -1274,10 +1151,14 @@ export class BuildingControlPlugin extends BasePlugin {
                     // 聚焦楼层：完全不透明
                     floor.opacity = this.config.focusOpacity
                     animations.push(this.animateFloorOpacity(floor, this.config.focusOpacity))
+                    // 聚焦楼层的设备也完全不透明
+                    animations.push(this.animateEquipmentOpacity(floor, this.config.focusOpacity))
                 } else {
                     // 其他楼层：半透明
                     floor.opacity = this.config.unfocusOpacity
                     animations.push(this.animateFloorOpacity(floor, this.config.unfocusOpacity))
+                    // 其他楼层的设备也半透明
+                    animations.push(this.animateEquipmentOpacity(floor, this.config.unfocusOpacity))
                 }
             })
 
@@ -1305,6 +1186,8 @@ export class BuildingControlPlugin extends BasePlugin {
             this.floors.forEach(floor => {
                 floor.opacity = 1.0
                 animations.push(this.animateFloorOpacity(floor, 1.0))
+                // 同时恢复设备的完全不透明
+                animations.push(this.animateEquipmentOpacity(floor, 1.0))
             })
 
             Promise.all(animations).then(() => {
@@ -1322,6 +1205,8 @@ export class BuildingControlPlugin extends BasePlugin {
 
         floor.opacity = opacity
         this.applyFloorOpacity(floor, opacity)
+        // 同时设置关联设备的透明度
+        this.applyEquipmentOpacity(floor, opacity)
     }
 
     /**
@@ -1354,7 +1239,6 @@ export class BuildingControlPlugin extends BasePlugin {
                 if (child.type === 'Group') {
                     facades.push(child)
                     const matchedKeyword = facadeKeywords.find(k => name.includes(k) || modelName.includes(k))
-                    console.log(`🎯 找到外立面组: ${this.getModelName(child)} (${child.type}, 匹配: ${matchedKeyword})`)
                     return // 找到外立面组，不需要继续遍历其子节点
                 }
 
@@ -1362,12 +1246,10 @@ export class BuildingControlPlugin extends BasePlugin {
                 if (child.type === 'Mesh' || child.type === 'SkinnedMesh') {
                     facades.push(child)
                     const matchedKeyword = facadeKeywords.find(k => name.includes(k) || modelName.includes(k))
-                    console.log(`🎯 找到外立面网格: ${this.getModelName(child)} (${child.type}, 匹配: ${matchedKeyword})`)
                 }
             }
         })
 
-        console.log(`🔍 外立面查找完成，共找到 ${facades.length} 个外立面对象`)
         return facades
     }
 
@@ -1379,7 +1261,6 @@ export class BuildingControlPlugin extends BasePlugin {
             facade.visible = false
             this.hiddenFacades.push(facade)
         })
-        console.log(`🙈 已隐藏 ${facades.length} 个外立面对象`)
     }
 
     /**
@@ -1389,7 +1270,6 @@ export class BuildingControlPlugin extends BasePlugin {
         this.hiddenFacades.forEach(facade => {
             facade.visible = true
         })
-        console.log(`👁️ 已显示 ${this.hiddenFacades.length} 个外立面对象`)
         this.hiddenFacades = []
     }
 
@@ -1416,10 +1296,6 @@ export class BuildingControlPlugin extends BasePlugin {
                     this.hideBuildingFacades(facades)
                 } else {
                     console.warn('⚠️ 未找到建筑外立面对象')
-                    console.log('🔍 调试信息 - 建筑根对象结构:')
-                    console.log('建筑根对象名称:', this.currentBuildingModel.name)
-                    console.log('建筑根对象userData:', this.currentBuildingModel.userData)
-
                     // 打印所有子对象的名称用于调试
                     const childNames: string[] = []
                     this.currentBuildingModel.traverse((child) => {
@@ -1427,7 +1303,6 @@ export class BuildingControlPlugin extends BasePlugin {
                             childNames.push(`${child.name} (${child.type})`)
                         }
                     })
-                    console.log('所有子对象:', childNames)
                 }
             }
         }
@@ -1467,8 +1342,6 @@ export class BuildingControlPlugin extends BasePlugin {
                 // 设备目标位置 = 当前位置 + (楼层目标位置 - 楼层当前位置)
                 const offset = floorTargetPos.clone().sub(floorCurrentPos)
                 const equipmentTargetPos = equipmentCurrentPos.clone().add(offset)
-
-                console.log(`🔧 设备 "${equipment.name}" 跟随 ${floor.floorNumber}楼移动: Y ${equipmentCurrentPos.y.toFixed(2)} → ${equipmentTargetPos.y.toFixed(2)}`)
 
                 // 创建设备动画
                 const equipmentAnimation = new Promise<void>((equipResolve) => {
@@ -1540,6 +1413,32 @@ export class BuildingControlPlugin extends BasePlugin {
     }
 
     /**
+     * 动画化楼层关联设备的透明度
+     */
+    private animateEquipmentOpacity(floor: FloorItem, targetOpacity: number): Promise<void> {
+        return new Promise((resolve) => {
+            if (floor.associatedEquipment.length === 0) {
+                resolve()
+                return
+            }
+
+            const current = { opacity: targetOpacity }
+
+            const tween = new TWEEN.Tween(current, this.activeTweens)
+                .to({ opacity: targetOpacity }, this.config.animationDuration)
+                .easing(this.getEasingFunction())
+                .onUpdate(() => {
+                    this.applyEquipmentOpacity(floor, current.opacity)
+                })
+                .onComplete(() => {
+                    this.removeTween(tween)
+                    resolve()
+                })
+                .start()
+        })
+    }
+
+    /**
      * 应用楼层透明度
      */
     private applyFloorOpacity(floor: FloorItem, opacity: number): void {
@@ -1554,6 +1453,26 @@ export class BuildingControlPlugin extends BasePlugin {
                     }
                 })
             }
+        })
+    }
+
+    /**
+     * 应用楼层关联设备的透明度
+     */
+    private applyEquipmentOpacity(floor: FloorItem, opacity: number): void {
+        floor.associatedEquipment.forEach(equipment => {
+            equipment.traverse((child) => {
+                if (child instanceof THREE.Mesh && child.material) {
+                    const material = Array.isArray(child.material) ? child.material : [child.material]
+                    material.forEach(mat => {
+                        if (mat instanceof THREE.Material) {
+                            mat.transparent = opacity < 1.0
+                            mat.opacity = opacity
+                            mat.needsUpdate = true
+                        }
+                    })
+                }
+            })
         })
     }
 
@@ -1602,7 +1521,6 @@ export class BuildingControlPlugin extends BasePlugin {
     public ensureBuildingModel(scene?: THREE.Scene): boolean {
         // 如果已有建筑模型，直接返回成功
         if (this.currentBuildingModel && this.floors.size > 0) {
-            console.log(`🏗️ 已有建筑模型: ${this.getModelName(this.currentBuildingModel)}`)
             return true
         }
 
@@ -1612,13 +1530,10 @@ export class BuildingControlPlugin extends BasePlugin {
             return false
         }
 
-        console.log('🔍 当前没有建筑模型，开始自动查找...')
-
         // 自动发现并设置建筑模型
         const discoveredBuildings = this.autoDiscoverBuildingsInScene(scene)
 
         if (discoveredBuildings.length > 0) {
-            console.log(`🏢 发现 ${discoveredBuildings.length} 个可交互建筑`)
             
             // 使用第一个发现的建筑
             const primaryBuilding = discoveredBuildings[0]
@@ -1627,7 +1542,6 @@ export class BuildingControlPlugin extends BasePlugin {
             if (success) {
                 // 执行设备关联
                 this.autoAssociateEquipmentByNaming(scene)
-                console.log(`✅ 已自动设置建筑模型: ${this.getModelName(primaryBuilding)}`)
                 return true
             }
         }
