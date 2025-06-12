@@ -74,6 +74,8 @@ export class BuildingControlPlugin extends BasePlugin {
     private currentBuildingModel: THREE.Group | null = null
     private activeTweens: TWEEN.Group = new TWEEN.Group()
     private focusedFloor: number | null = null
+    private scene: THREE.Scene | null = null
+    public scenePlugin: any
 
     // 外立面状态管理（参考mousePickPlugin的实现）
     private hiddenFacades: THREE.Object3D[] = []
@@ -94,15 +96,20 @@ export class BuildingControlPlugin extends BasePlugin {
 
     private events: FloorControlEvents = {}
 
+    // 在类中添加材质映射
+    private floorMaterials: Map<number, Map<THREE.Material, THREE.Material>> = new Map()
+
     constructor(params: any = {}) {
         super(params)
         this.updateConfig(params.floorControlConfig || {})
         this.events = params.events || {}
     }
 
-    public async init(scene?: THREE.Scene): Promise<void> {
+    public async init(scenePlugin?: any): Promise<void> {
+        let scene
         // 如果提供了场景对象，自动发现并设置建筑模型
-        if (scene) {
+        if (scenePlugin) {
+            scene = scenePlugin.scene
             const discoveredBuildings = this.autoDiscoverBuildingsInScene(scene)
 
             if (discoveredBuildings.length > 0) {
@@ -145,7 +152,6 @@ export class BuildingControlPlugin extends BasePlugin {
         this.findBuildingGroups(model)
 
         if (!this.floorsGroup) {
-            console.warn('⚠️ 未找到楼层组')
             // 打印所有子对象的详细信息
             const childInfo: any[] = []
             model.children.forEach((child, index) => {
@@ -1422,6 +1428,39 @@ export class BuildingControlPlugin extends BasePlugin {
                 return
             }
 
+            // 提前克隆建筑材质，保持各楼层材质独立，避免所有楼层材质同步修改的问题
+            if (!this.floorMaterials.has(floor.floorNumber)) {
+                this.floorMaterials.set(floor.floorNumber, new Map())
+            }
+            
+            const floorMaterialMap = this.floorMaterials.get(floor.floorNumber)!
+            
+            floor.group.traverse((object) => {
+                if (object instanceof THREE.Mesh && object.material) {
+                    const materials = Array.isArray(object.material) ? object.material : [object.material]
+                    const clonedMaterials: THREE.Material[] = []
+                    
+                    materials.forEach(mat => {
+                        if (mat instanceof THREE.Material) {
+                            // 检查是否已经为此楼层克隆过
+                            if (floorMaterialMap.has(mat)) {
+                                clonedMaterials.push(floorMaterialMap.get(mat)!)
+                            } else {
+                                // 克隆材质并记录映射
+                                const clonedMat = mat.clone()
+                                clonedMat.userData.isClonedForFloor = true
+                                clonedMat.userData.floorNumber = floor.floorNumber
+                                floorMaterialMap.set(mat, clonedMat)
+                                clonedMaterials.push(clonedMat)
+                            }
+                        }
+                    })
+                    
+                    // 将克隆的材质赋值回对象
+                    object.material = Array.isArray(object.material) ? clonedMaterials : clonedMaterials[0]
+                }
+            })
+            
             const current = { opacity: targetOpacity }
 
             const tween = new TWEEN.Tween(current, this.activeTweens)
@@ -1593,6 +1632,7 @@ export class BuildingControlPlugin extends BasePlugin {
     public destroy(): void {
         this.stopAllAnimations()
         this.floors.clear()
+        this.floorMaterials.clear()
         this.currentBuildingModel = null
         this.facadeGroup = null
         this.floorsGroup = null

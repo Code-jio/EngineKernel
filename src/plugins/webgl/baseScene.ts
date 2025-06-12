@@ -966,8 +966,6 @@ export class BaseScene extends BasePlugin {
         orthoCam.top = frustumSize / 2
         orthoCam.bottom = frustumSize / -2
         orthoCam.updateProjectionMatrix()
-        
-        console.log('📐 相机投影矩阵已更新，新宽高比:', newAspectRatio)
     }
 
     /**

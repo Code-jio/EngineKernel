@@ -293,7 +293,7 @@ export class SkyBox extends BasePlugin {
                 this.setupEnvironmentTexture(texture, 'HDR', this.config.hdrIntensity || 1.0)
             },
             progress => {
-                console.log("HDR文件加载进度:", (progress.loaded / progress.total * 100).toFixed(2) + '%')
+                // console.log("HDR文件加载进度:", (progress.loaded / progress.total * 100).toFixed(2) + '%')
             },
             err => {
                 console.error("HDR环境贴图加载失败:", err)

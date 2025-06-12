@@ -64,7 +64,6 @@ function processLoadedModel(model: THREE.Group, url: string): THREE.Group {
   
   const isBuildingModelFlag = isBuildingModel(fileName)
   
-  console.log(`🏷️ 模型名称设置完成: ${fileName}${isBuildingModelFlag ? ' (建筑模型)' : ''} (存储在userData.modelName中)`)
   return model
 }
 
@@ -299,13 +298,11 @@ export class ResourceReaderPlugin extends BasePlugin {
     // 创建模型加载执行器
     const modelExecutor = async (task: AsyncTask<THREE.Group>): Promise<THREE.Group> => {
       return new Promise((resolve, reject) => {
-        console.log(`🔄 开始异步加载: ${task.config.url}`)
         
         this.gltfLoader.load(
           task.config.url,
           // onLoad
           (gltf: any) => {
-            console.log(`✅ 异步加载成功: ${task.config.url}`)
             
             // 处理模型：设置名称和建筑模型特殊逻辑
             const processedModel = processLoadedModel(gltf.scene, task.config.url)
@@ -434,8 +431,6 @@ export class ResourceReaderPlugin extends BasePlugin {
     }
 
     try {
-      console.log(`📥 添加异步加载任务: ${url} (优先级: ${TaskPriority[priority]})`)
-      
       // 调度任务
       const result = await this.taskScheduler.schedule(taskConfig)
       
