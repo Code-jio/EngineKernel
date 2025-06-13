@@ -41,6 +41,11 @@ export interface FloorControlConfig {
     easingFunction: string       // 缓动函数
     showFacade: boolean          // 是否显示外立面
     autoHideFacade: boolean      // 展开时是否自动隐藏外立面
+    enableCameraAnimation: boolean    // 是否启用相机动画
+    cameraAnimationDuration: number   // 相机动画持续时间
+    cameraDistanceMultiplier: number  // 相机距离倍数（基于楼层大小）
+    cameraMinHeight: number          // 相机最小观察距离
+    restoreCameraOnUnfocus: boolean   // 取消聚焦时是否恢复相机位置
 }
 
 /**
@@ -53,6 +58,9 @@ export interface FloorControlEvents {
     onCollapseComplete?: () => void
     onFloorFocus?: (floorNumber: number) => void
     onFloorUnfocus?: () => void
+    onCameraAnimationStart?: (floorNumber: number) => void
+    onCameraAnimationComplete?: (floorNumber: number) => void
+    onCameraRestore?: () => void
 }
 
 /**
@@ -91,7 +99,12 @@ export class BuildingControlPlugin extends BasePlugin {
         unfocusOpacity: 0.2,
         easingFunction: 'Quadratic.InOut',
         showFacade: true,
-        autoHideFacade: true
+        autoHideFacade: true,
+        enableCameraAnimation: true,
+        cameraAnimationDuration: 1500,
+        cameraDistanceMultiplier: 1.5,
+        cameraMinHeight: 15,
+        restoreCameraOnUnfocus: true
     }
 
     private events: FloorControlEvents = {}
@@ -99,10 +112,20 @@ export class BuildingControlPlugin extends BasePlugin {
     // 在类中添加材质映射
     private floorMaterials: Map<number, Map<THREE.Material, THREE.Material>> = new Map()
 
+    // 相机管理
+    private cameraControls: any = null
+    private originalCameraPosition: THREE.Vector3 | null = null
+    private originalCameraTarget: THREE.Vector3 | null = null
+    private cameraAnimationTween: TWEEN.Tween<any> | null = null
+    
+    // 调试模式
+    private debugMode: boolean = false
+
     constructor(params: any = {}) {
         super(params)
         this.updateConfig(params.floorControlConfig || {})
         this.events = params.events || {}
+        this.debugMode = params.debugMode || false
     }
 
     public async init(scenePlugin?: any): Promise<void> {
@@ -110,6 +133,13 @@ export class BuildingControlPlugin extends BasePlugin {
         // 如果提供了场景对象，自动发现并设置建筑模型
         if (scenePlugin) {
             scene = scenePlugin.scene
+            this.scenePlugin = scenePlugin
+            
+            // 初始化相机控制器
+            if (scenePlugin.cameraControls) {
+                this.cameraControls = scenePlugin.cameraControls
+            }
+            
             const discoveredBuildings = this.autoDiscoverBuildingsInScene(scene)
 
             if (discoveredBuildings.length > 0) {
@@ -130,6 +160,22 @@ export class BuildingControlPlugin extends BasePlugin {
      */
     public updateConfig(newConfig: Partial<FloorControlConfig>): void {
         this.config = { ...this.config, ...newConfig }
+    }
+
+    /**
+     * 更新相机观察参数
+     * @param params 相机参数
+     */
+    public updateCameraParams(params: {
+        distanceMultiplier?: number
+        minHeight?: number
+    }): void {
+        if (params.distanceMultiplier !== undefined) {
+            this.config.cameraDistanceMultiplier = params.distanceMultiplier
+        }
+        if (params.minHeight !== undefined) {
+            this.config.cameraMinHeight = params.minHeight
+        }
     }
 
     /**
@@ -1152,6 +1198,7 @@ export class BuildingControlPlugin extends BasePlugin {
 
             const animations: Promise<void>[] = []
 
+            // 楼层透明度动画
             this.floors.forEach(floor => {
                 if (floor.floorNumber === floorNumber) {
                     // 聚焦楼层：完全不透明
@@ -1167,6 +1214,11 @@ export class BuildingControlPlugin extends BasePlugin {
                     animations.push(this.animateEquipmentOpacity(floor, this.config.unfocusOpacity))
                 }
             })
+
+            // 相机聚焦动画
+            if (this.config.enableCameraAnimation) {
+                animations.push(this.animateCameraToFloor(targetFloor))
+            }
 
             Promise.all(animations).then(() => {
                 resolve()
@@ -1189,12 +1241,18 @@ export class BuildingControlPlugin extends BasePlugin {
 
             const animations: Promise<void>[] = []
 
+            // 楼层透明度恢复动画
             this.floors.forEach(floor => {
                 floor.opacity = 1.0
                 animations.push(this.animateFloorOpacity(floor, 1.0))
                 // 同时恢复设备的完全不透明
                 animations.push(this.animateEquipmentOpacity(floor, 1.0))
             })
+
+            // 相机恢复动画
+            if (this.config.restoreCameraOnUnfocus && this.config.enableCameraAnimation) {
+                animations.push(this.restoreCameraState())
+            }
 
             Promise.all(animations).then(() => {
                 resolve()
@@ -1461,7 +1519,7 @@ export class BuildingControlPlugin extends BasePlugin {
                 }
             })
             
-            const current = { opacity: targetOpacity }
+            const current = { opacity: floor.opacity }
 
             const tween = new TWEEN.Tween(current, this.activeTweens)
                 .to({ opacity: targetOpacity }, this.config.animationDuration)
@@ -1540,6 +1598,221 @@ export class BuildingControlPlugin extends BasePlugin {
     }
 
     /**
+     * 计算楼层最佳观察位置（45度俯视角）
+     */
+    private calculateOptimalCameraPosition(floor: FloorItem): {
+        position: THREE.Vector3
+        target: THREE.Vector3
+    } {
+        // 获取楼层在世界坐标系中的包围盒
+        const bbox = new THREE.Box3().setFromObject(floor.group)
+        const worldCenter = bbox.getCenter(new THREE.Vector3())
+        const size = bbox.getSize(new THREE.Vector3())
+        
+        // Target始终是楼层的世界坐标中心
+        const target = worldCenter.clone()
+        
+        // 计算适合的观察距离（基于楼层的最大尺寸）
+        const maxSize = Math.max(size.x, size.z, size.y)
+        const baseDistance = Math.max(maxSize * 1.5, this.config.cameraMinHeight || 15)
+        
+        // 应用距离倍数
+        const observeDistance = baseDistance * (this.config.cameraDistanceMultiplier || 1.5)
+        
+        // 45度俯视角：相机高度 = 水平距离 * tan(45°) = 水平距离
+        // 为了保持45度角，水平距离和高度偏移相等
+        const horizontalOffset = observeDistance * 0.707 // cos(45°) ≈ 0.707
+        const heightOffset = observeDistance * 0.707     // sin(45°) ≈ 0.707
+        
+        // 计算相机位置（在楼层中心的东北方向，45度俯视）
+        const position = new THREE.Vector3(
+            target.x + horizontalOffset,
+            target.y + heightOffset,
+            target.z + horizontalOffset
+        )
+        
+        if (this.debugMode) {
+            console.log('📐 45度俯视相机计算', {
+                floorNumber: floor.floorNumber,
+                worldCenter: target,
+                floorSize: size,
+                observeDistance: observeDistance,
+                cameraPosition: position,
+                angle: '45度'
+            })
+        }
+        
+        return { position, target }
+    }
+
+    /**
+     * 保存当前相机状态
+     */
+    private saveCameraState(): void {
+        if (this.cameraControls) {
+            this.originalCameraPosition = this.cameraControls.object.position.clone()
+            this.originalCameraTarget = this.cameraControls.target.clone()
+        } else if (this.scenePlugin?.camera) {
+            // 备用方案：直接从场景插件获取相机信息
+            this.originalCameraPosition = this.scenePlugin.camera.position.clone()
+            this.originalCameraTarget = this.scenePlugin.cameraControls?.target?.clone() || new THREE.Vector3(0, 0, 0)
+        }
+    }
+
+        /**
+     * 执行相机动画（使用cameraFlyTo）
+     */
+    private executeCameraAnimation(targetPosition: THREE.Vector3, targetLookAt: THREE.Vector3): Promise<void> {
+        if (!this.scenePlugin?.cameraFlyTo) {
+            console.warn('⚠️ cameraFlyTo方法不可用，跳过相机动画')
+            return Promise.resolve()
+        }
+
+        return new Promise((resolve) => {
+            // 停止之前的相机动画
+            if (this.cameraAnimationTween) {
+                this.cameraAnimationTween.stop()
+                this.activeTweens.remove(this.cameraAnimationTween)
+                this.cameraAnimationTween = null
+            }
+
+            if (this.debugMode) {
+                console.log('🎥 相机动画开始', {
+                    position: targetPosition,
+                    target: targetLookAt,
+                    currentCameraPosition: this.cameraControls?.object?.position,
+                    currentCameraTarget: this.cameraControls?.target
+                })
+            }
+
+            // 使用cameraFlyTo执行相机动画
+            this.scenePlugin.cameraFlyTo({
+                position: targetPosition,
+                target: targetLookAt,
+                duration: this.config.cameraAnimationDuration,
+                onComplete: () => {
+                    // 动画完成后，确保相机控制器的状态同步
+                    this.ensureCameraControlsSync(targetPosition, targetLookAt)
+                    resolve()
+                }
+            })
+        })
+    }
+
+    /**
+     * 确保相机控制器状态同步
+     */
+    private ensureCameraControlsSync(position: THREE.Vector3, target: THREE.Vector3): void {
+        if (this.cameraControls) {
+            // 手动设置相机控制器的target，确保状态同步
+            this.cameraControls.target.copy(target)
+            this.cameraControls.object.position.copy(position)
+            
+            // 更新相机控制器
+            if (typeof this.cameraControls.update === 'function') {
+                this.cameraControls.update()
+            }
+            
+            if (this.debugMode) {
+                console.log('🎯 相机控制器状态已同步', {
+                    position: this.cameraControls.object.position,
+                    target: this.cameraControls.target
+                })
+            }
+        } else {
+            console.warn('⚠️ 相机控制器不可用，无法同步状态')
+        }
+    }
+
+    /**
+     * 相机聚焦到楼层
+     */
+    private animateCameraToFloor(floor: FloorItem): Promise<void> {
+        if (!this.scenePlugin?.cameraFlyTo || !this.config.enableCameraAnimation) {
+            return Promise.resolve()
+        }
+        
+        // 保存当前相机状态（仅在第一次聚焦时保存）
+        if (!this.originalCameraPosition) {
+            this.saveCameraState()
+        }
+        
+        // 触发相机动画开始事件
+        this.events.onCameraAnimationStart?.(floor.floorNumber)
+        
+        // 每次都重新计算目标位置，确保基于最新的楼层状态
+        const { position, target } = this.calculateOptimalCameraPosition(floor)
+        
+        if (this.debugMode) {
+            console.log(`🏢 聚焦楼层 ${floor.floorNumber}`, {
+                floorCenter: new THREE.Box3().setFromObject(floor.group).getCenter(new THREE.Vector3()),
+                calculatedPosition: position,
+                calculatedTarget: target,
+                currentState: this.currentState
+            })
+        }
+        
+        // 执行相机动画
+        return this.executeCameraAnimation(position, target).then(() => {
+            // 触发相机动画完成事件
+            this.events.onCameraAnimationComplete?.(floor.floorNumber)
+            
+            // 额外的验证：确保相机确实指向楼层中心
+            this.validateCameraFocus(floor, target)
+        })
+    }
+
+    /**
+     * 验证相机聚焦是否正确
+     */
+    private validateCameraFocus(floor: FloorItem, expectedTarget: THREE.Vector3): void {
+        if (!this.cameraControls) return
+        
+        const currentTarget = this.cameraControls.target.clone()
+        const distance = currentTarget.distanceTo(expectedTarget)
+        
+        if (distance > 1.0) { // 容差1米
+            if (this.debugMode) {
+                console.warn(`⚠️ 相机target可能不准确，距离楼层中心 ${distance.toFixed(2)} 米`)
+                console.log('当前target:', currentTarget)
+                console.log('期望target:', expectedTarget)
+            }
+            
+            // 强制修正target
+            this.cameraControls.target.copy(expectedTarget)
+            if (typeof this.cameraControls.update === 'function') {
+                this.cameraControls.update()
+            }
+            if (this.debugMode) {
+                console.log('🔧 已强制修正相机target')
+            }
+        } else if (this.debugMode) {
+            console.log('✅ 相机聚焦验证通过')
+        }
+    }
+
+    /**
+     * 恢复相机到原始状态
+     */
+    private restoreCameraState(): Promise<void> {
+        if (!this.originalCameraPosition || !this.originalCameraTarget || !this.config.enableCameraAnimation) {
+            return Promise.resolve()
+        }
+        
+        return this.executeCameraAnimation(
+            this.originalCameraPosition, 
+            this.originalCameraTarget
+        ).then(() => {
+            // 触发相机恢复事件
+            this.events.onCameraRestore?.()
+            
+            // 清除保存的状态
+            this.originalCameraPosition = null
+            this.originalCameraTarget = null
+        })
+    }
+
+    /**
      * 停止所有动画
      */
     public stopAllAnimations(): void {
@@ -1551,6 +1824,22 @@ export class BuildingControlPlugin extends BasePlugin {
      */
     public getCurrentState(): FloorState {
         return this.currentState
+    }
+
+    /**
+     * 获取当前聚焦的楼层号
+     */
+    public getFocusedFloor(): number | null {
+        return this.focusedFloor
+    }
+
+    /**
+     * 设置调试模式
+     * @param enabled 是否启用调试模式
+     */
+    public setDebugMode(enabled: boolean): void {
+        this.debugMode = enabled
+        console.log(`🐛 调试模式已${enabled ? '启用' : '关闭'}`)
     }
 
     /**
@@ -1631,13 +1920,30 @@ export class BuildingControlPlugin extends BasePlugin {
      */
     public destroy(): void {
         this.stopAllAnimations()
+        
+        // 停止相机动画
+        if (this.cameraAnimationTween) {
+            this.cameraAnimationTween.stop()
+            this.activeTweens.remove(this.cameraAnimationTween)
+            this.cameraAnimationTween = null
+        }
+        
         this.floors.clear()
         this.floorMaterials.clear()
         this.currentBuildingModel = null
         this.facadeGroup = null
         this.floorsGroup = null
+        
         // 重置外立面状态
         this.hiddenFacades = []
+        
+        // 清理相机相关资源
+        this.cameraControls = null
+        this.originalCameraPosition = null
+        this.originalCameraTarget = null
+        this.scenePlugin = null
+        this.scene = null
+        
         console.log(`🏗️ ${this.name} 已销毁`)
     }
 } 
