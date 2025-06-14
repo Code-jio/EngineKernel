@@ -203,6 +203,7 @@ export class SkyBox extends BasePlugin {
                     side: THREE.BackSide,
                 })
                 this.mesh = new THREE.Mesh(geometry, material)
+                this.mesh.renderOrder = 0  // 设置天空盒渲染顺序为0
                 this.mesh.name = "skyBox"
                 this.mesh.userData.skyBoxType = this.config.type
                 
@@ -235,6 +236,7 @@ export class SkyBox extends BasePlugin {
                     side: THREE.BackSide,
                 })
                 this.mesh = new THREE.Mesh(geometry, material)
+                this.mesh.renderOrder = 0  // 设置天空盒渲染顺序为0
                 this.mesh.name = "skyBox"
                 this.mesh.userData.skyBoxType = this.config.type
                 
@@ -354,7 +356,7 @@ export class SkyBox extends BasePlugin {
             side: THREE.BackSide,
         })
         this.mesh = new THREE.Mesh(geometry, material)
-        this.mesh.renderOrder = -1000  // 确保在最后渲染
+        this.mesh.renderOrder = 0  // 设置天空盒渲染顺序为0
         this.mesh.name = "skyBox"
         this.mesh.userData.skyBoxType = this.config.type
         
@@ -378,6 +380,7 @@ export class SkyBox extends BasePlugin {
             // 创建Sky实例
             this.skyMaterial = new Sky()
             this.mesh = this.skyMaterial.getMesh()  // 使用组合模式的mesh
+            this.mesh.renderOrder = 0  // 设置天空盒渲染顺序为0
             this.mesh.name = "skyBox"
             this.mesh.userData.skyBoxType = this.config.type
             

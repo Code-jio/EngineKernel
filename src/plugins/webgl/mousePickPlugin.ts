@@ -442,12 +442,25 @@ export class MousePickPlugin extends BasePlugin {
                     name: this.getModelName(result.object),
                     type: result.object.type
                 })), // 在事件根级别添加对象列表
+                // 点击到的三维场景实际位置：三维场景坐标系
+                mousePosition: {
+                    x: filteredResults[0].point.x,
+                    y: filteredResults[0].point.y,
+                    z: filteredResults[0].point.z
+                },
+                screenPosition: {
+                    x: event.clientX,
+                    y: event.clientY
+                }
             })
 
             // 处理选择和高亮
             this.handlePickResults(filteredResults, event)
         } else {
-            // 没有拾取到物体，在非Ctrl状态下清空选择和高亮
+
+            console.log("🎯 点击了空白区域")
+            
+            // 在非Ctrl状态下清空选择和高亮
             if (!this.isCtrlPressed) {
                 this.clearSelection()
                 this.clearOutlineHighlight()
@@ -573,9 +586,36 @@ export class MousePickPlugin extends BasePlugin {
                 this.lastClickTime = 0
                 this.lastClickedObject = null
             } else {
-                // 单击事件：正常选中和高亮
-                this.selectSingleObject(closestResult.object)
-                this.highlightObjectWithOutline(closestResult.object)
+                // 没有拾取到物体，检查是否是空白区域
+                if (this.isPickEmptyArea(results)) {
+                    // 发送空白区域点击事件
+                    this.emitPickEvent("emptyClick", {
+                        mousePosition: {
+                            x: this.mouse.x,
+                            y: this.mouse.y
+                        },
+                        screenPosition: {
+                            x: event.clientX,
+                            y: event.clientY
+                        },
+                        timestamp: Date.now()
+                    })
+                    this.clearSelection()
+                    this.clearOutlineHighlight()
+                }else{
+
+                    if(this.isPickedBuilding(results)){
+                        this.emitPickEvent("getBuilding", {
+                            object: closestResult.object,
+                            timestamp: Date.now()
+                        })
+                    }
+
+                    // 单击事件：正常选中和高亮
+                    this.selectSingleObject(closestResult.object)
+                    this.highlightObjectWithOutline(closestResult.object)
+                }
+
                 
                 // 更新双击检测状态
                 this.lastClickTime = currentTime
@@ -1558,5 +1598,27 @@ export class MousePickPlugin extends BasePlugin {
         
         // 向后兼容：如果userData.modelName不存在，使用object.name
         return object.name || '未命名模型'
+    }
+
+    // 检测是不是拾取到空白区域
+    private isPickEmptyArea(results: PickResult[]): boolean {
+        // 如果拾取结果里面只包含天空盒和地板则认定为拾取到空白区域
+        for (const result of results) {
+            if (result.object.name !== 'skyBox' && result.object.name !== 'ground') {
+                return false
+            }
+        }
+        return true
+    }
+
+    // isPickedBuilding
+    private isPickedBuilding(results: PickResult[]): boolean {
+        // 如果拾取结果里面包含建筑则认定为拾取到建筑
+        for (const result of results) {
+            if (result.object.name.toLocaleLowerCase().includes('building')) {
+                return true
+            }
+        }
+        return false
     }
 }

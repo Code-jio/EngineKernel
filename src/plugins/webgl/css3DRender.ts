@@ -6,9 +6,10 @@ import * as TWEEN from "@tweenjs/tween.js"
 interface CSS3DConfig {
     // 基础配置
     element: HTMLElement | string
-    position?: [number, number, number]
+    position: [number, number, number]
     rotation?: [number, number, number] 
     scale?: number | [number, number, number]  // 支持非等比缩放
+    offset?: number
     
     // 显示配置
     display?: boolean // css属性控制。
@@ -93,12 +94,13 @@ export class CSS3DRenderPlugin extends BasePlugin {
      * @returns CSS3DObject
      * @description 创建CSS3D对象，并添加到CSS3D渲染器中
      */
-    createCSS3DObject(options: CSS3DConfig): string {
+    createCSS3DObject(options: CSS3DConfig): CSS3DObject {
         // 提供默认参数
         const defaultOptions: CSS3DConfig = {
             element: document.createElement('div') || null,
             position: [0, 0, 0],
             rotation: [0, 0, 0],
+            offset: 0,
             scale: 0.05,
             display: true, // 默认可见
             opacity: 1,
@@ -132,9 +134,10 @@ export class CSS3DRenderPlugin extends BasePlugin {
 
             // 创建CSS3D对象
             const object = new CSS3DObject(element)
+            object.visible = mergedOptions.display || false
 
             // 设置位置
-            const position = mergedOptions.position || [0, 0, 0]
+            const position = mergedOptions.position
             object.position.set(position[0], position[1], position[2])
 
             // 设置旋转
@@ -167,7 +170,7 @@ export class CSS3DRenderPlugin extends BasePlugin {
                 mergedOptions.complete()
             }
 
-            return objectId
+            return object
             
         } catch (error) {
             console.error('创建CSS3D对象失败:', error)
@@ -204,7 +207,7 @@ export class CSS3DRenderPlugin extends BasePlugin {
             }
         }
         
-        window.addEventListener('resize', handleResize)
+        window.addEventListener('resize', handleResize) 
         this.resizeHandler = handleResize
     }
 
@@ -291,6 +294,8 @@ export class CSS3DRenderPlugin extends BasePlugin {
         if (!this.css3Drenderer || !this.mainScene || !this.camera) {
             return
         }
+        // 更新动画
+        this.animations.update()
 
         // 根据渲染模式决定是否渲染
         const shouldRender = this.renderMode === 'continuous' || 
@@ -301,12 +306,8 @@ export class CSS3DRenderPlugin extends BasePlugin {
         }
         
         try {
-            // 更新动画
-            this.animations.update()
-            
             this.css3Drenderer.render(this.mainScene, this.camera)
             this.needsRender = false
-            // this.lastRenderTime = now
             
         } catch (error) {
             console.error('CSS3D渲染失败:', error)
@@ -410,7 +411,7 @@ export class CSS3DRenderPlugin extends BasePlugin {
      * @param options 配置选项
      * @returns 对象ID
      */
-    createObject(options: CSS3DConfig): string {
+    createObject(options: CSS3DConfig): CSS3DObject {
         return this.createCSS3DObject(options)
     }
 
@@ -545,7 +546,7 @@ export class CSS3DRenderPlugin extends BasePlugin {
         // console.log('🎨 CSS3D渲染插件初始化完成')
     }
     
-        /**
+    /**
      * 渐入效果
      * @param object CSS3D对象
      * @param duration 动画时长（毫秒）
@@ -619,4 +620,31 @@ export class CSS3DRenderPlugin extends BasePlugin {
             
         this.markNeedsRender();
     }
+
+    setVisible(object: CSS3DObject, visible: boolean) {
+        if (object.visible === visible) return;
+    
+        if (visible) {
+          // 显示流程
+          object.element.style.display = 'block';
+          object.element.style.opacity = '0';
+          
+          // 强制布局计算
+          void object.element.offsetHeight;
+          
+          object.element.style.opacity = '1';
+        } else {
+          // 隐藏流程
+          object.element.style.opacity = '0';
+          
+          // 延迟实际隐藏
+          setTimeout(() => {
+            if (!object.visible) {
+              object.element.style.display = 'none';
+            }
+          }, 200);
+        }
+        
+        object.visible = visible;
+      }
 }

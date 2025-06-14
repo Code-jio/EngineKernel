@@ -233,12 +233,11 @@ const DEFAULT_CONFIGS = {
             type: "perspective",
             fov: 45,
             near: 0.1,
-            far: 500000,
+            far: 50000,
             position: [100, 100, 100],
             lookAt: [0, 0, 0]
         },
         rendererConfig: {
-            antialias: false,
             alpha: false,
             precision: "highp",
             powerPreference: "high-performance",
@@ -261,8 +260,8 @@ const DEFAULT_CONFIGS = {
             },
             polygonOffsetConfig: {
                 enabled: false,
-                factor: 0,
-                units: 0
+                factor: 1.0,
+                units: 1.0
             },
             depthRangeConfig: {
                 autoOptimize: true,
@@ -314,12 +313,11 @@ const DEFAULT_CONFIGS = {
             type: "perspective",
             fov: 45,
             near: 0.01,
-            far: 500000,
+            far: 50000,
             position: [300, 300, 300],
             lookAt: [0, 0, 0]
         },
         rendererConfig: {
-            antialias: true,
             alpha: false,
             precision: "highp",
             powerPreference: "high-performance",
@@ -352,7 +350,7 @@ const DEFAULT_CONFIGS = {
                 autoOptimize: true,
                 nearFarRatio: 1/5000,
                 minNear: 0.01,
-                maxFar: 500000
+                maxFar: 50000
             },
             conflictDetection: {
                 enabled: true,
@@ -399,12 +397,11 @@ const DEFAULT_CONFIGS = {
             type: "perspective",
             fov: 45,
             near: 0.001,
-            far: 500000,
+            far: 50000,
             position: [100, 100, 100],
             lookAt: [0, 0, 0]
         },
         rendererConfig: {
-            antialias: true,
             alpha: false,
             precision: "highp",
             powerPreference: "high-performance",
@@ -442,7 +439,7 @@ const DEFAULT_CONFIGS = {
                 autoOptimize: true,
                 nearFarRatio: 1/10000,
                 minNear: 0.001,
-                maxFar: 500000
+                maxFar: 50000
             },
             conflictDetection: {
                 enabled: true,
@@ -487,12 +484,11 @@ const DEFAULT_CONFIGS = {
             type: "perspective",
             fov: 45,
             near: 0.01,
-            far: 500000,
+            far: 50000,
             position: [100, 100, 100],
             lookAt: [0, 0, 0]
         },
         rendererConfig: {
-            antialias: true,
             alpha: true,
             precision: "highp",
             powerPreference: "high-performance",
@@ -525,7 +521,7 @@ const DEFAULT_CONFIGS = {
                 autoOptimize: true,
                 nearFarRatio: 1/5000,
                 minNear: 0.01,
-                maxFar: 500000
+                maxFar: 50000
             },
             conflictDetection: {
                 enabled: true,
@@ -736,8 +732,8 @@ export class BaseScene extends BasePlugin {
             },
             polygonOffsetConfig: {
                 enabled: false,
-                factor: 0,
-                units: 0
+                factor: 1.0,
+                units: 1.0
             },
             depthRangeConfig: {
                 autoOptimize: false,
@@ -826,10 +822,12 @@ export class BaseScene extends BasePlugin {
         this.scene.add(this.ambientLight)
         
         this.renderer = new THREE.WebGLRenderer({
-            antialias: rendererOption.antialias, // 抗锯齿
+            // antialias: rendererOption.antialias, // 抗锯齿
             alpha: rendererOption.alpha || false, // 透明
             precision: rendererOption.precision, // 精度
             powerPreference: rendererOption.powerPreference, // 性能
+            logarithmicDepthBuffer: true,
+            antialias: true
         })
 
         // 直接将Three.js生成的canvas添加到body
@@ -1115,6 +1113,7 @@ export class BaseScene extends BasePlugin {
         // 色调映射
         this.renderer.toneMapping = config.toneMapping
         this.renderer.toneMappingExposure = config.toneMappingExposure
+        // this.renderer.useLogDepthBuffer = true; // 启用对数深度缓冲区
         
         // 阴影配置（默认关闭）
         this.renderer.shadowMap.enabled = config.shadowMapEnabled

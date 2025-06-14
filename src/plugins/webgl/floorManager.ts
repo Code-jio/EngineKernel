@@ -124,8 +124,9 @@ export class FloorManager {
         if (this.floor) {
             this.floor.position.set(...config.position)
             this.floor.receiveShadow = true
+            this.floor.renderOrder = 0  // 设置地板渲染顺序为0
             this.scene.add(this.floor)
-            console.log(`✅ ${config.type}地板已创建`)
+            console.log(`✅ ${config.type}地板已创建，renderOrder设置为0`)
         }
     }
     

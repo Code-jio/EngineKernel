@@ -39,8 +39,8 @@ setTimeout(() => {
     // 等待默认图层创建完成
     setTimeout(() => {
         runTests()
-    }, 100)
-}, 100)
+    }, 0)
+}, 0)
 
 function runTests() {
     console.log('🔬 开始执行测试...')
@@ -341,7 +341,7 @@ function runTests() {
         } else {
             console.log('⚠️ 部分测试未通过，请检查实现')
         }
-    }, 1000)
+    }, 0)
 }
 
 export { } 
