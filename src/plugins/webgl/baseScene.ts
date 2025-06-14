@@ -4,7 +4,6 @@ import { PipelineManager } from "../../core/pipelineManager"
 import { FloorConfig, FloorManager } from "./floorManager"
 import { BaseControls, OrbitControlOptions } from "./baseControl"
 import * as TWEEN from '@tweenjs/tween.js'
-console.log(TWEEN)
 
 const tween_group = new TWEEN.Group();
 
@@ -249,7 +248,7 @@ const DEFAULT_CONFIGS = {
     development: {
         cameraConfig: {
             type: "perspective",
-            fov: 60,
+            fov: 45,
             near: 0.01,
             far: 500000,
             position: [100, 100, 100],
@@ -376,7 +375,7 @@ export class BaseScene extends BasePlugin {
             }
             
             // 获取配置预设
-            const preset = meta.userData.preset || 'balanced'
+            const preset = meta.userData.preset || 'highQuality' // 
             const defaultConfig = DEFAULT_CONFIGS[preset as keyof typeof DEFAULT_CONFIGS] || DEFAULT_CONFIGS.balanced
             
             // 合并用户配置与默认配置
@@ -510,7 +509,7 @@ export class BaseScene extends BasePlugin {
         this.initialize()
         
         // 显示初始化信息
-        const usedPreset = meta.userData.preset || 'balanced'
+        const usedPreset = meta.userData.preset || 'highQuality'
         console.log(`✅ BaseScene初始化完成 - 使用预设: ${usedPreset}`, {
             相机类型: cameraOption.type,
             光照系统: 'Three.js r155+ 物理正确光照',

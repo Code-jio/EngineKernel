@@ -103,9 +103,9 @@ export class BaseControls {
         this.control.minDistance = 1
         this.control.maxDistance = this.boundaryRadius * 0.8 // 80%的边界半径
         
-        // 极角限制（垂直旋转）- 防止相机潜入地下
-        this.control.minPolarAngle = 0.1 // 接近但不到顶部
-        this.control.maxPolarAngle = Math.PI / 2 - 0.01 // 最多只能平视地面，不能潜入地下
+        // 极角限制（垂直旋转）- 限制俯仰角在15-90度
+        this.control.minPolarAngle = 0 // 允许垂直向下（90度俯仰角）
+        this.control.maxPolarAngle = Math.PI / 2 - Math.PI * 5 / 180 // 限制最小俯仰角为15度
         
         // // 启用阻尼
         // this.control.enableDamping = false
@@ -260,6 +260,11 @@ export class BaseControls {
             this.control.update()
             
             console.warn(`相机位置被限制在边界内，距离: ${distanceFromCenter.toFixed(2)}`)
+        }
+
+        if (position.y < 0.5) {
+            position.y = 0.5
+            this.camera.position.copy(position)
         }
         
         // 限制target也在合理范围内
