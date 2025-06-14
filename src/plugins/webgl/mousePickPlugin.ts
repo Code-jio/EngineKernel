@@ -65,6 +65,7 @@ interface PickConfig {
     includeInvisible: boolean // 是否包含不可见物体
     recursive: boolean // 是否递归检测子物体
     enableDebug: boolean // 是否开启调试模式
+    showHighlight: boolean // 是否显示高亮
 }
 
 // 框选区域接口
@@ -91,13 +92,14 @@ export class MousePickPlugin extends BasePlugin {
 
     // 拾取配置
     private config: PickConfig = {
-        mode: PickMode.SINGLE,
-        tolerance: 0,
-        maxDistance: Infinity,
-        sortByDistance: true,
-        includeInvisible: false,
-        recursive: true,
-        enableDebug: false,
+        mode: PickMode.SINGLE, // 拾取模式
+        tolerance: 0, // 拾取容差（像素）
+        maxDistance: Infinity, // 最大拾取距离
+        sortByDistance: true, // 是否按距离排序
+        includeInvisible: false, // 是否包含不可见物体
+        recursive: true, // 是否递归检测子物体
+        enableDebug: false, // 是否开启调试模式
+        showHighlight: true, // 是否显示高亮
     }
 
     // 选中状态管理
@@ -138,7 +140,6 @@ export class MousePickPlugin extends BasePlugin {
     private highlightedObject: THREE.Object3D | null = null
     private highlightOutline: THREE.LineSegments | null = null
     private outlineMaterial: THREE.LineBasicMaterial
-    public showHighlight: boolean = false
 
     // 建筑控制状态管理
     private openedBuilding: THREE.Object3D | null = null
@@ -402,8 +403,48 @@ export class MousePickPlugin extends BasePlugin {
 
         // 过滤结果
         const filteredResults = this.filterIntersections(intersects)
-
         if (filteredResults.length > 0) {
+            // 发送拾取事件 - 只包含3D场景信息
+            this.emitPickEvent("object-picked", {
+                results: filteredResults.map(result => ({
+                    objectId: result.object.id,
+                    objectName: this.getModelName(result.object),
+                    objectType: result.objectType,
+                    object: result.object,
+                    worldPosition: result.point,
+                    localPosition: result.localPoint,
+                    distance: result.distance,
+                    normal: result.normal,
+                    uv: result.uv ? [result.uv.x, result.uv.y] : undefined,
+                    materialName: result.materialName,
+                    geometryType: result.geometryType,
+                    faceIndex: result.faceIndex,
+                    instanceId: result.instanceId,
+                    worldMatrix: result.worldMatrix,
+                    boundingBox: result.boundingBox
+                        ? {
+                              min: result.boundingBox.min,
+                              max: result.boundingBox.max,
+                          }
+                        : undefined,
+                    objectList: result.objectList?.map(obj => ({
+                        id: obj.id,
+                        name: this.getModelName(obj),
+                        type: obj.type
+                    })) || [], // 添加对象列表信息
+                })),
+                selectedObjectId: filteredResults[0].object.id,
+                selectedObjectName: this.getModelName(filteredResults[0].object),
+                pickMode: this.isCtrlPressed ? "box-select-mode" : this.config.mode,
+                timestamp: Date.now(),
+                objectList: filteredResults.map(result => ({
+                    id: result.object.id,
+                    name: this.getModelName(result.object),
+                    type: result.object.type
+                })), // 在事件根级别添加对象列表
+            })
+
+            // 处理选择和高亮
             this.handlePickResults(filteredResults, event)
         } else {
             // 没有拾取到物体，在非Ctrl状态下清空选择和高亮
@@ -543,49 +584,6 @@ export class MousePickPlugin extends BasePlugin {
         }
         // 如果Ctrl键按下，这里不处理选择，因为Ctrl键用于框选模式
 
-        // 提取对象列表
-        const objectList = results.map(result => result.object);
-
-        // 发送拾取事件 - 只包含3D场景信息
-        this.emitPickEvent("object-picked", {
-            results: results.map(result => ({
-                objectId: result.object.id,
-                objectName: this.getModelName(result.object),
-                objectType: result.objectType,
-                object:result.object,
-                worldPosition: result.point,
-                localPosition: result.localPoint,
-                distance: result.distance,
-                normal: result.normal,
-                uv: result.uv ? [result.uv.x, result.uv.y] : undefined,
-                materialName: result.materialName,
-                geometryType: result.geometryType,
-                faceIndex: result.faceIndex,
-                instanceId: result.instanceId,
-                worldMatrix: result.worldMatrix,
-                boundingBox: result.boundingBox
-                    ? {
-                          min: result.boundingBox.min,
-                          max: result.boundingBox.max,
-                      }
-                    : undefined,
-                objectList: result.objectList?.map(obj => ({
-                    id: obj.id,
-                    name: this.getModelName(obj),
-                    type: obj.type
-                })) || [], // 添加对象列表信息
-            })),
-            selectedObjectId: closestResult.object.id,
-            selectedObjectName: this.getModelName(closestResult.object),
-            pickMode: this.isCtrlPressed ? "box-select-mode" : this.config.mode,
-            timestamp: Date.now(),
-            objectList: objectList.map(obj => ({
-                id: obj.id,
-                name: this.getModelName(obj),
-                type: obj.type
-            })), // 在事件根级别添加对象列表
-        })
-
         console.log("🎯 拾取成功!", {
             objectName: this.getModelName(closestResult.object),
             objectType: closestResult.objectType,
@@ -595,7 +593,7 @@ export class MousePickPlugin extends BasePlugin {
                 objectId: result.object.id,
                 objectName: this.getModelName(result.object),
                 objectType: result.objectType,
-                object:result.object,
+                object: result.object,
                 worldPosition: result.point,
                 localPosition: result.localPoint,
                 distance: result.distance,
@@ -618,7 +616,6 @@ export class MousePickPlugin extends BasePlugin {
             pickMode: this.config.mode,
             timestamp: Date.now(),
         })
-
     }
 
     /**
@@ -907,7 +904,7 @@ export class MousePickPlugin extends BasePlugin {
      */
     private highlightObjectWithOutline(object: THREE.Object3D): void {
         // 如果高亮开关关闭，直接返回
-        if (!this.showHighlight) {
+        if (!this.config.showHighlight) {
             return
         }
 
@@ -1035,7 +1032,7 @@ export class MousePickPlugin extends BasePlugin {
      * 设置是否显示轮廓高亮
      */
     public setShowHighlight(enable: boolean): void {
-        this.showHighlight = enable
+        this.config.showHighlight = enable
         
         // 如果关闭高亮，清除当前的高亮效果
         if (!enable) {
@@ -1049,7 +1046,7 @@ export class MousePickPlugin extends BasePlugin {
      * 获取轮廓高亮开关状态
      */
     public getShowHighlight(): boolean {
-        return this.showHighlight
+        return this.config.showHighlight
     }
 
     /**

@@ -1,6 +1,7 @@
 import { THREE, BasePlugin } from "../basePlugin"
 import { CSS3DRenderer, CSS3DObject } from "../../utils/three-imports"
 import eventBus from '../../eventBus/eventBus'
+import * as TWEEN from "@tweenjs/tween.js"
 
 interface CSS3DConfig {
     // 基础配置
@@ -10,7 +11,7 @@ interface CSS3DConfig {
     scale?: number | [number, number, number]  // 支持非等比缩放
     
     // 显示配置
-    visible?: boolean
+    display?: boolean // css属性控制。
     opacity?: number
     zIndex?: number
     
@@ -19,8 +20,6 @@ interface CSS3DConfig {
     name?: string
     userData?: any
     
-    // 交互配置
-    interactive?: boolean
     draggable?: boolean
 
     
@@ -51,6 +50,9 @@ export class CSS3DRenderPlugin extends BasePlugin {
     // private lastRenderTime: number = 0
     // 存储update事件处理器引用，便于清理
     private updateHandler: (() => void) | null = null
+
+    // 动画组
+    private animations: TWEEN.Group = new TWEEN.Group()
 
     constructor(meta: any) {
         super(meta)
@@ -94,14 +96,13 @@ export class CSS3DRenderPlugin extends BasePlugin {
     createCSS3DObject(options: CSS3DConfig): string {
         // 提供默认参数
         const defaultOptions: CSS3DConfig = {
-            element: document.createElement('div'),
+            element: document.createElement('div') || null,
             position: [0, 0, 0],
             rotation: [0, 0, 0],
-            scale: 1,
-            visible: true,
+            scale: 0.05,
+            display: true, // 默认可见
             opacity: 1,
             zIndex: 1,
-            interactive: true,
             complete: () => {},
             onUpdate: () => {},
             onDestroy: () => {},
@@ -127,8 +128,7 @@ export class CSS3DRenderPlugin extends BasePlugin {
             // 设置基础样式
             element.style.opacity = mergedOptions.opacity?.toString() || '1'
             element.style.zIndex = mergedOptions.zIndex?.toString() || '1'
-            element.style.visibility = mergedOptions.visible ? 'visible' : 'hidden'
-            element.style.pointerEvents = mergedOptions.interactive ? 'auto' : 'none'
+            element.style.display = mergedOptions.display ? "block" : "none"
 
             // 创建CSS3D对象
             const object = new CSS3DObject(element)
@@ -186,9 +186,7 @@ export class CSS3DRenderPlugin extends BasePlugin {
      * @description 插件初始化方法，集成到渲染循环
      */
     private initialize () {
-        eventBus.on("update", () => {
-            this.update()
-        })
+        this.startRenderLoop()
 
         console.log("✅ CSS3D插件已通过eventBus集成到渲染循环")
         console.log(`🎬 当前渲染模式: ${this.renderMode}`)
@@ -303,12 +301,9 @@ export class CSS3DRenderPlugin extends BasePlugin {
         }
         
         try {
-            // // 避免过度渲染 - 限制最大FPS为60
-            // const now = performance.now()
-            // if (now - this.lastRenderTime < 16.67) { // ~60FPS
-            //     return
-            // }
-
+            // 更新动画
+            this.animations.update()
+            
             this.css3Drenderer.render(this.mainScene, this.camera)
             this.needsRender = false
             // this.lastRenderTime = now
@@ -538,15 +533,90 @@ export class CSS3DRenderPlugin extends BasePlugin {
      * @param coreInterface 核心接口
      */
     async init(coreInterface?: any): Promise<void> {
-        // 调用基类的init方法
-        await super.init(coreInterface)
+        // // 调用基类的init方法
+        // await super.init(coreInterface)
         
-        // 如果提供了核心接口，更新场景和相机引用
-        if (coreInterface) {
-            this.mainScene = coreInterface.scene || this.mainScene
-            this.camera = coreInterface.camera || this.camera
-        }
+        // // 如果提供了核心接口，更新场景和相机引用
+        // if (coreInterface) {
+        //     this.mainScene = coreInterface.scene || this.mainScene
+        //     this.camera = coreInterface.camera || this.camera
+        // }
         
-        console.log('🎨 CSS3D渲染插件初始化完成')
+        // console.log('🎨 CSS3D渲染插件初始化完成')
+    }
+    
+        /**
+     * 渐入效果
+     * @param object CSS3D对象
+     * @param duration 动画时长（毫秒）
+     */
+    fadeIn(object: CSS3DObject, duration: number = 1000): void {
+        if (!object || !object.element) return;
+        
+        // 设置初始状态
+        object.element.style.display = 'block';
+        object.element.style.opacity = '0';
+        object.visible = true;
+        
+        // 创建渐入动画
+        const startValues = { opacity: 0 };
+        const endValues = { opacity: 1 };
+        
+        new TWEEN.Tween(startValues, this.animations)
+            .to(endValues, duration)
+            .easing(TWEEN.Easing.Cubic.Out)
+            .onUpdate(() => {
+                if (object.element) {
+                    object.element.style.opacity = startValues.opacity.toString();
+                }
+            })
+            .onComplete(() => {
+                if (object.element) {
+                    object.element.style.opacity = '1';
+                }
+            })
+            .start();
+            
+        this.markNeedsRender();
+    }
+
+    /**
+     * 渐出效果
+     * @param object CSS3D对象
+     * @param duration 动画时长（毫秒）
+     * @param onComplete 完成回调
+     */
+    fadeOut(object: CSS3DObject, duration: number = 1000, onComplete?: () => void): void {
+        if (!object || !object.element) return;
+        
+        // 获取当前透明度
+        const currentOpacity = parseFloat(object.element.style.opacity || '1');
+        
+        // 创建渐出动画
+        const startValues = { opacity: currentOpacity };
+        const endValues = { opacity: 0 };
+        
+        new TWEEN.Tween(startValues, this.animations)
+            .to(endValues, duration)
+            .easing(TWEEN.Easing.Cubic.Out)
+            .onUpdate(() => {
+                if (object.element) {
+                    object.element.style.opacity = startValues.opacity.toString();
+                }
+            })
+            .onComplete(() => {
+                if (object.element) {
+                    object.element.style.opacity = '0';
+                    object.element.style.display = 'none';
+                }
+                object.visible = false;
+                
+                if (onComplete) {
+                    onComplete();
+                }
+            })
+            .start();
+            
+        this.markNeedsRender();
     }
 }
