@@ -6,6 +6,7 @@
 
 import { THREE, BasePlugin } from "../basePlugin"
 import * as TWEEN from '@tweenjs/tween.js'
+import eventBus from "../../eventBus/eventBus"
 
 /**
  * 楼层状态枚举
@@ -88,9 +89,6 @@ export class BuildingControlPlugin extends BasePlugin {
     // 外立面状态管理（参考mousePickPlugin的实现）
     private hiddenFacades: THREE.Object3D[] = []
 
-    // 设备模型管理
-    private equipmentModels: THREE.Object3D[] = []
-
     // 默认配置
     private config: FloorControlConfig = {
         expandDistance: 10,
@@ -126,6 +124,10 @@ export class BuildingControlPlugin extends BasePlugin {
         this.updateConfig(params.floorControlConfig || {})
         this.events = params.events || {}
         this.debugMode = params.debugMode || false
+
+        eventBus.on('update', ()=>{
+            this.activeTweens.update()
+        })
     }
 
     public async init(scenePlugin?: any): Promise<void> {
@@ -145,7 +147,6 @@ export class BuildingControlPlugin extends BasePlugin {
             if (discoveredBuildings.length > 0) {
                 // 默认使用第一个发现的建筑（可以后续扩展为支持多建筑）
                 const primaryBuilding = discoveredBuildings[0]
-
                 // 设置建筑模型并进行自动配置
                 if (this.setBuildingModel(primaryBuilding)) {
                     // 执行基于命名规则的智能设备关联
@@ -617,7 +618,6 @@ export class BuildingControlPlugin extends BasePlugin {
             if (!(object instanceof THREE.Group)) return
 
             const modelName = this.getModelName(object)
-
             // 检查是否为标记的建筑模型
             if (object.userData && object.userData.isBuildingModel === true) {
                 buildings.push(object)
@@ -1112,7 +1112,6 @@ export class BuildingControlPlugin extends BasePlugin {
             const lowestFloor = this.floors.get(lowestFloorNumber)!
             const baseY = lowestFloor.originalPosition.y
 
-
             floorNumbers.forEach((floorNumber, index) => {
                 const floor = this.floors.get(floorNumber)!
 
@@ -1440,7 +1439,7 @@ export class BuildingControlPlugin extends BasePlugin {
         return new Promise((resolve) => {
             const currentPos = floor.group.position.clone()
             const targetPos = floor.targetPosition.clone()
-
+            // debugger
             const tween = new TWEEN.Tween(currentPos, this.activeTweens)
                 .to(targetPos, this.config.animationDuration)
                 .easing(this.getEasingFunction())

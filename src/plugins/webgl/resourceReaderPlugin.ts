@@ -13,59 +13,6 @@ import {
   QueueConfig 
 } from './asyncTaskScheduler'
 
-/**
- * 从URL中提取文件名（不包含扩展名）
- */
-function extractFileNameFromPath(filePath: string): string {
-  if (!filePath) {
-    return `model_${Date.now()}`
-  }
-
-  try {
-    // 处理各种路径格式
-    const cleanPath = filePath.replace(/\\/g, '/')
-    const pathParts = cleanPath.split('/')
-    const fullFileName = pathParts[pathParts.length - 1]
-    
-    // 移除文件扩展名
-    const dotIndex = fullFileName.lastIndexOf('.')
-    const fileNameWithoutExt = dotIndex > 0 ? fullFileName.substring(0, dotIndex) : fullFileName
-    
-    // 清理文件名，移除特殊字符
-    const cleanFileName = fileNameWithoutExt.replace(/[^a-zA-Z0-9\u4e00-\u9fa5_-]/g, '_')
-    
-    return cleanFileName || `model_${Date.now()}`
-  } catch (error) {
-    console.warn('文件名提取失败，使用默认名称:', error)
-    return `model_${Date.now()}`
-  }
-}
-
-/**
- * 检查是否为建筑模型
- */
-function isBuildingModel(fileName: string): boolean {
-  // 检查原始文件名是否包含大写的BUILDING关键字
-  return fileName.includes('MAIN_BUILDING')
-}
-
-/**
- * 处理模型名称设置和建筑模型特殊逻辑
- */
-function processLoadedModel(model: THREE.Group, url: string): THREE.Group {
-  const fileName = extractFileNameFromPath(url)
-  
-  if (!model.userData) {
-    model.userData = {}
-  }
-  model.userData.modelName = fileName
-  
-  model.name = fileName
-  
-  const isBuildingModelFlag = isBuildingModel(fileName)
-  
-  return model
-}
 
 /**
  * 预期功能要求：
@@ -298,6 +245,8 @@ export class ResourceReaderPlugin extends BasePlugin {
     // 创建模型加载执行器
     const modelExecutor = async (task: AsyncTask<THREE.Group>): Promise<THREE.Group> => {
       return new Promise((resolve, reject) => {
+
+        task.config.url = task.config.url.replace(/\\/g, '/')
         
         this.gltfLoader.load(
           task.config.url,
@@ -305,7 +254,7 @@ export class ResourceReaderPlugin extends BasePlugin {
           (gltf: any) => {
             
             // 处理模型：设置名称和建筑模型特殊逻辑
-            const processedModel = processLoadedModel(gltf.scene, task.config.url)
+            const processedModel = this.processLoadedModel(gltf.scene, task.config.url)
             
             resolve(processedModel)
           },
@@ -433,20 +382,24 @@ export class ResourceReaderPlugin extends BasePlugin {
     try {
       // 调度任务
       const result = await this.taskScheduler.schedule(taskConfig)
-      
       if (result.success && result.data) {
         // 添加到缓存
         this.addToCache(fullUrl, result.data)
-        
+
         eventBus.emit('resource:loaded', { 
           url: fullUrl, 
           model: result.data, 
           loadTime: result.executionTime,
           fromCache: false 
         })
+
+        // 设置模型名称
+        this.setModelName(result.data, this.extractFileNameFromPath(fullUrl))
+
         
         return result.data
       } else {
+        console.error(`❌ 任务执行失败: ${taskConfig.id}`, result.error)
         throw result.error || new Error('Load failed')
       }
     } catch (error) {
@@ -710,7 +663,7 @@ export class ResourceReaderPlugin extends BasePlugin {
     task.progress = 100
     
     // 处理模型：设置名称和建筑模型特殊逻辑
-    const processedModel = processLoadedModel(gltf.scene, task.url)
+    const processedModel = this.processLoadedModel(gltf.scene, task.url)
     task.model = processedModel
     
     // 添加到缓存
@@ -1093,6 +1046,94 @@ export class ResourceReaderPlugin extends BasePlugin {
   }
 
   /**
+   * 设置模型名称
+   */
+  public setModelName(object: THREE.Group, baseName: string): void {
+    if (!object) return
+    
+    // 将名称存储到userData中（新的命名规则）
+    if (!object.userData) {
+      object.userData = {}
+    }
+    object.userData.modelName = baseName
+    
+    // 同时保留object.name用于显示和调试
+    object.name = baseName
+  }
+
+  /**
+   * 获取模型名称
+   */
+  public getModelName(object: THREE.Group): string {
+    if (!object) return '未命名模型'
+  
+    // 优先使用userData.modelName
+    if (object.userData && object.userData.modelName) {
+      return object.userData.modelName
+    }
+    
+    // 向后兼容：如果userData.modelName不存在，使用object.name
+    return object.name || '未命名模型'
+  }
+
+  /**
+   * 从文件路径提取文件名
+   */
+  public extractFileNameFromPath(filePath: string): string {
+    if (!filePath) {
+      return `model_${Date.now()}`
+    }
+  
+    try {
+      // 处理各种路径格式
+      const cleanPath = filePath.replace(/\\/g, '/')
+      const pathParts = cleanPath.split('/')
+      const fullFileName = pathParts[pathParts.length - 1]
+      
+      // 移除文件扩展名
+      const dotIndex = fullFileName.lastIndexOf('.')
+      const fileNameWithoutExt = dotIndex > 0 ? fullFileName.substring(0, dotIndex) : fullFileName
+      
+      // 清理文件名，移除特殊字符
+      const cleanFileName = fileNameWithoutExt.replace(/[^a-zA-Z0-9\u4e00-\u9fa5_-]/g, '_')
+      
+      return cleanFileName || `model_${Date.now()}`
+    } catch (error) {
+      console.warn('文件名提取失败，使用默认名称:', error)
+      return `model_${Date.now()}`
+    }
+  }
+
+  /**
+   * 调试方法：测试异步加载流程
+   */
+  public async debugLoadFlow(url: string): Promise<void> {
+    console.log('🔍 开始调试加载流程...')
+    
+    const fullUrl = this.resolveUrl(url)
+    console.log(`📍 完整URL: ${fullUrl}`)
+    
+    // 检查缓存
+    const cached = this.getCachedResource(fullUrl)
+    console.log(`💾 缓存检查结果: ${cached ? '有缓存' : '无缓存'}`)
+    
+    if (cached) {
+      console.log('✅ 从缓存返回，流程结束')
+      return
+    }
+    
+    // 检查任务调度器状态
+    const schedulerStatus = this.taskScheduler.getStatus()
+    console.log('📊 调度器状态:', schedulerStatus)
+    
+    // 检查加载器状态
+    console.log('🔧 GLTFLoader状态:', this.gltfLoader ? '已初始化' : '未初始化')
+    console.log('🔧 DRACOLoader状态:', this.dracoLoader ? '已初始化' : '未初始化')
+    
+    console.log('➡️ 准备创建任务配置并调度...')
+  }
+
+  /**
    * 销毁插件
    */
   dispose(): void {
@@ -1116,5 +1157,33 @@ export class ResourceReaderPlugin extends BasePlugin {
     }
 
     console.log('🧹 ResourceReaderPlugin已销毁')
+  }
+
+  private processLoadedModel(model: THREE.Group, url: string): THREE.Group {
+    const fileName = this.extractFileNameFromPath(url)
+  
+    // 使用统一的模型名称设置方法
+    this.setModelName(model, fileName)
+    
+    const isBuildingModelFlag = this.isBuildingModel(fileName)
+    
+    // 🔧 修复：为建筑模型设置标识
+    if (isBuildingModelFlag) {
+      if (!model.userData) {
+        model.userData = {}
+      }
+      model.userData.isBuildingModel = true
+      model.userData.isInteractive = true
+      console.log(`🏢 检测到建筑模型: ${fileName}`)
+    }
+    
+    return model
+  }
+
+  // 
+  private isBuildingModel(fileName: string): boolean {
+    // return fileName === 'MAIN_BUILDING'
+    // 建筑模型的文件名必须包含MAIN_BUILDING，而且以MAIN_BUILDING结尾
+    return fileName.includes('MAIN_BUILDING') && fileName.endsWith('MAIN_BUILDING')
   }
 }

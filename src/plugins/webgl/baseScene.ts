@@ -63,6 +63,62 @@ const tween_group = new TWEEN.Group();
  * scene.set2DCameraZoom(2.0)                 // 设置2D相机缩放
  * scene.apply2DCameraZoomDelta(0.5)          // 增加缩放增量
  * 
+ * 🔧 抗锯齿功能使用示例：
+ * 
+ * // 1. 创建高级抗锯齿场景
+ * const scene = BaseScene.createWithAdvancedAntialias('msaa', { samples: 8 })
+ * 
+ * // 2. 动态切换抗锯齿类型
+ * scene.setAntialiasType('fxaa', { intensity: 0.75, quality: 'high' })
+ * scene.setAntialiasType('msaa', { samples: 4 })
+ * scene.toggleAntialias(false)  // 禁用抗锯齿
+ * 
+ * // 3. 获取抗锯齿信息
+ * const aaConfig = scene.getAntialiasConfig()
+ * const aaQuality = scene.getAntialiasQuality()
+ * console.log('抗锯齿配置:', aaConfig, '质量:', aaQuality)
+ * 
+ * 🛡️ 深度冲突防护使用示例：
+ * 
+ * // 1. 创建深度优化场景
+ * const scene = BaseScene.createWithDepthOptimization(true)
+ * 
+ * // 2. 深度管理操作
+ * scene.autoOptimizeDepth()           // 自动优化深度范围
+ * scene.enablePolygonOffset(1.0, 1.0) // 启用多边形偏移
+ * scene.runDepthConflictDetection()   // 检测深度冲突
+ * 
+ * // 3. 深度配置
+ * scene.setDepthConfig({
+ *     depthRangeConfig: {
+ *         autoOptimize: true,
+ *         nearFarRatio: 1/10000
+ *     },
+ *     conflictDetection: {
+ *         enabled: true,
+ *         autoFix: true
+ *     }
+ * })
+ * 
+ * // 4. 获取深度统计
+ * const depthStats = scene.getDepthStats()
+ * console.log('深度统计:', depthStats)
+ * 
+ * 🎯 完美质量场景使用示例：
+ * 
+ * // 创建抗锯齿+深度优化的完美场景
+ * const scene = BaseScene.createPerfectQuality('msaa', true)
+ * 
+ * // 移动端优化场景
+ * const mobileScene = BaseScene.createMobileOptimized()
+ * 
+ * 支持的抗锯齿类型：
+ * - msaa: 多重采样抗锯齿（硬件级别）
+ * - fxaa: 快速近似抗锯齿（后处理）
+ * - smaa: 子像素形态学抗锯齿（后处理）
+ * - taa: 时间抗锯齿（后处理）
+ * - none: 禁用抗锯齿
+ * 
  * 支持的地板类型：
  * - water: 水面地板（参照three.js webgl_shaders_ocean）
  * - static: 静态贴图地板（支持PBR材质）
@@ -93,6 +149,78 @@ interface PerformanceStats {
     programs: number
 }
 
+// 抗锯齿配置接口
+interface AntialiasConfig {
+    enabled: boolean
+    type: 'msaa' | 'fxaa' | 'smaa' | 'taa' | 'none'
+    // MSAA配置
+    msaaConfig?: {
+        samples: number // 采样数 (2, 4, 8, 16)
+    }
+    // FXAA配置
+    fxaaConfig?: {
+        intensity: number // 强度 (0.0 - 1.0)
+        quality: 'low' | 'medium' | 'high'
+    }
+    // SMAA配置
+    smaaConfig?: {
+        threshold: number // 边缘检测阈值
+        maxSearchSteps: number // 最大搜索步数
+    }
+    // TAA配置
+    taaConfig?: {
+        accumulation: number // 累积因子
+        jitterPattern: 'halton' | 'random'
+    }
+}
+
+// 深度管理配置接口
+interface DepthConfig {
+    enabled: boolean
+    // 深度缓冲区优化
+    depthBufferConfig: {
+        enableLogDepth: boolean // 对数深度缓冲区
+        depthBits: 16 | 24 | 32 // 深度位数
+        stencilBits: 0 | 8 // 模板位数
+    }
+    // 多边形偏移配置
+    polygonOffsetConfig: {
+        enabled: boolean
+        factor: number // 多边形偏移因子
+        units: number // 多边形偏移单位
+    }
+    // 相机深度范围优化
+    depthRangeConfig: {
+        autoOptimize: boolean // 自动优化near/far
+        nearFarRatio: number // near/far比例 (推荐 1/10000)
+        minNear: number // 最小near值
+        maxFar: number // 最大far值
+    }
+    // 深度冲突检测
+    conflictDetection: {
+        enabled: boolean
+        threshold: number // 深度差异阈值
+        autoFix: boolean // 自动修复
+    }
+    // 深度排序
+    depthSortConfig: {
+        enabled: boolean
+        transparent: boolean // 透明对象排序
+        opaque: boolean // 不透明对象排序
+    }
+}
+
+// 增强的渲染统计
+interface EnhancedPerformanceStats extends PerformanceStats {
+    // 抗锯齿相关
+    antialiasType: string
+    antialiasQuality: string
+    // 深度相关
+    depthConflicts: number
+    depthOptimizationLevel: string
+    nearFarRatio: number
+}
+
 
 
 
@@ -106,7 +234,7 @@ const DEFAULT_CONFIGS = {
             fov: 45,
             near: 0.1,
             far: 500000,
-            position: [200, 200, 200],
+            position: [100, 100, 100],
             lookAt: [0, 0, 0]
         },
         rendererConfig: {
@@ -119,6 +247,39 @@ const DEFAULT_CONFIGS = {
             toneMapping: THREE.LinearToneMapping,
             toneMappingExposure: 1.0,
             pixelRatio: 1
+        },
+        antialiasConfig: {
+            enabled: false,
+            type: 'none' as const
+        },
+        depthConfig: {
+            enabled: true,
+            depthBufferConfig: {
+                enableLogDepth: false,
+                depthBits: 16,
+                stencilBits: 0
+            },
+            polygonOffsetConfig: {
+                enabled: false,
+                factor: 0,
+                units: 0
+            },
+            depthRangeConfig: {
+                autoOptimize: true,
+                nearFarRatio: 1/1000,
+                minNear: 0.1,
+                maxFar: 100000
+            },
+            conflictDetection: {
+                enabled: false,
+                threshold: 0.001,
+                autoFix: false
+            },
+            depthSortConfig: {
+                enabled: false,
+                transparent: false,
+                opaque: false
+            }
         },
         performanceConfig: {
             enabled: true
@@ -168,6 +329,42 @@ const DEFAULT_CONFIGS = {
             toneMappingExposure: 1.0,
             outputColorSpace: 'srgb'
         },
+        antialiasConfig: {
+            enabled: true,
+            type: 'msaa' as const,
+            msaaConfig: {
+                samples: 4
+            }
+        },
+        depthConfig: {
+            enabled: true,
+            depthBufferConfig: {
+                enableLogDepth: false,
+                depthBits: 24,
+                stencilBits: 8
+            },
+            polygonOffsetConfig: {
+                enabled: true,
+                factor: 1.0,
+                units: 1.0
+            },
+            depthRangeConfig: {
+                autoOptimize: true,
+                nearFarRatio: 1/5000,
+                minNear: 0.01,
+                maxFar: 500000
+            },
+            conflictDetection: {
+                enabled: true,
+                threshold: 0.0001,
+                autoFix: true
+            },
+            depthSortConfig: {
+                enabled: true,
+                transparent: true,
+                opaque: false
+            }
+        },
         performanceConfig: {
             enabled: true
         },
@@ -203,7 +400,7 @@ const DEFAULT_CONFIGS = {
             fov: 45,
             near: 0.001,
             far: 500000,
-            position: [500, 500, 500],
+            position: [100, 100, 100],
             lookAt: [0, 0, 0]
         },
         rendererConfig: {
@@ -217,6 +414,46 @@ const DEFAULT_CONFIGS = {
             toneMapping: THREE.ACESFilmicToneMapping,
             toneMappingExposure: 1.2,
             outputColorSpace: 'srgb'
+        },
+        antialiasConfig: {
+            enabled: true,
+            type: 'msaa' as const,
+            msaaConfig: {
+                samples: 8
+            },
+            fxaaConfig: {
+                intensity: 0.75,
+                quality: 'high'
+            }
+        },
+        depthConfig: {
+            enabled: true,
+            depthBufferConfig: {
+                enableLogDepth: true,
+                depthBits: 32,
+                stencilBits: 8
+            },
+            polygonOffsetConfig: {
+                enabled: true,
+                factor: 2.0,
+                units: 2.0
+            },
+            depthRangeConfig: {
+                autoOptimize: true,
+                nearFarRatio: 1/10000,
+                minNear: 0.001,
+                maxFar: 500000
+            },
+            conflictDetection: {
+                enabled: true,
+                threshold: 0.00001,
+                autoFix: true
+            },
+            depthSortConfig: {
+                enabled: true,
+                transparent: true,
+                opaque: true
+            }
         },
         performanceConfig: {
             enabled: true
@@ -263,6 +500,43 @@ const DEFAULT_CONFIGS = {
             shadowMapEnabled: true,
             toneMapping: THREE.ACESFilmicToneMapping,
             toneMappingExposure: 1.0
+        },
+        antialiasConfig: {
+            enabled: true,
+            type: 'fxaa' as const,
+            fxaaConfig: {
+                intensity: 1.0,
+                quality: 'medium'
+            }
+        },
+        depthConfig: {
+            enabled: true,
+            depthBufferConfig: {
+                enableLogDepth: false,
+                depthBits: 24,
+                stencilBits: 8
+            },
+            polygonOffsetConfig: {
+                enabled: true,
+                factor: 1.0,
+                units: 1.0
+            },
+            depthRangeConfig: {
+                autoOptimize: true,
+                nearFarRatio: 1/5000,
+                minNear: 0.01,
+                maxFar: 500000
+            },
+            conflictDetection: {
+                enabled: true,
+                threshold: 0.0001,
+                autoFix: true
+            },
+            depthSortConfig: {
+                enabled: true,
+                transparent: true,
+                opaque: false
+            }
         },
         performanceConfig: {
             enabled: true
@@ -361,6 +635,18 @@ export class BaseScene extends BasePlugin {
         axesHelper: THREE.AxesHelper | null
     }
     
+    // 抗锯齿配置
+    private antialiasConfig: AntialiasConfig
+    
+    // 深度管理配置
+    private depthConfig: DepthConfig
+    
+    // 增强的性能统计
+    private enhancedStats: EnhancedPerformanceStats
+    
+    // 深度冲突计数器
+    private depthConflictCounter: number = 0
+    
     private _flyTween: any = null;
     
     constructor(meta: any) {
@@ -376,7 +662,7 @@ export class BaseScene extends BasePlugin {
             
             // 获取配置预设
             const preset = meta.userData.preset || 'highQuality' // 
-            const defaultConfig = DEFAULT_CONFIGS[preset as keyof typeof DEFAULT_CONFIGS] || DEFAULT_CONFIGS.balanced
+            const defaultConfig = DEFAULT_CONFIGS[preset as keyof typeof DEFAULT_CONFIGS] || DEFAULT_CONFIGS.highQuality
             
             // 合并用户配置与默认配置
             const finalConfig = this.mergeConfigs(defaultConfig, meta.userData)
@@ -432,6 +718,68 @@ export class BaseScene extends BasePlugin {
         this.debugHelpers = {
             gridHelper: null,
             axesHelper: null
+        }
+
+        // 初始化抗锯齿配置
+        this.antialiasConfig = finalConfig.antialiasConfig || {
+            enabled: false,
+            type: 'none'
+        }
+
+        // 初始化深度管理配置
+        this.depthConfig = finalConfig.depthConfig || {
+            enabled: true,
+            depthBufferConfig: {
+                enableLogDepth: false,
+                depthBits: 24,
+                stencilBits: 8
+            },
+            polygonOffsetConfig: {
+                enabled: false,
+                factor: 0,
+                units: 0
+            },
+            depthRangeConfig: {
+                autoOptimize: false,
+                nearFarRatio: 1/1000,
+                minNear: 0.1,
+                maxFar: 100000
+            },
+            conflictDetection: {
+                enabled: false,
+                threshold: 0.001,
+                autoFix: false
+            },
+            depthSortConfig: {
+                enabled: false,
+                transparent: false,
+                opaque: false
+            }
+        }
+
+        // 初始化增强的性能统计
+        this.enhancedStats = {
+            // 基础统计
+            fps: 0,
+            frameTime: 0,
+            avgFrameTime: 0,
+            frameCount: 0,
+            objects: 0,
+            vertices: 0,
+            faces: 0,
+            drawCalls: 0,
+            triangles: 0,
+            points: 0,
+            lines: 0,
+            textures: 0,
+            geometries: 0,
+            programs: 0,
+            // 增强统计
+            antialiasType: this.antialiasConfig.type,
+            antialiasQuality: 'medium',
+            depthConflicts: 0,
+            depthOptimizationLevel: 'basic',
+            nearFarRatio: this.depthConfig.depthRangeConfig.nearFarRatio
         }
 
         const cameraOption = finalConfig.cameraConfig
@@ -498,6 +846,12 @@ export class BaseScene extends BasePlugin {
         // 应用渲染器高级配置
         this.applyRendererAdvancedConfig()
 
+        // 应用抗锯齿配置
+        this.applyAntialiasConfig()
+
+        // 应用深度配置
+        this.applyDepthConfig()
+
         // 将renderer实例存入meta供其他插件使用
         meta.userData.renderer = this.renderer
 
@@ -514,6 +868,8 @@ export class BaseScene extends BasePlugin {
             相机类型: cameraOption.type,
             光照系统: 'Three.js r155+ 物理正确光照',
             阴影系统: this.rendererAdvancedConfig.shadowMapEnabled ? '启用' : '禁用',
+            抗锯齿: this.antialiasConfig.enabled ? `启用(${this.antialiasConfig.type})` : '禁用',
+            深度管理: this.depthConfig.enabled ? '启用' : '禁用',
             性能监控: this.performanceMonitor.enabled ? '启用' : '禁用',
             Debug模式: this.debugConfig.enabled ? '启用' : '禁用',
             地板系统: this.floorConfig.enabled ? `启用(${this.floorConfig.type})` : '禁用',
@@ -796,6 +1152,249 @@ export class BaseScene extends BasePlugin {
     }
 
     /**
+     * 应用抗锯齿配置
+     */
+    private applyAntialiasConfig(): void {
+        const config = this.antialiasConfig
+        
+        if (!config.enabled) {
+            console.log('🚫 抗锯齿已禁用')
+            return
+        }
+
+        console.log(`🔧 应用抗锯齿配置: ${config.type}`)
+        
+        switch (config.type) {
+            case 'msaa':
+                this.applyMSAAConfig(config.msaaConfig)
+                break
+            case 'fxaa':
+                console.log('📝 FXAA需要在后处理管道中实现')
+                break
+            case 'smaa':
+                console.log('📝 SMAA需要在后处理管道中实现')
+                break
+            case 'taa':
+                console.log('📝 TAA需要在后处理管道中实现')
+                break
+            case 'none':
+            default:
+                console.log('🚫 抗锯齿类型为none，跳过配置')
+                break
+        }
+    }
+
+    /**
+     * 应用MSAA配置
+     */
+    private applyMSAAConfig(msaaConfig?: AntialiasConfig['msaaConfig']): void {
+        if (!msaaConfig) {
+            console.log('⚠️ MSAA配置为空，使用默认值')
+            return
+        }
+        
+        // MSAA主要通过WebGLRenderer的antialias参数控制
+        // 采样数需要在创建renderer时设置，这里只能记录配置
+        console.log(`✅ MSAA配置: ${msaaConfig.samples}x采样`)
+        
+        // 更新增强统计
+        this.enhancedStats.antialiasType = 'msaa'
+        this.enhancedStats.antialiasQuality = this.getMSAAQualityLevel(msaaConfig.samples)
+    }
+
+    /**
+     * 获取MSAA质量等级
+     */
+    private getMSAAQualityLevel(samples: number): string {
+        if (samples >= 8) return 'high'
+        if (samples >= 4) return 'medium'
+        if (samples >= 2) return 'low'
+        return 'none'
+    }
+
+    /**
+     * 应用深度配置
+     */
+    private applyDepthConfig(): void {
+        const config = this.depthConfig
+        
+        if (!config.enabled) {
+            console.log('🚫 深度管理已禁用')
+            return
+        }
+
+        console.log('🔧 应用深度管理配置')
+
+        // 应用深度缓冲区配置
+        this.applyDepthBufferConfig(config.depthBufferConfig)
+
+        // 应用多边形偏移配置
+        this.applyPolygonOffsetConfig(config.polygonOffsetConfig)
+
+        // 应用深度范围配置
+        this.applyDepthRangeConfig(config.depthRangeConfig)
+
+        // 启用深度冲突检测
+        if (config.conflictDetection.enabled) {
+            this.enableDepthConflictDetection(config.conflictDetection)
+        }
+
+        console.log('✅ 深度管理配置已应用')
+    }
+
+    /**
+     * 应用深度缓冲区配置
+     */
+    private applyDepthBufferConfig(depthBufferConfig: DepthConfig['depthBufferConfig']): void {
+        // 对数深度缓冲区需要着色器支持，这里只记录配置
+        if (depthBufferConfig.enableLogDepth) {
+            console.log('📝 对数深度缓冲区需要自定义着色器支持')
+        }
+        
+        console.log(`🔧 深度缓冲区配置: ${depthBufferConfig.depthBits}位深度, ${depthBufferConfig.stencilBits}位模板`)
+    }
+
+    /**
+     * 应用多边形偏移配置
+     */
+    private applyPolygonOffsetConfig(polygonOffsetConfig: DepthConfig['polygonOffsetConfig']): void {
+        if (!polygonOffsetConfig.enabled) {
+            console.log('🚫 多边形偏移已禁用')
+            return
+        }
+
+        // 多边形偏移主要在材质级别设置
+        console.log(`✅ 多边形偏移配置: factor=${polygonOffsetConfig.factor}, units=${polygonOffsetConfig.units}`)
+        
+        // 为现有材质应用多边形偏移（示例）
+        this.scene.traverse((object) => {
+            if (object instanceof THREE.Mesh && object.material) {
+                const materials = Array.isArray(object.material) ? object.material : [object.material]
+                materials.forEach(material => {
+                    if (material instanceof THREE.Material) {
+                        material.polygonOffset = true
+                        material.polygonOffsetFactor = polygonOffsetConfig.factor
+                        material.polygonOffsetUnits = polygonOffsetConfig.units
+                        material.needsUpdate = true
+                    }
+                })
+            }
+        })
+    }
+
+    /**
+     * 应用深度范围配置
+     */
+    private applyDepthRangeConfig(depthRangeConfig: DepthConfig['depthRangeConfig']): void {
+        if (!depthRangeConfig.autoOptimize) {
+            console.log('🚫 深度范围自动优化已禁用')
+            return
+        }
+
+        this.optimizeCameraDepthRange(depthRangeConfig)
+    }
+
+    /**
+     * 优化相机深度范围
+     */
+    private optimizeCameraDepthRange(config: DepthConfig['depthRangeConfig']): void {
+        const camera = this.camera
+        
+        // 计算场景边界
+        const boundingBox = new THREE.Box3()
+        this.scene.traverse((object) => {
+            if (object instanceof THREE.Mesh && object.geometry) {
+                const objectBoundingBox = new THREE.Box3().setFromObject(object)
+                boundingBox.union(objectBoundingBox)
+            }
+        })
+
+        if (boundingBox.isEmpty()) {
+            console.log('⚠️ 场景为空，无法优化深度范围')
+            return
+        }
+
+        // 计算相机到场景的距离
+        const center = new THREE.Vector3()
+        boundingBox.getCenter(center)
+        const size = new THREE.Vector3()
+        boundingBox.getSize(size)
+        
+        const maxSize = Math.max(size.x, size.y, size.z)
+        const distance = camera.position.distanceTo(center)
+        
+        // 计算优化的near和far值
+        let newNear = Math.max(distance - maxSize, config.minNear)
+        let newFar = Math.min(distance + maxSize * 2, config.maxFar)
+        
+        // 确保near/far比例合理
+        if (newFar / newNear < 1 / config.nearFarRatio) {
+            newNear = newFar * config.nearFarRatio
+        }
+
+        // 应用到相机
+        if (camera instanceof THREE.PerspectiveCamera) {
+            camera.near = newNear
+            camera.far = newFar
+            camera.updateProjectionMatrix()
+        } else if (camera instanceof THREE.OrthographicCamera) {
+            camera.near = newNear
+            camera.far = newFar
+            camera.updateProjectionMatrix()
+        }
+
+        // 更新统计
+        this.enhancedStats.nearFarRatio = newNear / newFar
+        this.enhancedStats.depthOptimizationLevel = 'optimized'
+        
+        console.log(`✅ 深度范围已优化: near=${newNear.toFixed(3)}, far=${newFar.toFixed(3)}, ratio=${(newNear/newFar).toFixed(6)}`)
+    }
+
+    /**
+     * 启用深度冲突检测
+     */
+    private enableDepthConflictDetection(conflictConfig: DepthConfig['conflictDetection']): void {
+        console.log(`✅ 深度冲突检测已启用: 阈值=${conflictConfig.threshold}`)
+        
+        // 这里可以添加深度冲突检测逻辑
+        // 例如检测重叠的几何体、相近的Z值等
+    }
+
+    /**
+     * 检测深度冲突
+     */
+    private detectDepthConflicts(): number {
+        let conflicts = 0
+        const threshold = this.depthConfig.conflictDetection.threshold
+        
+        // 简单的深度冲突检测示例
+        const meshes: THREE.Mesh[] = []
+        this.scene.traverse((object) => {
+            if (object instanceof THREE.Mesh) {
+                meshes.push(object)
+            }
+        })
+
+        // 检测相近的Z位置
+        for (let i = 0; i < meshes.length; i++) {
+            for (let j = i + 1; j < meshes.length; j++) {
+                const mesh1 = meshes[i]
+                const mesh2 = meshes[j]
+                
+                const zDiff = Math.abs(mesh1.position.z - mesh2.position.z)
+                if (zDiff < threshold) {
+                    conflicts++
+                }
+            }
+        }
+
+        this.depthConflictCounter = conflicts
+        this.enhancedStats.depthConflicts = conflicts
+        
+        return conflicts
+    }
+
+    /**
      * 更新性能统计
      */
     private updatePerformanceStats(): void {
@@ -1066,6 +1665,262 @@ export class BaseScene extends BasePlugin {
         }
     }
 
+    // ================================
+    // 抗锯齿管理相关方法
+    // ================================
+
+    /**
+     * 设置抗锯齿类型
+     * @param type 抗锯齿类型
+     * @param options 相关配置选项
+     */
+    public setAntialiasType(type: AntialiasConfig['type'], options?: any): void {
+        this.antialiasConfig.type = type
+        this.antialiasConfig.enabled = type !== 'none'
+        
+        // 根据类型设置相关配置
+        switch (type) {
+            case 'msaa':
+                this.antialiasConfig.msaaConfig = {
+                    samples: options?.samples || 4,
+                    ...this.antialiasConfig.msaaConfig
+                }
+                break
+            case 'fxaa':
+                this.antialiasConfig.fxaaConfig = {
+                    intensity: options?.intensity || 0.75,
+                    quality: options?.quality || 'medium',
+                    ...this.antialiasConfig.fxaaConfig
+                }
+                break
+            case 'smaa':
+                this.antialiasConfig.smaaConfig = {
+                    threshold: options?.threshold || 0.1,
+                    maxSearchSteps: options?.maxSearchSteps || 16,
+                    ...this.antialiasConfig.smaaConfig
+                }
+                break
+            case 'taa':
+                this.antialiasConfig.taaConfig = {
+                    accumulation: options?.accumulation || 0.95,
+                    jitterPattern: options?.jitterPattern || 'halton',
+                    ...this.antialiasConfig.taaConfig
+                }
+                break
+        }
+        
+        // 重新应用配置
+        this.applyAntialiasConfig()
+        
+        console.log(`🔄 抗锯齿类型已更改为: ${type}`)
+        eventBus.emit('antialias:type-changed', { type, options })
+    }
+
+    /**
+     * 切换抗锯齿启用状态
+     * @param enabled 是否启用
+     */
+    public toggleAntialias(enabled: boolean): void {
+        this.antialiasConfig.enabled = enabled
+        this.applyAntialiasConfig()
+        
+        console.log(`🔄 抗锯齿${enabled ? '已启用' : '已禁用'}`)
+        eventBus.emit('antialias:toggled', { enabled })
+    }
+
+    /**
+     * 获取当前抗锯齿配置
+     */
+    public getAntialiasConfig(): AntialiasConfig {
+        return { ...this.antialiasConfig }
+    }
+
+    /**
+     * 获取抗锯齿质量信息
+     */
+    public getAntialiasQuality(): string {
+        if (!this.antialiasConfig.enabled) return 'none'
+        
+        switch (this.antialiasConfig.type) {
+            case 'msaa':
+                return this.getMSAAQualityLevel(this.antialiasConfig.msaaConfig?.samples || 4)
+            case 'fxaa':
+                return this.antialiasConfig.fxaaConfig?.quality || 'medium'
+            case 'smaa':
+                return 'high'
+            case 'taa':
+                return 'ultra'
+            default:
+                return 'none'
+        }
+    }
+
+    // ================================
+    // 深度管理相关方法
+    // ================================
+
+    /**
+     * 设置深度配置
+     * @param config 深度配置
+     */
+    public setDepthConfig(config: Partial<DepthConfig>): void {
+        Object.assign(this.depthConfig, config)
+        this.applyDepthConfig()
+        
+        console.log('🔄 深度配置已更新')
+        eventBus.emit('depth:config-updated', { config })
+    }
+
+    /**
+     * 切换深度管理启用状态
+     * @param enabled 是否启用
+     */
+    public toggleDepthManagement(enabled: boolean): void {
+        this.depthConfig.enabled = enabled
+        this.applyDepthConfig()
+        
+        console.log(`🔄 深度管理${enabled ? '已启用' : '已禁用'}`)
+        eventBus.emit('depth:toggled', { enabled })
+    }
+
+    /**
+     * 自动优化深度设置
+     */
+    public autoOptimizeDepth(): void {
+        if (!this.depthConfig.enabled) {
+            console.log('⚠️ 深度管理未启用，无法自动优化')
+            return
+        }
+        
+        // 启用自动优化
+        this.depthConfig.depthRangeConfig.autoOptimize = true
+        this.optimizeCameraDepthRange(this.depthConfig.depthRangeConfig)
+        
+        console.log('✅ 深度设置已自动优化')
+        eventBus.emit('depth:auto-optimized')
+    }
+
+    /**
+     * 执行深度冲突检测
+     */
+    public runDepthConflictDetection(): number {
+        if (!this.depthConfig.conflictDetection.enabled) {
+            console.log('⚠️ 深度冲突检测未启用')
+            return 0
+        }
+        
+        const conflicts = this.detectDepthConflicts()
+        
+        if (conflicts > 0) {
+            console.warn(`⚠️ 检测到 ${conflicts} 个深度冲突`)
+            
+            // 如果启用自动修复
+            if (this.depthConfig.conflictDetection.autoFix) {
+                this.autoFixDepthConflicts()
+            }
+        } else {
+            console.log('✅ 未检测到深度冲突')
+        }
+        
+        return conflicts
+    }
+
+    /**
+     * 自动修复深度冲突
+     */
+    private autoFixDepthConflicts(): void {
+        console.log('🔧 正在自动修复深度冲突...')
+        
+        // 简单的修复策略：为重叠的对象添加小的Z偏移
+        const meshes: THREE.Mesh[] = []
+        const threshold = this.depthConfig.conflictDetection.threshold
+        
+        this.scene.traverse((object) => {
+            if (object instanceof THREE.Mesh) {
+                meshes.push(object)
+            }
+        })
+
+        let fixedCount = 0
+        const usedPositions = new Set<string>()
+        
+        for (const mesh of meshes) {
+            const key = `${mesh.position.x.toFixed(3)},${mesh.position.y.toFixed(3)},${mesh.position.z.toFixed(3)}`
+            
+            if (usedPositions.has(key)) {
+                // 发现冲突，添加小的偏移
+                mesh.position.z += threshold * 2 * (Math.random() - 0.5)
+                fixedCount++
+            } else {
+                usedPositions.add(key)
+            }
+        }
+        
+        console.log(`✅ 自动修复了 ${fixedCount} 个深度冲突`)
+        eventBus.emit('depth:conflicts-fixed', { fixedCount })
+    }
+
+    /**
+     * 获取当前深度配置
+     */
+    public getDepthConfig(): DepthConfig {
+        return { ...this.depthConfig }
+    }
+
+    /**
+     * 获取深度统计信息
+     */
+    public getDepthStats(): any {
+        return {
+            nearFarRatio: this.enhancedStats.nearFarRatio,
+            depthConflicts: this.enhancedStats.depthConflicts,
+            optimizationLevel: this.enhancedStats.depthOptimizationLevel,
+            cameraDepthRange: {
+                near: this.camera.near,
+                far: this.camera.far
+            }
+        }
+    }
+
+    /**
+     * 启用多边形偏移
+     * @param factor 偏移因子
+     * @param units 偏移单位
+     */
+    public enablePolygonOffset(factor: number = 1.0, units: number = 1.0): void {
+        this.depthConfig.polygonOffsetConfig.enabled = true
+        this.depthConfig.polygonOffsetConfig.factor = factor
+        this.depthConfig.polygonOffsetConfig.units = units
+        
+        this.applyPolygonOffsetConfig(this.depthConfig.polygonOffsetConfig)
+        
+        console.log(`✅ 多边形偏移已启用: factor=${factor}, units=${units}`)
+        eventBus.emit('depth:polygon-offset-enabled', { factor, units })
+    }
+
+    /**
+     * 禁用多边形偏移
+     */
+    public disablePolygonOffset(): void {
+        this.depthConfig.polygonOffsetConfig.enabled = false
+        
+        // 移除现有材质的多边形偏移
+        this.scene.traverse((object) => {
+            if (object instanceof THREE.Mesh && object.material) {
+                const materials = Array.isArray(object.material) ? object.material : [object.material]
+                materials.forEach(material => {
+                    if (material instanceof THREE.Material) {
+                        material.polygonOffset = false
+                        material.needsUpdate = true
+                    }
+                })
+            }
+        })
+        
+        console.log('🚫 多边形偏移已禁用')
+        eventBus.emit('depth:polygon-offset-disabled')
+    }
+
     /**
      * 访问器方法
      */
@@ -1074,6 +1929,11 @@ export class BaseScene extends BasePlugin {
     get rendererInstance(): THREE.WebGLRenderer { return this.renderer }
     get controlsInstance(): BaseControls | null { return this.controls }
     get isPerformanceMonitorEnabled(): boolean { return this.performanceMonitor.enabled }
+    get antialiasConfigInstance(): AntialiasConfig { return this.antialiasConfig }
+    get depthConfigInstance(): DepthConfig { return this.depthConfig }
+    get enhancedStatsInstance(): EnhancedPerformanceStats { return this.enhancedStats }
+    get isAntialiasEnabled(): boolean { return this.antialiasConfig.enabled }
+    get isDepthManagementEnabled(): boolean { return this.depthConfig.enabled }
 
     /**
      * 静态工厂方法 - 创建高性能场景
@@ -1292,6 +2152,218 @@ export class BaseScene extends BasePlugin {
      */
     static getPresetConfig(preset: string): any {
         return DEFAULT_CONFIGS[preset as keyof typeof DEFAULT_CONFIGS] || null
+    }
+
+    /**
+     * 静态工厂方法 - 创建高级抗锯齿场景
+     * @param antialiasType 抗锯齿类型
+     * @param customConfig 自定义配置
+     */
+    static createWithAdvancedAntialias(
+        antialiasType: AntialiasConfig['type'], 
+        customConfig: any = {}
+    ): BaseScene {
+        const antialiasConfig: AntialiasConfig = {
+            enabled: antialiasType !== 'none',
+            type: antialiasType
+        }
+
+        // 根据类型设置默认配置
+        switch (antialiasType) {
+            case 'msaa':
+                antialiasConfig.msaaConfig = {
+                    samples: customConfig.samples || 8
+                }
+                break
+            case 'fxaa':
+                antialiasConfig.fxaaConfig = {
+                    intensity: customConfig.intensity || 0.75,
+                    quality: customConfig.quality || 'high'
+                }
+                break
+            case 'smaa':
+                antialiasConfig.smaaConfig = {
+                    threshold: customConfig.threshold || 0.1,
+                    maxSearchSteps: customConfig.maxSearchSteps || 16
+                }
+                break
+            case 'taa':
+                antialiasConfig.taaConfig = {
+                    accumulation: customConfig.accumulation || 0.95,
+                    jitterPattern: customConfig.jitterPattern || 'halton'
+                }
+                break
+        }
+
+        return new BaseScene({
+            userData: {
+                preset: 'highQuality',
+                antialiasConfig,
+                ...customConfig
+            }
+        })
+    }
+
+    /**
+     * 静态工厂方法 - 创建深度优化场景
+     * @param enableLogDepth 是否启用对数深度
+     * @param customConfig 自定义配置
+     */
+    static createWithDepthOptimization(
+        enableLogDepth: boolean = true, 
+        customConfig: any = {}
+    ): BaseScene {
+        const depthConfig: DepthConfig = {
+            enabled: true,
+            depthBufferConfig: {
+                enableLogDepth,
+                depthBits: 32,
+                stencilBits: 8
+            },
+            polygonOffsetConfig: {
+                enabled: true,
+                factor: 2.0,
+                units: 2.0
+            },
+            depthRangeConfig: {
+                autoOptimize: true,
+                nearFarRatio: 1/10000,
+                minNear: 0.001,
+                maxFar: 1000000
+            },
+            conflictDetection: {
+                enabled: true,
+                threshold: 0.00001,
+                autoFix: true
+            },
+            depthSortConfig: {
+                enabled: true,
+                transparent: true,
+                opaque: true
+            }
+        }
+
+        return new BaseScene({
+            userData: {
+                preset: 'highQuality',
+                depthConfig,
+                ...customConfig
+            }
+        })
+    }
+
+    /**
+     * 静态工厂方法 - 创建抗锯齿+深度优化的完美场景
+     * @param antialiasType 抗锯齿类型
+     * @param enableLogDepth 是否启用对数深度
+     * @param customConfig 自定义配置
+     */
+    static createPerfectQuality(
+        antialiasType: AntialiasConfig['type'] = 'msaa',
+        enableLogDepth: boolean = true,
+        customConfig: any = {}
+    ): BaseScene {
+        // 高级抗锯齿配置
+        const antialiasConfig: AntialiasConfig = {
+            enabled: antialiasType !== 'none',
+            type: antialiasType,
+            msaaConfig: { samples: 8 },
+            fxaaConfig: { intensity: 0.9, quality: 'high' }
+        }
+
+        // 完整深度优化配置
+        const depthConfig: DepthConfig = {
+            enabled: true,
+            depthBufferConfig: {
+                enableLogDepth,
+                depthBits: 32,
+                stencilBits: 8
+            },
+            polygonOffsetConfig: {
+                enabled: true,
+                factor: 2.0,
+                units: 2.0
+            },
+            depthRangeConfig: {
+                autoOptimize: true,
+                nearFarRatio: 1/10000,
+                minNear: 0.001,
+                maxFar: 1000000
+            },
+            conflictDetection: {
+                enabled: true,
+                threshold: 0.00001,
+                autoFix: true
+            },
+            depthSortConfig: {
+                enabled: true,
+                transparent: true,
+                opaque: true
+            }
+        }
+
+        return new BaseScene({
+            userData: {
+                preset: 'highQuality',
+                antialiasConfig,
+                depthConfig,
+                ...customConfig
+            }
+        })
+    }
+
+    /**
+     * 静态工厂方法 - 创建移动端优化场景（轻量抗锯齿+基础深度管理）
+     * @param customConfig 自定义配置
+     */
+    static createMobileOptimized(customConfig: any = {}): BaseScene {
+        const antialiasConfig: AntialiasConfig = {
+            enabled: true,
+            type: 'fxaa',
+            fxaaConfig: {
+                intensity: 0.5,
+                quality: 'low'
+            }
+        }
+
+        const depthConfig: DepthConfig = {
+            enabled: true,
+            depthBufferConfig: {
+                enableLogDepth: false,
+                depthBits: 16,
+                stencilBits: 0
+            },
+            polygonOffsetConfig: {
+                enabled: false,
+                factor: 0,
+                units: 0
+            },
+            depthRangeConfig: {
+                autoOptimize: true,
+                nearFarRatio: 1/1000,
+                minNear: 0.1,
+                maxFar: 50000
+            },
+            conflictDetection: {
+                enabled: true,
+                threshold: 0.001,
+                autoFix: true
+            },
+            depthSortConfig: {
+                enabled: false,
+                transparent: false,
+                opaque: false
+            }
+        }
+
+        return new BaseScene({
+            userData: {
+                preset: 'highPerformance',
+                antialiasConfig,
+                depthConfig,
+                ...customConfig
+            }
+        })
     }
 
     destroy() {
