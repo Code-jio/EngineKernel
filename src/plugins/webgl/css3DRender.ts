@@ -23,6 +23,11 @@ interface CSS3DConfig {
     
     draggable?: boolean
 
+    // 性能优化配置
+    animatedToggle?: boolean // 是否使用动画显隐切换
+    gpuAcceleration?: boolean // 是否强制启用GPU加速
+    pointerEventsControl?: 'auto' | 'none' | 'smart' // 鼠标事件控制策略
+    useTransitions?: boolean // 是否使用CSS过渡动画
     
     // 生命周期回调
     complete?: () => void
@@ -63,7 +68,7 @@ export class CSS3DRenderPlugin extends BasePlugin {
         this.domElement = this.css3Drenderer.domElement
 
         this.domElement.className = 'css3d-renderer-layer'
-        this.domElement.style.position = 'fixed'
+        this.domElement.style.position = 'absolute'
         this.domElement.style.top = '0'
         this.domElement.style.left = '0'
         this.domElement.style.width = '100%'
@@ -82,6 +87,40 @@ export class CSS3DRenderPlugin extends BasePlugin {
     }
 
     /**
+     * 初始化插件
+     * @description 插件初始化方法，集成到渲染循环
+     */
+    private initialize () {
+        this.startRenderLoop()
+        this.addTransitionStyles() // 
+
+        console.log("✅ CSS3D插件已通过eventBus集成到渲染循环")
+        console.log(`🎬 当前渲染模式: ${this.renderMode}`)
+    }
+
+    // 添加过渡动画样式到文档头
+    private addTransitionStyles(): void {
+        if (!document.getElementById('css3d-transition-styles')) {
+        const style = document.createElement('style');
+        style.id = 'css3d-transition-styles';
+        style.textContent = `
+            .css3d-transition {
+                transition: opacity 0.3s ease, transform 0.3s ease !important;
+                transform-origin: center center;
+                backface-visibility: hidden;
+            }
+            .css3d-hidden {
+                /* 隐藏状态样式由JavaScript动态设置 */
+            }
+            .css3d-visible {
+                /* 显示状态样式由JavaScript动态设置 */
+            }
+        `;
+        document.head.appendChild(style);
+        }
+    }
+
+    /**
      * 创建CSS3D对象
      * @param options 参数配置
      * @param options.element 元素
@@ -94,10 +133,10 @@ export class CSS3DRenderPlugin extends BasePlugin {
      * @returns CSS3DObject
      * @description 创建CSS3D对象，并添加到CSS3D渲染器中
      */
-    createCSS3DObject(options: CSS3DConfig): CSS3DObject {
+    createCSS3DObject(options: CSS3DConfig): CSS3DObject | CSS3DConfig{
         // 提供默认参数
         const defaultOptions: CSS3DConfig = {
-            element: document.createElement('div') || null,
+            element: "<div>空对象</div>",
             position: [0, 0, 0],
             rotation: [0, 0, 0],
             offset: 0,
@@ -105,6 +144,10 @@ export class CSS3DRenderPlugin extends BasePlugin {
             display: true, // 默认可见
             opacity: 1,
             zIndex: 1,
+            animatedToggle: false, // 默认不使用动画切换
+            gpuAcceleration: true, // 默认启用GPU加速
+            pointerEventsControl: 'smart', // 智能鼠标事件控制
+            useTransitions: true, // 默认使用CSS过渡
             complete: () => {},
             onUpdate: () => {},
             onDestroy: () => {},
@@ -115,84 +158,125 @@ export class CSS3DRenderPlugin extends BasePlugin {
 
         try {
             // 处理element参数，确保是HTMLElement
-            let element: HTMLElement
+            let element: HTMLElement;
             if (typeof mergedOptions.element === 'string') {
-                const foundElement = document.querySelector(mergedOptions.element)
-                if (foundElement instanceof HTMLElement) {
-                    element = foundElement
-                } else {
-                    throw new Error(`找不到选择器对应的元素: ${mergedOptions.element}`)
-                }
+              const wrapper = document.createElement('div');
+              wrapper.innerHTML = mergedOptions.element;
+              const firstChild = wrapper.firstElementChild as HTMLElement;
+              if (!firstChild) {
+                throw new Error('创建DOM元素失败：字符串解析后无子元素');
+              }
+              element = firstChild;
             } else {
-                element = mergedOptions.element
+              element = mergedOptions.element;
             }
-
-            // 设置基础样式
-            element.style.opacity = mergedOptions.opacity?.toString() || '1'
-            element.style.zIndex = mergedOptions.zIndex?.toString() || '1'
-            element.style.display = mergedOptions.display ? "block" : "none"
-
+      
+            // 计算鼠标事件属性
+            let pointerEvents = 'auto';
+            if (mergedOptions.pointerEventsControl === 'none') {
+              pointerEvents = 'none';
+            } else if (mergedOptions.pointerEventsControl === 'smart') {
+              pointerEvents = mergedOptions.display ? 'auto' : 'none';
+            }
+      
+            // 坐标系修正样式（解决Three.js与CSS3D坐标系差异）
+            const baseTransform = 'rotateX(180deg) translate3d(0,0,0)';
+            
+            // 构建完整样式
+            const cssText = [
+              `opacity: ${mergedOptions.display ? mergedOptions.opacity : 0}`,
+              `z-index: ${mergedOptions.zIndex}`,
+              `visibility: ${mergedOptions.display ? 'visible' : 'hidden'}`,
+              `pointer-events: ${pointerEvents}`,
+              `transform: ${baseTransform}`,
+              'transform-origin: center center',
+              'backface-visibility: hidden',
+              mergedOptions.gpuAcceleration ? 'will-change: transform, opacity' : '',
+            ].filter(Boolean).join('; ');
+      
+            // 一次性设置样式
+            element.style.cssText += ';' + cssText;
+            
+            // 添加过渡动画类
+            if (mergedOptions.useTransitions) {
+              element.classList.add('css3d-transition');
+            }
+            
+            // 添加可见性控制类
+            if (mergedOptions.animatedToggle) {
+              element.classList.add(mergedOptions.display ? 'css3d-visible' : 'css3d-hidden');
+            } else {
+              element.style.display = mergedOptions.display ? 'block' : 'none';
+            }
+      
             // 创建CSS3D对象
-            const object = new CSS3DObject(element)
-            object.visible = mergedOptions.display || false
-
-            // 设置位置
-            const position = mergedOptions.position
-            object.position.set(position[0], position[1], position[2])
-
+            const object = new CSS3DObject(element);
+            
+            // 设置可见性
+            object.visible = mergedOptions.display || false;
+            
+            // 应用offset（Y轴偏移）
+            const finalY = mergedOptions.position[1] + (mergedOptions.offset || 0);
+            object.position.set(
+              mergedOptions.position[0], 
+              finalY, 
+              mergedOptions.position[2]
+            );
+            
             // 设置旋转
             if (mergedOptions.rotation) {
-                object.rotation.set(mergedOptions.rotation[0], mergedOptions.rotation[1], mergedOptions.rotation[2])
+              object.rotation.set(
+                mergedOptions.rotation[0], 
+                mergedOptions.rotation[1], 
+                mergedOptions.rotation[2]
+              );
             }
-
-            // 设置缩放（支持等比和非等比缩放）
+      
+            // 设置缩放
             if (mergedOptions.scale) {
-                if (typeof mergedOptions.scale === 'number') {
-                    object.scale.setScalar(mergedOptions.scale)
-                } else {
-                    object.scale.set(mergedOptions.scale[0], mergedOptions.scale[1], mergedOptions.scale[2])
-                }
+              if (typeof mergedOptions.scale === 'number') {
+                object.scale.setScalar(mergedOptions.scale);
+              } else {
+                object.scale.set(
+                  mergedOptions.scale[0], 
+                  mergedOptions.scale[1], 
+                  mergedOptions.scale[2]
+                );
+              }
             }
-
+      
             // 设置用户数据
             if (mergedOptions.userData) {
-                object.userData = mergedOptions.userData
+              object.userData = mergedOptions.userData;
             }
-
-            // 添加到场景并获取ID
-            const objectId = this.addObject(object, mergedOptions.id)
+      
+            // 添加到场景
+            const objectId = this.addObject(object, mergedOptions.id);
             
-            // 标记需要重新渲染
-            this.markNeedsRender()
-
-            // 调用完成回调
+            // 请求渲染
+            this.markNeedsRender();
+      
+            // 完成回调
             if (mergedOptions.complete) {
-                mergedOptions.complete()
+              mergedOptions.complete();
             }
-
-            return object
+      
+            // 设置更新回调
+            object.userData.onUpdate = mergedOptions.onUpdate;
             
-        } catch (error) {
-            console.error('创建CSS3D对象失败:', error)
-            throw error
-        }
+            return object;
+            
+          } catch (error) {
+            console.error('创建CSS3D对象失败:', error);
+            throw error;
+          }
     }
+
     /**
      * 标记需要重新渲染
      */
     private markNeedsRender(): void {
         this.needsRender = true
-    }
-
-    /**
-     * 初始化插件
-     * @description 插件初始化方法，集成到渲染循环
-     */
-    private initialize () {
-        this.startRenderLoop()
-
-        console.log("✅ CSS3D插件已通过eventBus集成到渲染循环")
-        console.log(`🎬 当前渲染模式: ${this.renderMode}`)
     }
 
     /**
@@ -397,6 +481,7 @@ export class CSS3DRenderPlugin extends BasePlugin {
             console.error('销毁CSS3D插件失败:', error)
         }
     }
+
     /**
      * 获取CSS3D渲染器
      * @description 获取CSS3D渲染器
@@ -412,7 +497,7 @@ export class CSS3DRenderPlugin extends BasePlugin {
      * @returns 对象ID
      */
     createObject(options: CSS3DConfig): CSS3DObject {
-        return this.createCSS3DObject(options)
+        return this.createCSS3DObject(options) as CSS3DObject
     }
 
     /**
@@ -547,104 +632,340 @@ export class CSS3DRenderPlugin extends BasePlugin {
     }
     
     /**
-     * 渐入效果
+     * 渐入效果 - 优化版本，使用CSS过渡动画
      * @param object CSS3D对象
      * @param duration 动画时长（毫秒）
      */
     fadeIn(object: CSS3DObject, duration: number = 1000): void {
-        if (!object || !object.element) return;
+        if (!object || !object.element) {
+            console.warn('fadeIn: 无效的CSS3D对象')
+            return
+        }
         
-        // 设置初始状态
-        object.element.style.display = 'block';
-        object.element.style.opacity = '0';
-        object.visible = true;
+        const element = object.element
+        const baseTransform = 'translate3d(0,0,0) rotateX(180deg)' // 保持翻转修正
         
-        // 创建渐入动画
-        const startValues = { opacity: 0 };
-        const endValues = { opacity: 1 };
+        // 设置初始状态 - 批量设置样式避免多次重绘
+        const initialStyles = [
+            'visibility: visible',
+            'opacity: 0',
+            'pointer-events: none', // 动画开始时禁用鼠标事件
+            `transform: ${baseTransform} scale(0.8)`, // 轻微缩放效果 + 翻转修正
+            `transition: opacity ${duration}ms ease, transform ${duration}ms ease`
+        ].join('; ')
         
-        new TWEEN.Tween(startValues, this.animations)
-            .to(endValues, duration)
-            .easing(TWEEN.Easing.Cubic.Out)
-            .onUpdate(() => {
-                if (object.element) {
-                    object.element.style.opacity = startValues.opacity.toString();
-                }
-            })
-            .onComplete(() => {
-                if (object.element) {
-                    object.element.style.opacity = '1';
-                }
-            })
-            .start();
+        element.style.cssText += '; ' + initialStyles
+        object.visible = true
+        
+        // 强制重绘以确保初始状态生效
+        void element.offsetHeight
+        
+        // 设置最终状态，触发CSS过渡动画
+        const finalStyles = [
+            'opacity: 1',
+            'pointer-events: auto', // 动画完成后恢复鼠标事件
+            `transform: ${baseTransform} scale(1)`
+        ].join('; ')
+        
+        element.style.cssText += '; ' + finalStyles
+        
+        // 清理过渡属性
+        setTimeout(() => {
+            if (object.visible && element.style.opacity === '1') {
+                element.style.transition = ''
+            }
+        }, duration + 50)
             
-        this.markNeedsRender();
+        this.markNeedsRender()
     }
 
     /**
-     * 渐出效果
+     * 渐出效果 - 优化版本，使用CSS过渡动画
      * @param object CSS3D对象
      * @param duration 动画时长（毫秒）
      * @param onComplete 完成回调
      */
     fadeOut(object: CSS3DObject, duration: number = 1000, onComplete?: () => void): void {
-        if (!object || !object.element) return;
+        if (!object || !object.element) {
+            console.warn('fadeOut: 无效的CSS3D对象')
+            return
+        }
         
-        // 获取当前透明度
-        const currentOpacity = parseFloat(object.element.style.opacity || '1');
+        const element = object.element
+        const baseTransform = 'translate3d(0,0,0) rotateX(180deg)' // 保持翻转修正
         
-        // 创建渐出动画
-        const startValues = { opacity: currentOpacity };
-        const endValues = { opacity: 0 };
+        // 立即禁用鼠标事件，防止动画过程中的交互
+        element.style.pointerEvents = 'none'
+        element.style.transition = `opacity ${duration}ms ease, transform ${duration}ms ease`
         
-        new TWEEN.Tween(startValues, this.animations)
-            .to(endValues, duration)
-            .easing(TWEEN.Easing.Cubic.Out)
-            .onUpdate(() => {
-                if (object.element) {
-                    object.element.style.opacity = startValues.opacity.toString();
-                }
-            })
-            .onComplete(() => {
-                if (object.element) {
-                    object.element.style.opacity = '0';
-                    object.element.style.display = 'none';
-                }
-                object.visible = false;
+        // 设置渐出状态
+        const fadeOutStyles = [
+            'opacity: 0',
+            `transform: ${baseTransform} scale(0.8)`
+        ].join('; ')
+        
+        element.style.cssText += '; ' + fadeOutStyles
+        
+        // 动画完成后的处理
+        setTimeout(() => {
+            if (element.style.opacity === '0') {
+                const hideStyles = [
+                    'visibility: hidden',
+                    `transform: ${baseTransform} scale(0)`,
+                    'transition: ""'
+                ].join('; ')
+                element.style.cssText += '; ' + hideStyles
+                object.visible = false
                 
                 if (onComplete) {
-                    onComplete();
+                    onComplete()
                 }
-            })
-            .start();
+            }
+        }, duration + 50)
             
-        this.markNeedsRender();
+        this.markNeedsRender()
     }
 
-    setVisible(object: CSS3DObject, visible: boolean) {
-        if (object.visible === visible) return;
-    
-        if (visible) {
-          // 显示流程
-          object.element.style.display = 'block';
-          object.element.style.opacity = '0';
-          
-          // 强制布局计算
-          void object.element.offsetHeight;
-          
-          object.element.style.opacity = '1';
-        } else {
-          // 隐藏流程
-          object.element.style.opacity = '0';
-          
-          // 延迟实际隐藏
-          setTimeout(() => {
-            if (!object.visible) {
-              object.element.style.display = 'none';
+    /**
+     * 智能显隐控制 - 优化版本，保持正确的scale和坐标系
+     * @param object CSS3D对象
+     * @param visible 是否可见
+     * @param useAnimation 是否使用动画过渡
+     */
+    setVisible(object: CSS3DObject, visible: boolean, useAnimation: boolean = false): void {
+        if (!object) return;
+        const element = object.element as HTMLElement;
+        
+        // 获取对象的实际scale值
+        let actualScale = 1;
+        if (object.scale.x !== undefined) {
+            actualScale = object.scale.x; // 假设是均匀缩放
+        }
+        
+        // 构建包含坐标系修正的transform
+        const baseTransform = 'rotateX(180deg)'; // Y轴翻转修正
+        const scaleTransform = `scale(${actualScale})`;
+        
+        if (useAnimation && element.classList.contains('css3d-transition')) {
+            // 使用CSS过渡动画
+            element.classList.remove('css3d-visible', 'css3d-hidden');
+            
+            if (visible) {
+                // 显示状态
+                element.style.opacity = '1';
+                element.style.visibility = 'visible';
+                element.style.transform = `${baseTransform} ${scaleTransform}`;
+                element.style.pointerEvents = this.getPointerEventsControl(object) === 'smart' ? 'auto' : element.style.pointerEvents;
+                element.classList.add('css3d-visible');
+            } else {
+                // 隐藏状态 - 使用较小的scale制造动画效果
+                const hideScale = actualScale * 0.8; // 保持相对比例
+                element.style.opacity = '0';
+                element.style.transform = `${baseTransform} scale(${hideScale})`;
+                element.style.pointerEvents = 'none';
+                element.classList.add('css3d-hidden');
+                
+                // 动画完成后彻底隐藏
+                setTimeout(() => {
+                    if (element.style.opacity === '0') {
+                        element.style.visibility = 'hidden';
+                    }
+                }, 300);
             }
-          }, 200);
+        } else {
+            // 直接设置，不使用动画
+            if (visible) {
+                element.style.display = 'block';
+                element.style.visibility = 'visible';
+                element.style.opacity = '1';
+                element.style.transform = `${baseTransform} ${scaleTransform}`;
+                element.style.pointerEvents = this.getPointerEventsControl(object) === 'smart' ? 'auto' : element.style.pointerEvents;
+            } else {
+                element.style.opacity = '0';
+                element.style.visibility = 'hidden';
+                element.style.pointerEvents = 'none';
+                // 保持transform以维持scale
+                element.style.transform = `${baseTransform} ${scaleTransform}`;
+            }
         }
         
         object.visible = visible;
-      }
+        this.markNeedsRender();
+    }
+
+    /**
+     * 批量更新对象样式 - 性能优化方法
+     * @param updates 批量更新配置数组
+     */
+    batchUpdateStyles(updates: Array<{
+        id: string
+        styles: Partial<{
+            opacity: number
+            visibility: 'visible' | 'hidden'
+            transform: string
+            pointerEvents: 'auto' | 'none'
+        }>
+    }>): void {
+        const updatedObjects: CSS3DObject[] = []
+        
+        updates.forEach(update => {
+            const item = this.items.get(update.id)
+            if (!item) return
+            
+            const cssStyles: string[] = []
+            
+            if (update.styles.opacity !== undefined) {
+                cssStyles.push(`opacity: ${update.styles.opacity}`)
+            }
+            if (update.styles.visibility !== undefined) {
+                cssStyles.push(`visibility: ${update.styles.visibility}`)
+            }
+            if (update.styles.transform !== undefined) {
+                cssStyles.push(`transform: ${update.styles.transform}`)
+            }
+            if (update.styles.pointerEvents !== undefined) {
+                cssStyles.push(`pointer-events: ${update.styles.pointerEvents}`)
+            }
+            
+            if (cssStyles.length > 0) {
+                item.element.style.cssText += '; ' + cssStyles.join('; ')
+                updatedObjects.push(item.object)
+            }
+        })
+        
+        if (updatedObjects.length > 0) {
+            this.markNeedsRender()
+            console.log(`🚀 批量更新了 ${updatedObjects.length} 个CSS3D对象的样式`)
+        }
+    }
+
+    /**
+     * 启用/禁用GPU加速
+     * @param objectId 对象ID，如果为空则应用到所有对象
+     * @param enable 是否启用
+     */
+    setGPUAcceleration(objectId?: string, enable: boolean = true): void {
+        const processObject = (item: CSS3DItem) => {
+            const element = item.element
+            if (enable) {
+                const gpuStyles = [
+                    'transform: translate3d(0,0,0)',
+                    'will-change: transform, opacity',
+                    'backface-visibility: hidden'
+                ].join('; ')
+                element.style.cssText += '; ' + gpuStyles
+            } else {
+                element.style.transform = element.style.transform.replace('translate3d(0,0,0)', '')
+                element.style.willChange = 'auto'
+                element.style.backfaceVisibility = 'visible'
+            }
+        }
+        
+        if (objectId) {
+            const item = this.items.get(objectId)
+            if (item) {
+                processObject(item)
+            }
+        } else {
+            this.items.forEach(processObject)
+        }
+        
+        this.markNeedsRender()
+        console.log(`🎨 ${enable ? '启用' : '禁用'}GPU加速 ${objectId ? `(对象: ${objectId})` : '(所有对象)'}`)
+    }
+
+    /**
+     * 性能监控 - 获取渲染统计信息
+     * @returns 性能统计数据
+     */
+    getPerformanceStats(): {
+        totalObjects: number
+        visibleObjects: number
+        hiddenObjects: number
+        gpuAcceleratedObjects: number
+        renderMode: string
+    } {
+        let visibleCount = 0
+        let gpuAcceleratedCount = 0
+        
+        this.items.forEach(item => {
+            if (item.object.visible) {
+                visibleCount++
+            }
+            
+            // 检查是否启用了GPU加速
+            if (item.element.style.willChange.includes('transform') || 
+                item.element.style.transform.includes('translate3d')) {
+                gpuAcceleratedCount++
+            }
+        })
+        
+        return {
+            totalObjects: this.items.size,
+            visibleObjects: visibleCount,
+            hiddenObjects: this.items.size - visibleCount,
+            gpuAcceleratedObjects: gpuAcceleratedCount,
+            renderMode: this.renderMode
+        }
+    }
+
+    /**
+     * 优化CSS3D对象的DOM结构
+     * @param objectId 对象ID
+     */
+    optimizeDOMStructure(objectId: string): boolean {
+        const item = this.items.get(objectId)
+        if (!item) return false
+        
+        const element = item.element
+        
+        try {
+            // 移除不必要的样式
+            const unnecessaryProps = ['margin', 'padding', 'border', 'outline']
+            unnecessaryProps.forEach(prop => {
+                element.style.removeProperty(prop)
+            })
+            
+            // 确保高性能的渲染属性
+            const optimizedStyles = [
+                'contain: layout style paint',
+                'isolation: isolate'
+            ].join('; ')
+            
+            element.style.cssText += '; ' + optimizedStyles
+            
+            console.log(`✨ 优化了CSS3D对象DOM结构 (ID: ${objectId})`)
+            return true
+        } catch (error) {
+            console.error(`优化DOM结构失败 (ID: ${objectId}):`, error)
+            return false
+        }
+    }
+
+    /**
+     * 获取指针事件控制
+     * @param id 对象ID
+     * @returns 指针事件控制策略
+     */
+    getPointerEventsControl(object: CSS3DObject): 'auto' | 'none' | 'smart' {
+        let control 
+        if (!object) {
+            control = 'auto'
+        } else {
+            control = object.userData.pointerEventsControl || 'auto'
+        }
+        
+        // 更新用户数据
+        object.userData.pointerEventsControl = control;
+        
+        // 实时更新样式
+        const element = object.element as HTMLElement;
+        if (control === 'smart') {
+          element.style.pointerEvents = object.visible ? 'auto' : 'none';
+        } else {
+          element.style.pointerEvents = control;
+        }
+
+        return control
+    }
 }
