@@ -831,9 +831,9 @@ export class BaseScene extends BasePlugin {
         })
 
         // 直接将Three.js生成的canvas添加到body
-        this.renderer.domElement.style.position = 'fixed'
-        this.renderer.domElement.style.top = '0'
-        this.renderer.domElement.style.left = '0'
+        // this.renderer.domElement.style.position = 'fixed'
+        // this.renderer.domElement.style.top = '0'
+        // this.renderer.domElement.style.left = '0'
         this.renderer.domElement.style.width = '100%'
         this.renderer.domElement.style.height = '100%'
         // this.renderer.domElement.style.zIndex = '1' // 设置合适的层级

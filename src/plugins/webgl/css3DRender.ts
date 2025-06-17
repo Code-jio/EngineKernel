@@ -105,15 +105,12 @@ export class CSS3DRenderPlugin extends BasePlugin {
         style.id = 'css3d-transition-styles';
         style.textContent = `
             .css3d-transition {
-                transition: opacity 0.3s ease, transform 0.3s ease !important;
+                transition: opacity 0.3s ease, transform 0.3s ease, visibility 0.3s ease !important;
                 transform-origin: center center;
-                backface-visibility: hidden;
-            }
-            .css3d-hidden {
-                /* 隐藏状态样式由JavaScript动态设置 */
             }
             .css3d-visible {
-                /* 显示状态样式由JavaScript动态设置 */
+            }
+            .css3d-hidden {
             }
         `;
         document.head.appendChild(style);
@@ -179,8 +176,14 @@ export class CSS3DRenderPlugin extends BasePlugin {
               pointerEvents = mergedOptions.display ? 'auto' : 'none';
             }
       
-            // 坐标系修正样式（解决Three.js与CSS3D坐标系差异）
-            const baseTransform = 'rotateX(180deg) translate3d(0,0,0)';
+            // GPU加速样式
+            const baseTransform = 'translate3d(0,0,0)';
+            
+            // 构建初始变换（包含中心对齐）
+            const initialTransform = [
+              'translate(-50%, -50%)', // 中心对齐
+              baseTransform            // GPU加速
+            ].join(' ');
             
             // 构建完整样式
             const cssText = [
@@ -188,9 +191,8 @@ export class CSS3DRenderPlugin extends BasePlugin {
               `z-index: ${mergedOptions.zIndex}`,
               `visibility: ${mergedOptions.display ? 'visible' : 'hidden'}`,
               `pointer-events: ${pointerEvents}`,
-              `transform: ${baseTransform}`,
+              `transform: ${initialTransform}`,
               'transform-origin: center center',
-              'backface-visibility: hidden',
               mergedOptions.gpuAcceleration ? 'will-change: transform, opacity' : '',
             ].filter(Boolean).join('; ');
       
@@ -515,6 +517,9 @@ export class CSS3DRenderPlugin extends BasePlugin {
         try {
             item.object.position.set(x, y, z)
             this.markNeedsRender()
+            this.forceUpdateMatrix3D(item.object); 
+
+            this.markNeedsRender()
             return true
         } catch (error) {
             console.error(`移动对象失败 (ID: ${id}):`, error)
@@ -643,14 +648,41 @@ export class CSS3DRenderPlugin extends BasePlugin {
         }
         
         const element = object.element
-        const baseTransform = 'translate3d(0,0,0) rotateX(180deg)' // 保持翻转修正
+        
+        // 保留现有变换（包括中心对齐和matrix3d）
+        const preserveTransform = () => {
+            const currentTransform = element.style.transform;
+            const matrix3dMatch = currentTransform.match(/matrix3d\([^)]+\)/);
+            const translateMatch = currentTransform.match(/translate\([^)]+\)/);
+            
+            const transforms = [];
+            
+            // 保留中心对齐
+            if (translateMatch && translateMatch[0].includes('-50%')) {
+                transforms.push(translateMatch[0]);
+            } else {
+                transforms.push('translate(-50%, -50%)');
+            }
+            
+            // 保留matrix3d
+            if (matrix3dMatch) {
+                transforms.push(matrix3dMatch[0]);
+            }
+            
+            // 添加GPU加速
+            transforms.push('translate3d(0,0,0)');
+            
+            return transforms.join(' ');
+        };
+        
+        const preservedTransform = preserveTransform();
         
         // 设置初始状态 - 批量设置样式避免多次重绘
         const initialStyles = [
             'visibility: visible',
             'opacity: 0',
             'pointer-events: none', // 动画开始时禁用鼠标事件
-            `transform: ${baseTransform} scale(0.8)`, // 轻微缩放效果 + 翻转修正
+            `transform: ${preservedTransform}`, // 保留所有变换
             `transition: opacity ${duration}ms ease, transform ${duration}ms ease`
         ].join('; ')
         
@@ -664,7 +696,7 @@ export class CSS3DRenderPlugin extends BasePlugin {
         const finalStyles = [
             'opacity: 1',
             'pointer-events: auto', // 动画完成后恢复鼠标事件
-            `transform: ${baseTransform} scale(1)`
+            `transform: ${preservedTransform}`
         ].join('; ')
         
         element.style.cssText += '; ' + finalStyles
@@ -692,7 +724,34 @@ export class CSS3DRenderPlugin extends BasePlugin {
         }
         
         const element = object.element
-        const baseTransform = 'translate3d(0,0,0) rotateX(180deg)' // 保持翻转修正
+        
+        // 保留现有变换（包括中心对齐和matrix3d）
+        const preserveTransform = () => {
+            const currentTransform = element.style.transform;
+            const matrix3dMatch = currentTransform.match(/matrix3d\([^)]+\)/);
+            const translateMatch = currentTransform.match(/translate\([^)]+\)/);
+            
+            const transforms = [];
+            
+            // 保留中心对齐
+            if (translateMatch && translateMatch[0].includes('-50%')) {
+                transforms.push(translateMatch[0]);
+            } else {
+                transforms.push('translate(-50%, -50%)');
+            }
+            
+            // 保留matrix3d
+            if (matrix3dMatch) {
+                transforms.push(matrix3dMatch[0]);
+            }
+            
+            // 添加GPU加速
+            transforms.push('translate3d(0,0,0)');
+            
+            return transforms.join(' ');
+        };
+        
+        const preservedTransform = preserveTransform();
         
         // 立即禁用鼠标事件，防止动画过程中的交互
         element.style.pointerEvents = 'none'
@@ -701,7 +760,7 @@ export class CSS3DRenderPlugin extends BasePlugin {
         // 设置渐出状态
         const fadeOutStyles = [
             'opacity: 0',
-            `transform: ${baseTransform} scale(0.8)`
+            `transform: ${preservedTransform}`
         ].join('; ')
         
         element.style.cssText += '; ' + fadeOutStyles
@@ -711,7 +770,7 @@ export class CSS3DRenderPlugin extends BasePlugin {
             if (element.style.opacity === '0') {
                 const hideStyles = [
                     'visibility: hidden',
-                    `transform: ${baseTransform} scale(0)`,
+                    `transform: ${preservedTransform}`,
                     'transition: ""'
                 ].join('; ')
                 element.style.cssText += '; ' + hideStyles
@@ -727,7 +786,37 @@ export class CSS3DRenderPlugin extends BasePlugin {
     }
 
     /**
-     * 智能显隐控制 - 优化版本，保持正确的scale和坐标系
+     * 强制更新CSS3D对象的matrix3d变换
+     * @param object CSS3D对象
+     */
+    private forceUpdateMatrix3D(object: CSS3DObject): void {
+        if (!this.css3Drenderer || !this.mainScene || !this.camera) {
+            return;
+        }
+        
+        try {
+
+            const originalVisible = object.visible
+            object.visible = true
+
+            if (object.parent) {
+                object.parent.updateMatrixWorld(true);
+            }
+            // 临时触发一次渲染来更新matrix3d
+            // 这会让CSS3DRenderer重新计算并设置matrix3d属性
+            this.css3Drenderer.render(this.mainScene, this.camera);
+            
+            // 标记对象需要更新
+            object.matrixWorldNeedsUpdate = true;
+
+            object.visible = originalVisible
+        } catch (error) {
+            console.warn('强制更新matrix3d失败:', error);
+        }
+    }
+
+    /**
+     * 智能显隐控制 - 优化版本，保持matrix3d同步
      * @param object CSS3D对象
      * @param visible 是否可见
      * @param useAnimation 是否使用动画过渡
@@ -735,42 +824,73 @@ export class CSS3DRenderPlugin extends BasePlugin {
     setVisible(object: CSS3DObject, visible: boolean, useAnimation: boolean = false): void {
         if (!object) return;
         const element = object.element as HTMLElement;
+
+        const wasVisible = object.visible
         
-        // 获取对象的实际scale值
-        let actualScale = 1;
-        if (object.scale.x !== undefined) {
-            actualScale = object.scale.x; // 假设是均匀缩放
+        if (visible == true) {
+            console.log('set visible true');
         }
         
-        // 构建包含坐标系修正的transform
-        const baseTransform = 'rotateX(180deg)'; // Y轴翻转修正
-        const scaleTransform = `scale(${actualScale})`;
+        // 保留现有的所有变换，包括中心对齐和matrix3d
+        const preserveMatrixTransform = () => {
+            const currentTransform = element.style.transform;
+            
+            // 提取所有重要的变换函数
+            const matrix3dMatch = currentTransform.match(/matrix3d\([^)]+\)/);
+            const translateMatch = currentTransform.match(/translate\([^)]+\)/);
+            const translate3dMatch = currentTransform.match(/translate3d\([^)]+\)/);
+            
+            const transforms = [];
+            
+            // 保留 translate(-50%, -50%) 中心对齐
+            if (translateMatch && translateMatch[0].includes('-50%')) {
+                transforms.push(translateMatch[0]);
+            } else {
+                // 如果没有中心对齐，添加默认的
+                transforms.push('translate(-50%, -50%)');
+            }
+            
+            // 保留 matrix3d 3D变换
+            if (matrix3dMatch) {
+                transforms.push(matrix3dMatch[0]);
+            }
+            
+            // 添加GPU加速（如果还没有）
+            if (!translate3dMatch || !translate3dMatch[0].includes('translate3d(0,0,0)')) {
+                transforms.push('translate3d(0,0,0)');
+            }
+            
+            return transforms.join(' ');
+        };
         
         if (useAnimation && element.classList.contains('css3d-transition')) {
             // 使用CSS过渡动画
             element.classList.remove('css3d-visible', 'css3d-hidden');
             
             if (visible) {
-                // 显示状态
+                // 显示状态 - 只修改显示属性，不覆盖transform
                 element.style.opacity = '1';
                 element.style.visibility = 'visible';
-                element.style.transform = `${baseTransform} ${scaleTransform}`;
                 element.style.pointerEvents = this.getPointerEventsControl(object) === 'smart' ? 'auto' : element.style.pointerEvents;
                 element.classList.add('css3d-visible');
+                
+                // 保留matrix3d
+                element.style.transform = preserveMatrixTransform();
             } else {
-                // 隐藏状态 - 使用较小的scale制造动画效果
-                const hideScale = actualScale * 0.8; // 保持相对比例
+                // 隐藏状态
                 element.style.opacity = '0';
-                element.style.transform = `${baseTransform} scale(${hideScale})`;
                 element.style.pointerEvents = 'none';
                 element.classList.add('css3d-hidden');
+                
+                // 保留matrix3d
+                element.style.transform = preserveMatrixTransform();
                 
                 // 动画完成后彻底隐藏
                 setTimeout(() => {
                     if (element.style.opacity === '0') {
                         element.style.visibility = 'hidden';
                     }
-                }, 300);
+                }, 300); // 与transition时间一致
             }
         } else {
             // 直接设置，不使用动画
@@ -778,18 +898,28 @@ export class CSS3DRenderPlugin extends BasePlugin {
                 element.style.display = 'block';
                 element.style.visibility = 'visible';
                 element.style.opacity = '1';
-                element.style.transform = `${baseTransform} ${scaleTransform}`;
                 element.style.pointerEvents = this.getPointerEventsControl(object) === 'smart' ? 'auto' : element.style.pointerEvents;
+                
+                // 保留matrix3d
+                element.style.transform = preserveMatrixTransform();
             } else {
                 element.style.opacity = '0';
                 element.style.visibility = 'hidden';
                 element.style.pointerEvents = 'none';
-                // 保持transform以维持scale
-                element.style.transform = `${baseTransform} ${scaleTransform}`;
+                
+                // 保留matrix3d
+                element.style.transform = preserveMatrixTransform();
             }
         }
         
         object.visible = visible;
+
+        if (visible && !wasVisible) {
+            // 显示时确保变换正确并强制更新matrix3d
+            this.ensureCorrectTransform(element);
+            this.forceUpdateMatrix3D(object);
+        }
+
         this.markNeedsRender();
     }
 
@@ -848,14 +978,9 @@ export class CSS3DRenderPlugin extends BasePlugin {
         const processObject = (item: CSS3DItem) => {
             const element = item.element
             if (enable) {
-                const gpuStyles = [
-                    'transform: translate3d(0,0,0)',
-                    'will-change: transform, opacity',
-                    'backface-visibility: hidden'
-                ].join('; ')
-                element.style.cssText += '; ' + gpuStyles
+                // 只设置will-change，不覆盖transform（transform由setVisible等方法统一管理）
+                element.style.willChange = 'transform, opacity'
             } else {
-                element.style.transform = element.style.transform.replace('translate3d(0,0,0)', '')
                 element.style.willChange = 'auto'
                 element.style.backfaceVisibility = 'visible'
             }
@@ -967,5 +1092,60 @@ export class CSS3DRenderPlugin extends BasePlugin {
         }
 
         return control
+    }
+
+    /**
+     * 确保CSS3D对象具有正确的变换
+     * @param element HTML元素
+     */
+    private ensureCorrectTransform(element: HTMLElement): void {
+        const transform = element.style.transform;
+        
+        // 检查是否包含必要的变换
+        const hasCenterAlign = transform.includes('translate(-50%, -50%)');
+        const hasGPUAccel = transform.includes('translate3d(0,0,0)');
+        
+        if (!hasCenterAlign || !hasGPUAccel) {
+            console.log('🔧 修复CSS3D对象变换:', { hasCenterAlign, hasGPUAccel });
+            
+            // 重新构建正确的变换
+            const matrix3dMatch = transform.match(/matrix3d\([^)]+\)/);
+            const transforms = ['translate(-50%, -50%)'];
+            
+            if (matrix3dMatch) {
+                transforms.push(matrix3dMatch[0]);
+            }
+            
+            transforms.push('translate3d(0,0,0)');
+            element.style.transform = transforms.join(' ');
+        }
+    }
+
+    /**
+     * 手动同步所有CSS3D对象的matrix3d变换
+     * @description 当Three.js对象位置发生变化后，调用此方法确保CSS3D对象同步
+     */
+    syncAllMatrix3D(): void {
+        if (!this.css3Drenderer || !this.mainScene || !this.camera) {
+            console.warn('CSS3DRenderer、场景或相机未初始化，无法同步matrix3d');
+            return;
+        }
+        
+        try {
+            // 更新所有对象的世界矩阵
+            this.mainScene.updateMatrixWorld(true);
+            
+            // 在渲染前确保所有对象的变换正确
+            this.items.forEach(item => {
+                this.ensureCorrectTransform(item.element);
+            });
+            
+            // 触发CSS3DRenderer渲染，更新所有matrix3d
+            this.css3Drenderer.render(this.mainScene, this.camera);
+            
+            console.log(`🔄 已同步 ${this.items.size} 个CSS3D对象的matrix3d变换`);
+        } catch (error) {
+            console.error('同步matrix3d失败:', error);
+        }
     }
 }

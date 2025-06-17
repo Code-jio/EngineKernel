@@ -1332,7 +1332,7 @@ export class ModelMarker extends BasePlugin {
       autoStart: true,
       showPath: true,
       pathLineColor: 0x00ff00,
-      pathLineWidth: 2,
+      pathLineWidth: 5,
       easing: 'easeInOut',
       lookAtDirection: true,
       ...options
@@ -1362,43 +1362,18 @@ export class ModelMarker extends BasePlugin {
     if (config.showPath) {
       const lineWidth = config.pathLineWidth || 1
       
-      if (lineWidth > 1) {
-        // 使用TubeGeometry创建粗线条
-        try {
-          const tubeGeometry = new THREE.TubeGeometry(curve, 100, lineWidth * 0.01, 8, false)
-          const tubeMaterial = new THREE.MeshBasicMaterial({
-            color: config.pathLineColor,
-            transparent: true,
-            opacity: 0.8
-          })
-          pathLine = new THREE.Mesh(tubeGeometry, tubeMaterial)
-          pathLine.name = 'PathTube'
-          console.log(`🛤️ 使用管道几何体创建粗路径线，宽度: ${lineWidth}`)
-        } catch (error) {
-          console.warn('⚠️ 创建管道几何体失败，回退到普通线条:', error)
-          // 回退到普通线条
-          const points = curve.getPoints(100)
-          const geometry = new THREE.BufferGeometry().setFromPoints(points)
-          const material = new THREE.LineBasicMaterial({
-            color: config.pathLineColor,
-            transparent: true,
-            opacity: 0.8
-          })
-          pathLine = new THREE.Line(geometry, material)
-          pathLine.name = 'PathLine'
-        }
-      } else {
-        // 使用普通线条
-        const points = curve.getPoints(100)
-        const geometry = new THREE.BufferGeometry().setFromPoints(points)
-        const material = new THREE.LineBasicMaterial({
-          color: config.pathLineColor,
-          transparent: true,
-          opacity: 0.8
-        })
-        pathLine = new THREE.Line(geometry, material)
-        pathLine.name = 'PathLine'
-      }
+
+      // 使用普通线条
+      const points = curve.getPoints(100)
+      const geometry = new THREE.BufferGeometry().setFromPoints(points)
+      const material = new THREE.LineBasicMaterial({
+        color: config.pathLineColor,
+        transparent: true,
+        opacity: 0.8
+      })
+      pathLine = new THREE.Line(geometry, material)
+      pathLine.name = 'PathLine'
+
       
       // 添加到场景中而不是模型中，这样路径线不会跟随模型移动
       if (this.scene && pathLine) {
