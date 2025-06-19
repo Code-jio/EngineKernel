@@ -88,14 +88,6 @@ export class BaseControls {
         this.camera.position.copy(initialCameraPosition)
         this.control.target.copy(initialTargetPosition)
         this.control.update()
-        
-        // 根据相机类型确定初始模式
-        this.currentMode = this.camera instanceof THREE.OrthographicCamera ? '2D' : '3D'
-        
-        // 如果是2D模式，应用2D限制
-        if (this.currentMode === '2D') {
-            this.apply2DLimits()
-        }
     }
     
     private setupDefaultLimits() {
@@ -131,26 +123,6 @@ export class BaseControls {
     }
     
     /**
-     * 应用2D模式的控制限制
-     */
-    private apply2DLimits(): void {
-        // 2D模式：固定俯视角度，禁用旋转
-        this.control.minPolarAngle = Math.PI / 2 - 0.01 // 接近90度
-        this.control.maxPolarAngle = Math.PI / 2 + 0.01 // 接近90度
-        
-        // 禁用水平旋转（或严格限制）
-        this.control.minAzimuthAngle = -0.01
-        this.control.maxAzimuthAngle = 0.01
-        
-        // 启用缩放和平移
-        this.control.enableZoom = true
-        this.control.enablePan = true
-        this.control.enableRotate = true // 保持启用但通过角度限制
-        
-        console.log('🎥 已应用2D控制限制（俯视模式）')
-    }
-    
-    /**
      * 恢复3D模式的控制限制
      */
     private apply3DLimits(): void {
@@ -168,75 +140,6 @@ export class BaseControls {
         this.control.enableRotate = true
         
         console.log('🎥 已恢复3D控制限制（透视模式）')
-    }
-    
-    /**
-     * 切换控制器绑定的相机
-     * @param newCamera 新的相机实例
-     * @param mode 相机模式 '2D' 或 '3D'
-     */
-    public switchCamera(newCamera: THREE.PerspectiveCamera | THREE.OrthographicCamera, mode: '2D' | '3D'): void {
-        if (!newCamera) {
-            console.error('❌ switchCamera: 新相机不能为空')
-            return
-        }
-        
-        // 保存当前控制器状态
-        const currentTarget = this.control.target.clone()
-        
-        // 销毁当前控制器
-        this.control.dispose()
-        
-        // 更新相机引用
-        this.camera = newCamera
-        this.currentMode = mode
-        
-        // 创建新的控制器
-        this.control = new OrbitControls(this.camera, this.controlLayer)
-        
-        // 恢复控制器状态
-        this.control.target.copy(currentTarget)
-        
-        // 重新设置基础限制
-        this.setupDefaultLimits()
-        
-        // 根据模式应用相应的限制
-        if (mode === '2D') {
-            this.apply2DLimits()
-        } else {
-            this.apply3DLimits()
-        }
-        
-        // 重新绑定事件监听器
-        this.control.addEventListener("change", () => {
-            this.enforceMovementBounds()
-            eventBus.emit("camera-moved")
-        })
-        
-        // 更新控制器
-        this.control.update()
-        
-        console.log(`🔄 控制器已切换到${mode}模式`)
-    }
-    
-    /**
-     * 获取当前相机模式
-     */
-    public getCurrentMode(): '2D' | '3D' {
-        return this.currentMode
-    }
-    
-    /**
-     * 设置2D模式特定的俯视角度
-     * @param angle 俯视角度（弧度，默认Math.PI/2为完全俯视）
-     */
-    public set2DViewAngle(angle: number = Math.PI / 2): void {
-        if (this.currentMode === '2D') {
-            const tolerance = 0.01
-            this.control.minPolarAngle = angle - tolerance
-            this.control.maxPolarAngle = angle + tolerance
-            this.control.update()
-        }
     }
     
     /**
