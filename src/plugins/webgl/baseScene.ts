@@ -2670,13 +2670,22 @@ export class BaseScene extends BasePlugin {
             size,
             position: [0, 0, 0],
             waterConfig: {
-                color: 0x001e0f,
-                sunColor: 0xffffff,
-                distortionScale: 3.7,
+                // 基础参数
                 textureWidth: 512,
                 textureHeight: 512,
                 alpha: 1.0,
                 time: 0,
+                
+                // 视觉效果参数
+                waterColor: 0x4a90e2,
+                distortionScale: 2.0,
+                
+                // 贴图
+                waterNormalsUrl: './textures/waternormals.jpg',
+                
+                // 动画控制
+                animationSpeed: 0.3,
+                waveScale: 0.5,
                 ...config
             }
         })
@@ -2697,14 +2706,22 @@ export class BaseScene extends BasePlugin {
             size,
             position: [0, 0, 0],
             waterConfig: {
-                color: 0x001e0f,
-                sunColor: 0xffffff,
-                distortionScale: 3.7,
+                // 基础参数
                 textureWidth: 512,
                 textureHeight: 512,
                 alpha: 1.0,
                 time: 0,
+                
+                // 视觉效果参数
+                waterColor: 0x4a90e2,
+                distortionScale: 2.0,
+                
+                // 贴图
                 waterNormalsUrl,
+                
+                // 动画控制
+                animationSpeed: 0.3,
+                waveScale: 0.5,
                 ...config
             }
         })

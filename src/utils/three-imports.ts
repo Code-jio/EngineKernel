@@ -14,6 +14,7 @@ import { CSS3DRenderer, CSS3DObject } from 'three/examples/jsm/renderers/CSS3DRe
 import Stats from 'three/examples/jsm/libs/stats.module';
 import WebGPURenderer from 'three/examples/jsm/renderers/webgpu/WebGPURenderer';
 import { WebGLRenderer } from 'three';
+import { Water } from "three/examples/jsm/objects/Water"
 // 类型导入
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader';
 
@@ -29,6 +30,7 @@ export {
     CSS3DRenderer,
     CSS3DObject,
     Stats,
+    Water,
     WebGPURenderer,
     WebGLRenderer,
     type GLTF,

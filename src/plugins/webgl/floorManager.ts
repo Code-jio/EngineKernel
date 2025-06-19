@@ -1,4 +1,5 @@
 import { THREE } from "../basePlugin"
+import { Water } from "../../utils/three-imports"
 
 /**
  * 地板配置接口
@@ -9,16 +10,24 @@ export interface FloorConfig {
     size: number              // 地板大小
     position: [number, number, number]  // 地板位置
     
-    // 水面地板配置
+    // 水面地板配置 - 简化版本，只保留基本水面效果
     waterConfig?: {
-        color: number              // 水面颜色 
-        sunColor: number           // 太阳光颜色
-        distortionScale: number    // 扭曲比例
+        // 基础参数
         textureWidth: number       // 反射贴图宽度
         textureHeight: number      // 反射贴图高度
         alpha: number              // 透明度
-        time: number               // 时间参数
-        waterNormalsUrl?: string  // 水面法线贴图URL
+        time: number               // 初始时间
+        
+        // 视觉效果参数
+        waterColor: number         // 水面颜色
+        distortionScale: number    // 扭曲比例
+        
+        // 贴图
+        waterNormalsUrl?: string   // 水面法线贴图URL
+        
+        // 动画控制
+        animationSpeed: number     // 动画速度倍数
+        waveScale: number          // 波浪缩放系数
     }
     
     // 静态贴图地板配置
@@ -134,196 +143,64 @@ export class FloorManager {
      * 创建水面地板
      */
     private createWaterFloor(config: FloorConfig, renderer: THREE.WebGLRenderer): THREE.Mesh {
+        // 获取水面配置，提供默认值
         const waterConfig = config.waterConfig || {
-            color: 0x001e0f,
-            sunColor: 0xffffff,
-            distortionScale: 3.7,
             textureWidth: 512,
             textureHeight: 512,
-            alpha: 1.0,
+            alpha: 0,              // 调整默认透明度为0.8，更自然的半透明效果
             time: 0,
-            waterNormalsUrl:"./textures/waternormals.jpg"
-        }
-        const geometry = new THREE.PlaneGeometry(config.size, config.size, 512, 512)
-        
-        // 创建水面法线贴图
-        const textureLoader = new THREE.TextureLoader()
-        let waterNormals: THREE.Texture | null = null
-        
-        if (waterConfig.waterNormalsUrl) {
-            waterNormals = textureLoader.load(waterConfig.waterNormalsUrl, (texture) => {
-                texture.wrapS = texture.wrapT = THREE.RepeatWrapping
-            })
-        } else {
-            // 生成程序化法线贴图
-            waterNormals = this.generateProceduralWaterNormals()
+            waterColor: 0x001e0f,
+            distortionScale: 3.7,
+            waterNormalsUrl: 'textures/waternormals.jpg',
+            animationSpeed: 1.0,
+            waveScale: 1.0
         }
         
-        // 创建反射渲染目标
-        this.reflectionRenderTarget = new THREE.WebGLRenderTarget(
-            waterConfig.textureWidth,
-            waterConfig.textureHeight,
+        // 创建水面几何体
+        const waterGeometry = new THREE.PlaneGeometry(config.size, config.size)
+        
+        // 创建水面
+        const water = new Water(
+            waterGeometry,
             {
-                format: THREE.RGBFormat,
-                generateMipmaps: true,
-                minFilter: THREE.LinearMipmapLinearFilter,
+                textureWidth: waterConfig.textureWidth,
+                textureHeight: waterConfig.textureHeight,
+                waterNormals: new THREE.TextureLoader().load(waterConfig.waterNormalsUrl || 'textures/waternormals.jpg', function (texture) {
+                    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+                }),
+                sunDirection: new THREE.Vector3(),
+                sunColor: 0xffffff,
+                waterColor: waterConfig.waterColor,
+                distortionScale: waterConfig.distortionScale,
+                fog: this.scene.fog !== undefined
             }
-        )
+        );
         
-        // 水面shader材质
-        const waterMaterial = new THREE.ShaderMaterial({
-            uniforms: {
-                time: { value: waterConfig.time },
-                size: { value: 1.0 },
-                distortionScale: { value: waterConfig.distortionScale },
-                textureMatrix: { value: new THREE.Matrix4() },
-                sunColor: { value: new THREE.Color(waterConfig.sunColor) },
-                waterColor: { value: new THREE.Color(waterConfig.color) },
-                sunDirection: { value: new THREE.Vector3(0.70707, 0.70707, 0) },
-                alpha: { value: waterConfig.alpha },
-                waterNormals: { value: waterNormals }
-            },
-            vertexShader: this.getWaterVertexShader(),
-            fragmentShader: this.getWaterFragmentShader(),
-            transparent: true,
-            side: THREE.DoubleSide
-        })
+        // 设置水面旋转，使其水平放置
+        water.rotation.x = -Math.PI / 2;
+        water.name = "waterFloor";
         
-        this.waterUniforms = waterMaterial.uniforms
+        // 保存水面的 uniforms 用于动画更新
+        this.waterUniforms = water.material.uniforms;
         
-        const mesh = new THREE.Mesh(geometry, waterMaterial)
-        mesh.rotation.x = -Math.PI / 2
-        mesh.name = "ground"
+        // 设置初始时间
+        if (this.waterUniforms.time) {
+            this.waterUniforms.time.value = waterConfig.time;
+        }
         
-        return mesh
+        // 设置透明度
+        if (waterConfig.alpha < 1.0) {
+            water.material.transparent = true;
+            water.material.opacity = waterConfig.alpha;
+            // 如果有alpha uniform，也更新它
+            if (this.waterUniforms.alpha) {
+                this.waterUniforms.alpha.value = waterConfig.alpha;
+            }
+        }
+        
+        return water;
     }
     
-    /**
-     * 生成程序化水面法线贴图
-     */
-    private generateProceduralWaterNormals(): THREE.Texture {
-        const size = 512
-        const data = new Uint8Array(size * size * 3)
-        
-        for (let i = 0; i < size; i++) {
-            for (let j = 0; j < size; j++) {
-                const x = (i / size) * 2 - 1
-                const y = (j / size) * 2 - 1
-                
-                // 生成简单的波浪法线
-                const wave1 = Math.sin(x * 10) * Math.cos(y * 10) * 0.3
-                const wave2 = Math.sin(x * 15 + Math.PI / 3) * Math.cos(y * 15 + Math.PI / 4) * 0.2
-                const wave3 = Math.sin(x * 20 + Math.PI / 2) * Math.cos(y * 20 + Math.PI / 6) * 0.1
-                
-                const height = wave1 + wave2 + wave3
-                
-                // 计算法线向量
-                const normal = new THREE.Vector3(0, 1, 0)
-                normal.x = -height * 0.5
-                normal.z = -height * 0.5
-                normal.normalize()
-                
-                // 转换到0-255范围
-                const index = (i * size + j) * 3
-                data[index] = Math.floor((normal.x * 0.5 + 0.5) * 255)
-                data[index + 1] = Math.floor((normal.y * 0.5 + 0.5) * 255)
-                data[index + 2] = Math.floor((normal.z * 0.5 + 0.5) * 255)
-            }
-        }
-        
-        const texture = new THREE.DataTexture(data, size, size, THREE.RGBFormat)
-        texture.wrapS = texture.wrapT = THREE.RepeatWrapping
-        texture.needsUpdate = true
-        
-        return texture
-    }
-
-    /**
-     * 水面顶点着色器
-     */
-    private getWaterVertexShader(): string {
-        return `
-            uniform mat4 textureMatrix;
-            uniform float time;
-            uniform float size;
-            
-            varying vec4 vUv;
-            varying vec3 vNormal;
-            varying vec3 vViewDirection;
-            
-            void main() {
-                vUv = textureMatrix * vec4(position, 1.0);
-                
-                vec4 worldPosition = modelMatrix * vec4(position, 1.0);
-                vViewDirection = normalize(cameraPosition - worldPosition.xyz);
-                vNormal = normalize(normalMatrix * normal);
-                
-                // 添加波浪顶点位移
-                vec3 newPosition = position;
-                newPosition.z += sin(position.x * 0.1 + time * 2.0) * 0.5;
-                newPosition.z += sin(position.y * 0.1 + time * 1.5) * 0.3;
-                
-                gl_Position = projectionMatrix * modelViewMatrix * vec4(newPosition, 1.0);
-            }
-        `
-    }
-
-    /**
-     * 水面片段着色器
-     */
-    private getWaterFragmentShader(): string {
-        return `
-            uniform vec3 sunColor;
-            uniform vec3 waterColor;
-            uniform vec3 sunDirection;
-            uniform float distortionScale;
-            uniform float alpha;
-            uniform float time;
-            uniform sampler2D waterNormals;
-            
-            varying vec4 vUv;
-            varying vec3 vNormal;
-            varying vec3 vViewDirection;
-            
-            vec3 gerstnerWave(vec2 direction, float amplitude, float frequency, float speed, vec2 position, float time, inout vec3 tangent, inout vec3 binormal) {
-                float phase = speed * frequency;
-                float cosineWave = cos(dot(direction, position) * frequency + time * phase);
-                float sineWave = sin(dot(direction, position) * frequency + time * phase);
-                
-                vec3 displacement = vec3(
-                    direction.x * amplitude * cosineWave,
-                    amplitude * sineWave,
-                    direction.y * amplitude * cosineWave
-                );
-                
-                return displacement;
-            }
-            
-            void main() {
-                vec2 distortedUv = vUv.xy / vUv.w;
-                
-                // 采样法线贴图
-                vec2 normalUv = distortedUv * 4.0 + time * 0.1;
-                vec3 normalColor1 = texture2D(waterNormals, normalUv).xyz * 2.0 - 1.0;
-                vec3 normalColor2 = texture2D(waterNormals, normalUv * 0.5 + time * 0.05).xyz * 2.0 - 1.0;
-                
-                vec3 normal = normalize(normalColor1 + normalColor2);
-                
-                // 菲涅尔反射
-                float fresnel = pow(1.0 - max(dot(vViewDirection, normal), 0.0), 2.0);
-                
-                // 太阳光反射
-                vec3 reflectDirection = reflect(-sunDirection, normal);
-                float sunReflection = pow(max(dot(vViewDirection, reflectDirection), 0.0), 64.0);
-                
-                // 混合颜色
-                vec3 finalColor = mix(waterColor, sunColor, fresnel * 0.3);
-                finalColor += sunColor * sunReflection * 0.5;
-                
-                gl_FragColor = vec4(finalColor, alpha);
-            }
-        `
-    }
 
     /**
      * 创建静态贴图地板
@@ -451,11 +328,22 @@ export class FloorManager {
     public updateFloor(deltaTime: number, camera?: THREE.Camera): void {
         if (!this.floor) return
         
-        this.animationTime += deltaTime
-        
-        // 更新水面动画
+        // 更新水面动画 - 参考THREE.js官方示例，使用60fps固定增量
         if (this.waterUniforms) {
-            this.waterUniforms.time.value = this.animationTime * 0.001
+            // 使用固定的时间增量来保持一致的动画速度
+            this.waterUniforms.time.value += 1.0 / 60.0;
+            
+            // 更新相机位置（用于水面效果计算）
+            if (camera && this.waterUniforms.eye) {
+                this.waterUniforms.eye.value.setFromMatrixPosition(camera.matrixWorld);
+            }
+            
+            // 更新太阳方向（用于水面反射效果）
+            if (this.waterUniforms.sunDirection) {
+                // 设置一个默认的太阳方向，可以根据需要调整
+                const sunDirection = new THREE.Vector3(1, 1, 0).normalize();
+                this.waterUniforms.sunDirection.value.copy(sunDirection);
+            }
         }
     }
     
@@ -463,19 +351,79 @@ export class FloorManager {
      * 更新反射
      */
     public updateReflection(camera: THREE.Camera, renderer: THREE.WebGLRenderer): void {
-        if (!this.reflectionRenderTarget || !this.reflectionCamera || !this.floor) return
+        if (!this.reflectionRenderTarget || !this.reflectionCamera || !this.floor) {
+            return
+        }
         
-        // 设置反射相机
-        this.reflectionCamera.position.copy(camera.position)
-        this.reflectionCamera.rotation.copy(camera.rotation)
-        this.reflectionCamera.position.y = -this.reflectionCamera.position.y + 2 * this.floor.position.y
-        this.reflectionCamera.rotation.x = -this.reflectionCamera.rotation.x
+        // 只有当相机位置发生显著变化时才更新反射
+        const currentPosition = camera.position.clone();
+        if (this.lastCameraPosition.distanceTo(currentPosition) < 0.1) {
+            return; // 相机移动距离太小，跳过更新以提高性能
+        }
+        this.lastCameraPosition.copy(currentPosition);
         
-        // 渲染反射
-        const currentRenderTarget = renderer.getRenderTarget()
-        renderer.setRenderTarget(this.reflectionRenderTarget)
-        renderer.render(this.scene, this.reflectionCamera)
-        renderer.setRenderTarget(currentRenderTarget)
+        // 设置反射相机 - 创建水面镜像
+        const floorY = this.floor.position.y;
+        
+        // 复制相机的基本属性
+        this.reflectionCamera.position.copy(camera.position);
+        this.reflectionCamera.rotation.copy(camera.rotation);
+        
+        // 如果是透视相机，同步FOV和aspect
+        if (camera instanceof THREE.PerspectiveCamera && this.reflectionCamera instanceof THREE.PerspectiveCamera) {
+            this.reflectionCamera.fov = camera.fov;
+            this.reflectionCamera.aspect = camera.aspect;
+            this.reflectionCamera.near = camera.near;
+            this.reflectionCamera.far = camera.far;
+        }
+        
+        // 镜像变换：将相机位置和旋转沿Y轴镜像
+        this.reflectionCamera.position.y = 2 * floorY - camera.position.y;
+        this.reflectionCamera.rotation.x = -camera.rotation.x;
+        this.reflectionCamera.rotation.z = -camera.rotation.z;
+        
+        // 更新投影矩阵
+        if (this.reflectionCamera instanceof THREE.PerspectiveCamera) {
+            this.reflectionCamera.updateProjectionMatrix();
+        } else if (this.reflectionCamera instanceof THREE.OrthographicCamera) {
+            this.reflectionCamera.updateProjectionMatrix();
+        }
+        
+        // 暂时隐藏水面，避免无限反射
+        this.floor.visible = false;
+        
+        // 渲染反射场景
+        const currentRenderTarget = renderer.getRenderTarget();
+        const currentXrEnabled = renderer.xr.enabled;
+        const currentShadowAutoUpdate = renderer.shadowMap.autoUpdate;
+        
+        try {
+            renderer.xr.enabled = false;
+            renderer.shadowMap.autoUpdate = false;
+            renderer.setRenderTarget(this.reflectionRenderTarget);
+            renderer.render(this.scene, this.reflectionCamera);
+        } catch (error) {
+            console.warn('⚠️ 水面反射渲染出错:', error);
+        } finally {
+            // 恢复原始设置
+            renderer.setRenderTarget(currentRenderTarget);
+            renderer.xr.enabled = currentXrEnabled;
+            renderer.shadowMap.autoUpdate = currentShadowAutoUpdate;
+            this.floor.visible = true;
+        }
+        
+        // 更新水面材质的textureMatrix
+        if (this.waterUniforms && this.waterUniforms.textureMatrix) {
+            const textureMatrix = this.waterUniforms.textureMatrix.value;
+            textureMatrix.set(
+                0.5, 0.0, 0.0, 0.5,
+                0.0, 0.5, 0.0, 0.5,
+                0.0, 0.0, 0.5, 0.5,
+                0.0, 0.0, 0.0, 1.0
+            );
+            textureMatrix.multiply(this.reflectionCamera.projectionMatrix);
+            textureMatrix.multiply(this.reflectionCamera.matrixWorldInverse);
+        }
     }
     
     /**
@@ -487,14 +435,31 @@ export class FloorManager {
             
             // 清理材质和几何体
             if (this.floor.material instanceof THREE.Material) {
+                // 清理材质中的贴图 - 使用类型检查
+                const material = this.floor.material as any;
+                if (material.map) material.map.dispose()
+                if (material.normalMap) material.normalMap.dispose()
+                if (material.roughnessMap) material.roughnessMap.dispose()
+                if (material.metalnessMap) material.metalnessMap.dispose()
+                
                 this.floor.material.dispose()
             } else if (Array.isArray(this.floor.material)) {
-                this.floor.material.forEach(material => material.dispose())
+                this.floor.material.forEach(material => {
+                    // 清理每个材质的贴图 - 使用类型检查
+                    const mat = material as any;
+                    if (mat.map) mat.map.dispose()
+                    if (mat.normalMap) mat.normalMap.dispose()
+                    if (mat.roughnessMap) mat.roughnessMap.dispose()
+                    if (mat.metalnessMap) mat.metalnessMap.dispose()
+                    
+                    material.dispose()
+                })
             }
             this.floor.geometry.dispose()
             
             this.floor = null
             this.waterUniforms = null
+            console.log('🗑️ 地板已移除，资源已清理')
         }
         
         // 清理反射相关资源
@@ -503,8 +468,9 @@ export class FloorManager {
             this.reflectionRenderTarget = null
         }
         this.reflectionCamera = null
+        this.lastCameraPosition.set(0, 0, 0)
     }
-    
+
     /**
      * 切换地板类型
      */
