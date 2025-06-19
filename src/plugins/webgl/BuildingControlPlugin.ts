@@ -28,7 +28,28 @@ export interface FloorItem {
     isVisible: boolean          // 是否可见
     opacity: number             // 透明度
     nodeCount: number           // 节点数量
-    associatedEquipment: THREE.Object3D[]  // 关联的设备模型数组
+    associatedEquipment: {
+        equipment: THREE.Object3D
+        equipmentName: string
+        roomCode: string
+        floorNumber: number
+    }[]  // 关联的设备模型数组
+    rooms: RoomItem[] // 关联的房间列表
+}
+
+export interface RoomItem {
+    group: THREE.Group          // 房间组对象
+    roomNumber: string          // 房间号
+    originalPosition: THREE.Vector3  // 原始位置
+    targetPosition: THREE.Vector3    // 目标位置
+    isVisible: boolean          // 是否可见
+    opacity: number             // 透明度
+    associatedEquipment: {
+        equipment: THREE.Object3D
+        equipmentName: string
+        roomCode: string
+        floorNumber: number
+    }[]  // 关联的设备模型数组
 }
 
 /**
@@ -64,6 +85,22 @@ export interface FloorControlEvents {
     onCameraRestore?: () => void
 }
 
+// 添加userData结构定义
+interface BuildingObjectUserData {
+    // 原有的模型名称信息
+    modelName?: string
+    isBuildingModel?: boolean
+    
+    // 新增的解析信息
+    buildingInfo?: {
+        type: 'floor' | 'room' | 'facade' | 'equipment' | 'unknown'
+        buildingName?: string
+        floorNumber?: number
+        roomCode?: string
+        isFacade?: boolean
+    }
+}
+
 /**
  * 楼层控制插件
  * 
@@ -79,12 +116,12 @@ export class BuildingControlPlugin extends BasePlugin {
     private currentState: FloorState = FloorState.NORMAL
     private floors: Map<number, FloorItem> = new Map()
     private facadeGroup: THREE.Group | null = null
-    private floorsGroup: THREE.Group | null = null
     private currentBuildingModel: THREE.Group | null = null
     private activeTweens: TWEEN.Group = new TWEEN.Group()
     private focusedFloor: number | null = null
     private scene: THREE.Scene | null = null
     public scenePlugin: any
+    public allDevices: THREE.Object3D[] = []
 
     // 外立面状态管理（参考mousePickPlugin的实现）
     private hiddenFacades: THREE.Object3D[] = []
@@ -131,412 +168,453 @@ export class BuildingControlPlugin extends BasePlugin {
     }
 
     public async init(scenePlugin?: any): Promise<void> {
-        let scene
         // 如果提供了场景对象，自动发现并设置建筑模型
         if (scenePlugin) {
-            scene = scenePlugin.scene
+            this.scene = scenePlugin.scene
             this.scenePlugin = scenePlugin
-            
             // 初始化相机控制器
             if (scenePlugin.cameraControls) {
                 this.cameraControls = scenePlugin.cameraControls
             }
-            
-            const discoveredBuildings = this.autoDiscoverBuildingsInScene(scene)
+        }
 
-            if (discoveredBuildings.length > 0) {
-                // 默认使用第一个发现的建筑（可以后续扩展为支持多建筑）
-                const primaryBuilding = discoveredBuildings[0]
-                // 设置建筑模型并进行自动配置
-                if (this.setBuildingModel(primaryBuilding)) {
-                    // 执行基于命名规则的智能设备关联
-                    this.autoAssociateEquipmentByNaming(scene)
-                }
+        // 设置可交互建筑模型
+        if (this.setBuildingModel()) {
+            // 解析所有设备列表
+            this.parseAllEquipments()
+
+            // 解析并链接建筑结构（非侵入式）
+            const linkSuccess = this.linkParsedStructure()
+            if (linkSuccess) {
+                console.log('🏗️ 建筑控制插件初始化完成')
+                
+                // 输出建筑概览
+                const overview = this.getBuildingOverview()
+                console.log('📊 建筑概览:', overview)
+            } else {
+                console.warn('⚠️ 建筑结构链接失败，部分功能可能不可用')
             }
+        } else {
+            console.warn('⚠️ 未找到建筑模型，建筑控制功能不可用')
         }
     }
 
     /**
      * 更新配置
+     * @param config 配置对象
+     * @returns 更新后的配置对象
      */
-    public updateConfig(newConfig: Partial<FloorControlConfig>): void {
-        this.config = { ...this.config, ...newConfig }
+    public updateConfig(config: FloorControlConfig): FloorControlConfig {
+        this.config = {
+            ...this.config,
+            ...config
+        }
+        return this.config
     }
 
     /**
-     * 更新相机观察参数
-     * @param params 相机参数
+     * 设置可交互建筑模型
+     * @returns 是否成功设置
      */
-    public updateCameraParams(params: {
-        distanceMultiplier?: number
-        minHeight?: number
-    }): void {
-        if (params.distanceMultiplier !== undefined) {
-            this.config.cameraDistanceMultiplier = params.distanceMultiplier
-        }
-        if (params.minHeight !== undefined) {
-            this.config.cameraMinHeight = params.minHeight
-        }
-    }
-
-    /**
-     * 设置建筑模型
-     */
-    public setBuildingModel(model: THREE.Group): boolean {
-        if (!model.userData.isBuildingModel) {
-            console.warn('⚠️ 传入的模型不是建筑模型')
+    public setBuildingModel(): boolean {
+        this.scene?.children.forEach(child => {
+            if (child.name === 'MAIN_BUILDING') {
+                this.currentBuildingModel = child as THREE.Group
+                return true
+            }
+        })
+        if (this.currentBuildingModel) {
+            return true
+        } else {
             return false
         }
+    }
 
-        this.currentBuildingModel = model
-        this.floors.clear()
-        this.facadeGroup = null
-        this.floorsGroup = null
-        // 重置外立面状态
-        this.hiddenFacades = []
+    /**
+     * 解析建筑模型
+     * 内部子节点命名规则：
+     * 楼层命名规则是：MAIN_BUILDING_1F、MAIN_BUILDING_2F、MAIN_BUILDING_nF。。。（数字n表示楼层）
+     * 房间内部命名规则是：MAIN_BUILDING_1F_R101、MAIN_BUILDING_1F_K102。。。（某个字母+数字表示房间）
+     * 外立面命名规则是：MAIN_BUILDING_MASK（名称里带有MASK字样）
+     */
+    public parseBuildingModel(): {
+        success: boolean
+        floors: Map<number, {
+            floorObject: THREE.Object3D
+            floorNumber: number
+            rooms: Array<{
+                roomObject: THREE.Object3D
+                roomCode: string
+            }>
+            equipments: Array<{
+                equipmentObject: THREE.Object3D
+                equipmentName: string
+                roomCode: string | null
+                floorNumber: number
+                roomObject: THREE.Object3D | null
+            }>
+        }>
+        facades: THREE.Object3D[]
+        statistics: {
+            totalFloors: number
+            totalRooms: number
+            totalFacades: number
+            totalEquipments: number
+            unrecognizedObjects: THREE.Object3D[]
+        }
+        errors: string[]
+    } {
+        const result = {
+            success: false,
+            floors: new Map(),
+            facades: [] as THREE.Object3D[],
+            statistics: {
+                totalFloors: 0,
+                totalRooms: 0,
+                totalFacades: 0,
+                totalEquipments: 0,
+                unrecognizedObjects: [] as THREE.Object3D[]
+            },
+            errors: [] as string[]
+        }
 
-        // 查找外立面组和楼层组
-        this.findBuildingGroups(model)
+        // 检查是否有当前建筑模型
+        if (!this.currentBuildingModel) {
+            result.errors.push('未设置建筑模型，请先调用 setBuildingModel() 方法')
+            return result
+        }
 
-        if (!this.floorsGroup) {
-            // 打印所有子对象的详细信息
-            const childInfo: any[] = []
-            model.children.forEach((child, index) => {
-                childInfo.push({
-                    index: index,
-                    name: child.name,
-                    type: child.type,
-                    userData: child.userData,
-                    childrenCount: child.children ? child.children.length : 0
-                })
+        console.log('🏗️ 开始解析建筑模型:', this.getModelName(this.currentBuildingModel))
+
+        try {
+            // 遍历建筑模型的所有子对象
+            this.currentBuildingModel.traverse((child) => {
+                // 跳过建筑模型本身
+                if (child === this.currentBuildingModel) return
+
+                const modelName = this.getModelName(child)
+                const objectName = child.name || 'unnamed'
+                
+                // 解析外立面 (包含MASK关键词)
+                if (this.isFacadeObject(modelName)) {
+                    // 将解析信息挂载到userData
+                    if (!child.userData) {
+                        child.userData = {}
+                    }
+                    
+                    child.userData.buildingInfo = {
+                        type: 'facade',
+                        buildingName: 'MAIN_BUILDING',
+                        isFacade: true,
+                    }
+                    
+                    result.facades.push(child)
+                    console.log(`🎭 发现外立面: ${modelName}`)
+                    return
+                }
+
+                // 解析楼层对象
+                const floorInfo = this.parseFloorFromName(modelName)
+                if (floorInfo.isFloor) {
+                    this.processFloorObject(child, floorInfo.floorNumber, result)
+                    return
+                }
+
+                // 解析房间对象
+                const roomInfo = this.parseRoomFromName(modelName)
+                if (roomInfo.isRoom) {
+                    this.processRoomObject(child, roomInfo, result)
+                    return
+                }
+
+                // 未识别的对象
+                // 将解析信息挂载到userData（标记为未识别）
+                if (!child.userData) {
+                    child.userData = {}
+                }
+                
+                // 将解析信息挂载到userData
+                child.userData.buildingInfo = {
+                    type: 'building',
+                    buildingName: 'MAIN_BUILDING',
+                    totalFloors: result.statistics.totalFloors,
+                    totalRooms: result.statistics.totalRooms,
+                    totalFacades: result.statistics.totalFacades,
+                    unrecognizedObjects: result.statistics.unrecognizedObjects,
+                    errors: result.errors,
+                }
+                
+                result.statistics.unrecognizedObjects.push(child)
+                console.warn(`⚠️ 未识别的对象: ${modelName} (${objectName})`)
             })
 
-            // 尝试智能查找可能的楼层组
-            this.attemptSmartFloorGroupDetection(model)
+            // 计算统计信息
+            result.statistics.totalFloors = result.floors.size
+            result.statistics.totalFacades = result.facades.length
+            result.statistics.totalRooms = Array.from(result.floors.values())
+                .reduce((sum, floor) => sum + floor.rooms.length, 0)
+            result.statistics.totalEquipments = Array.from(result.floors.values())
+                .reduce((sum, floor) => sum + floor.equipments.length, 0)
+
+            // 验证解析结果
+            this.validateParsingResult(result)
+
+            // 如果没有严重错误，标记为成功
+            result.success = result.errors.length === 0
+
+            // 输出解析报告
+            if (this.debugMode) {
+                this.generateParsingReport(result)
+            }
+
+        } catch (error) {
+            const errorMsg = `解析建筑模型时发生错误: ${error instanceof Error ? error.message : String(error)}`
+            result.errors.push(errorMsg)
+            console.error('❌', errorMsg, error)
         }
 
-        // 如果仍然没有楼层组，创建一个并重组楼层结构
-        if (!this.floorsGroup) {
-            this.createAndOrganizeFloorsGroup(model)
-        }
-
-        // 初始化楼层数据
-        this.initializeFloors()
-
-        return true
+        return result
     }
 
     /**
-     * 查找建筑的各个组件组
+     * 判断是否为外立面对象
      */
-    private findBuildingGroups(model: THREE.Group): void {
-        // 外立面和楼层组的可能命名关键词（mask优先）
+    private isFacadeObject(modelName: string): boolean {
+        const name = modelName.toLowerCase()
         const facadeKeywords = ['mask', 'facade', 'exterior', 'wall', 'curtain', '外立面', '立面', '幕墙']
-        const floorKeywords = ['floor', 'level', 'story', 'storey', '楼层', '层', '楼']
-
-        model.children.forEach(child => {
-            const name = child.name.toLowerCase()
-            const modelName = this.getModelName(child).toLowerCase()
-
-            // 查找外立面组（优先检查mask关键词）
-            if (!this.facadeGroup && facadeKeywords.some(keyword =>
-                name.includes(keyword) || modelName.includes(keyword))) {
-                this.facadeGroup = child as THREE.Group
-                const matchedKeyword = facadeKeywords.find(k => name.includes(k) || modelName.includes(k))
-            }
-
-            // 查找楼层组（排除外立面）
-            else if (!this.floorsGroup && floorKeywords.some(keyword =>
-                name.includes(keyword) || modelName.includes(keyword))) {
-                this.floorsGroup = child as THREE.Group
-                const matchedKeyword = floorKeywords.find(k => name.includes(k) || modelName.includes(k))
-            }
-        })
+        return facadeKeywords.some(keyword => name.includes(keyword))
     }
 
     /**
-     * 尝试智能检测楼层组（排除外立面）
+     * 从名称中解析楼层信息
      */
-    private attemptSmartFloorGroupDetection(model: THREE.Group): void {
-        // 外立面关键词（优先检查MASK）
-        const facadeKeywords = ['mask', 'facade', 'exterior', 'wall', 'curtain', '外立面', '立面', '幕墙']
-
-        // 楼层关键词
-        const floorKeywords = ['floor', 'level', 'story', 'storey', '楼层', '层', '楼']
-
-        // 收集潜在楼层节点和外立面节点
-        const potentialFloorNodes: Array<{
-            object: THREE.Object3D
-            name: string
-            modelName: string
-            y: number
-            floorNumber: number | null
-            isFloorCandidate: boolean
-        }> = []
-
-        const facadeNodes: THREE.Object3D[] = []
-
-        // 遍历主建筑的直接子节点
-        model.children.forEach((child, index) => {
-            const name = child.name.toLowerCase()
-            const modelName = this.getModelName(child)
-            const modelNameLower = modelName.toLowerCase()
-
-            // 获取世界坐标Y值
-            const worldPos = new THREE.Vector3()
-            child.getWorldPosition(worldPos)
-
-            // 1. 检查是否是外立面（优先检查MASK关键词）
-            const isFacade = facadeKeywords.some(keyword =>
-                name.includes(keyword) || modelNameLower.includes(keyword)
-            )
-
-            if (isFacade) {
-                facadeNodes.push(child)
-                const matchedKeyword = facadeKeywords.find(k => name.includes(k) || modelNameLower.includes(k))
-
-                // 设置外立面组（如果还没有设置）
-                if (!this.facadeGroup) {
-                    this.facadeGroup = child as THREE.Group
-                }
-                return
-            }
-
-            // 2. 检查是否是楼层相关节点
-            const isFloorRelated = floorKeywords.some(keyword =>
-                name.includes(keyword) || modelNameLower.includes(keyword)
-            )
-
-            // 3. 尝试从名称中提取楼层号
-            const floorNumber = this.extractFloorNumberFromName(modelName)
-
-            // 4. 判断是否为楼层候选节点
-            const isFloorCandidate = isFloorRelated || floorNumber !== null ||
-                (child.children.length > 0 && !this.isEquipmentModel(modelName))
-
-            potentialFloorNodes.push({
-                object: child,
-                name: name,
-                modelName: modelName,
-                y: worldPos.y,
+    private parseFloorFromName(modelName: string): {
+        isFloor: boolean
+        floorNumber: number
+        buildingName: string | null
+    } {
+        // 楼层命名规则: MAIN_BUILDING_1F, MAIN_BUILDING_2F, MAIN_BUILDING_nF
+        const floorPattern = /^(.+)_(\d+)F$/i
+        const match = modelName.match(floorPattern)
+        
+        if (match) {
+            const buildingName = match[1]
+            const floorNumber = parseInt(match[2], 10)
+            
+            return {
+                isFloor: true,
                 floorNumber: floorNumber,
-                isFloorCandidate: isFloorCandidate
-            })
-        })
-
-        // 5. 筛选和排序楼层节点
-        const floorCandidates = potentialFloorNodes.filter(node => node.isFloorCandidate)
-
-        if (floorCandidates.length === 0) {
-            console.warn('⚠️ 未找到任何潜在楼层节点')
-            return
+                buildingName: buildingName
+            }
         }
 
-        // 按楼层号排序（如果有），否则按Y坐标排序
-        floorCandidates.sort((a, b) => {
-            // 优先按楼层号排序
-            if (a.floorNumber !== null && b.floorNumber !== null) {
-                return a.floorNumber - b.floorNumber
-            }
-            // 如果只有一个有楼层号，有楼层号的优先
-            if (a.floorNumber !== null && b.floorNumber === null) return -1
-            if (a.floorNumber === null && b.floorNumber !== null) return 1
-            // 都没有楼层号时按Y坐标排序
-            return a.y - b.y
-        })
-
-        // 6. 将 floorCandidates 作为主建筑模型的楼层组，并把模型绑定到对应的楼层上
-        if (floorCandidates.length > 0) {
-            // 创建或使用现有的楼层组容器
-            if (!this.floorsGroup) {
-                // 创建新的楼层组容器
-                this.floorsGroup = new THREE.Group()
-                this.floorsGroup.name = `${this.getModelName(model)}_FloorsContainer`
-                this.floorsGroup.userData = {
-                    isFloorsGroup: true,
-                    createdBySmartDetection: true
-                }
-                model.add(this.floorsGroup)
-            }
-
-            // 为每个楼层候选创建楼层结构
-            floorCandidates.forEach((candidate, index) => {
-                // 确定楼层号：优先使用提取的楼层号，否则按顺序分配
-                const floorNumber = candidate.floorNumber !== null ? candidate.floorNumber : (index + 1)
-
-                // 创建楼层组
-                const floorGroup = new THREE.Group()
-                floorGroup.name = `Floor_${floorNumber}`
-                floorGroup.userData = {
-                    isFloorGroup: true,
-                    floorNumber: floorNumber,
-                    originalObject: candidate.modelName,
-                    detectedBySmartDetection: true
-                }
-
-                // 复制原始对象的变换到楼层组
-                floorGroup.position.copy(candidate.object.position)
-                floorGroup.rotation.copy(candidate.object.rotation)
-                floorGroup.scale.copy(candidate.object.scale)
-
-                // 从主建筑中移除原始对象
-                if (candidate.object.parent) {
-                    candidate.object.parent.remove(candidate.object)
-                }
-
-                // 重置原始对象的变换并添加到楼层组
-                candidate.object.position.set(0, 0, 0)
-                candidate.object.rotation.set(0, 0, 0)
-                candidate.object.scale.set(1, 1, 1)
-                floorGroup.add(candidate.object)
-
-                // 将楼层组添加到楼层容器
-                if (this.floorsGroup) {
-                    this.floorsGroup.add(floorGroup)
-                }
-
-            })
+        return {
+            isFloor: false,
+            floorNumber: 0,
+            buildingName: null
         }
     }
 
     /**
-     * 创建楼层组并重组楼层结构
+     * 从名称中解析房间信息
      */
-    private createAndOrganizeFloorsGroup(model: THREE.Group): void {
-        // 创建新的楼层组
-        const floorsGroup = new THREE.Group()
-        floorsGroup.name = `${model.name}_Floors`
-        floorsGroup.userData = {
-            isFloorsGroup: true,
-            createdByPlugin: true
-        }
-
-        // 外立面关键词（特别包含mask）
-        const facadeKeywords = ['mask', 'facade', 'exterior', 'wall', 'curtain', '外立面', '立面', '幕墙']
-
-        // 收集潜在的楼层对象（排除外立面）
-        const potentialFloorObjects: THREE.Object3D[] = []
-        const facadeObjects: THREE.Object3D[] = []
-
-        model.children.slice().forEach(child => {
-            const name = child.name.toLowerCase()
-            const modelName = this.getModelName(child).toLowerCase()
-
-            // 检查是否是外立面（优先检查mask关键词）
-            const isFacade = facadeKeywords.some(keyword =>
-                name.includes(keyword) || modelName.includes(keyword)
-            )
-
-            if (isFacade) {
-                facadeObjects.push(child)
-                // 如果还没有外立面组，将第一个外立面对象设为外立面组
-                if (!this.facadeGroup) {
-                    this.facadeGroup = child as THREE.Group
-                }
-            } else {
-                // 其他对象视为潜在楼层
-                potentialFloorObjects.push(child)
-            }
-        })
-
-        // 按Y坐标对潜在楼层对象进行排序
-        const sortedFloorObjects = potentialFloorObjects.map(obj => {
-            const worldPos = new THREE.Vector3()
-            obj.getWorldPosition(worldPos)
-            return { object: obj, y: worldPos.y, name: this.getModelName(obj) }
-        }).sort((a, b) => a.y - b.y)
-
-        // 为每个楼层对象创建楼层组
-        sortedFloorObjects.forEach((floorData, index) => {
-            const floorNumber = index + 1
-            const floorObj = floorData.object
-
-            // 创建楼层组
-            const floorGroup = new THREE.Group()
-            floorGroup.name = `Floor_${floorNumber}`
-            floorGroup.userData = {
-                isFloorGroup: true,
+    private parseRoomFromName(modelName: string): {
+        isRoom: boolean
+        floorNumber: number
+        roomCode: string
+        buildingName: string | null
+    } {
+        // 房间命名规则: MAIN_BUILDING_1F_R101, MAIN_BUILDING_1F_K102
+        const roomPattern = /^(.+)_(\d+)F_([A-Z])(\d+)$/i
+        const match = modelName.match(roomPattern)
+        
+        if (match) {
+            const buildingName = match[1]
+            const floorNumber = parseInt(match[2], 10)
+            const roomTypeCode = match[3].toUpperCase()
+            const roomNumber = match[4]
+            const roomCode = `${roomTypeCode}${roomNumber}`
+            
+            return {
+                isRoom: true,
                 floorNumber: floorNumber,
-                originalObject: floorObj.name,
-                createdByPlugin: true
+                roomCode: roomCode,
+                buildingName: buildingName
             }
-
-            // 复制原始对象的变换
-            floorGroup.position.copy(floorObj.position)
-            floorGroup.rotation.copy(floorObj.rotation)
-            floorGroup.scale.copy(floorObj.scale)
-
-            // 从建筑模型中移除原始对象
-            model.remove(floorObj)
-
-            // 重置原始对象的变换并添加到楼层组
-            floorObj.position.set(0, 0, 0)
-            floorObj.rotation.set(0, 0, 0)
-            floorObj.scale.set(1, 1, 1)
-            floorGroup.add(floorObj)
-
-            // 将楼层组添加到楼层组容器
-            floorsGroup.add(floorGroup)
-        })
-
-        // 将楼层组添加到建筑模型
-        model.add(floorsGroup)
-        this.floorsGroup = floorsGroup
-
-        // 如果没有楼层对象，创建一个默认楼层组
-        if (sortedFloorObjects.length === 0) {
-            const defaultFloorGroup = new THREE.Group()
-            defaultFloorGroup.name = 'Floor_1_Default'
-            defaultFloorGroup.userData = {
-                isFloorGroup: true,
-                floorNumber: 1,
-                isDefault: true,
-                createdByPlugin: true
+        } else {
+            return {
+                isRoom: false,
+                floorNumber: 0,
+                roomCode: '',
+                buildingName: null
             }
-            floorsGroup.add(defaultFloorGroup)
         }
     }
 
     /**
-     * 初始化楼层数据
+     * 处理楼层对象
      */
-    private initializeFloors(): void {
-        if (!this.floorsGroup) {
-            console.warn('⚠️ 未找到楼层组，无法初始化楼层')
-            return
+    private processFloorObject(
+        floorObject: THREE.Object3D, 
+        floorNumber: number, 
+        result: ReturnType<typeof this.parseBuildingModel>
+    ): void {
+        // 解析建筑名称
+        const floorInfo = this.parseFloorFromName(this.getModelName(floorObject))
+        
+        // 将解析信息挂载到userData
+        if (!floorObject.userData) {
+            floorObject.userData = {}
+        }
+        
+        floorObject.userData.buildingInfo = {
+            type: 'floor',
+            buildingName: floorInfo.buildingName || 'MAIN_BUILDING',
+            floorNumber: floorNumber,
+            equipments: [],
+            rooms: [],
+            isFloor: true,
+        }
+        
+        if (!result.floors.has(floorNumber)) {
+            result.floors.set(floorNumber, {
+                floorObject: floorObject,
+                floorNumber: floorNumber,
+                rooms: [],
+                equipments: []
+            })
+            console.log(`🏢 发现楼层: ${floorNumber}F - ${this.getModelName(floorObject)}`)
+        } else {
+            result.errors.push(`发现重复的楼层: ${floorNumber}F`)
+        }
+    }
+
+    /**
+     * 处理房间对象
+     */
+    private processRoomObject(
+        roomObject: THREE.Object3D,
+        roomInfo: ReturnType<typeof this.parseRoomFromName>,
+        result: ReturnType<typeof this.parseBuildingModel>
+    ): void {
+        const floorNumber = roomInfo.floorNumber
+        
+        // 将解析信息挂载到userData
+        if (!roomObject.userData) {
+            roomObject.userData = {}
+        }
+        
+        roomObject.userData.buildingInfo = {
+            type: 'room',
+            buildingName: roomInfo.buildingName || 'MAIN_BUILDING',
+            floorNumber: floorNumber,
+            roomCode: roomInfo.roomCode,
+            isRoom: true,
+            equipments: [],// 关联的设备列表
+        }
+        
+        // 确保楼层存在
+        if (!result.floors.has(floorNumber)) {
+            // 如果楼层不存在，创建一个虚拟楼层记录
+            result.floors.set(floorNumber, {
+                floorObject: null as any, // 将在后续处理中补充
+                floorNumber: floorNumber,
+                rooms: [],
+                equipments: []
+            })
+            console.warn(`⚠️ 为房间 ${roomInfo.roomCode} 创建了虚拟楼层 ${floorNumber}F`)
+        }
+        const floor = this.floors.get(floorNumber)!
+        floor.rooms.push({
+            group: roomObject as THREE.Group,
+            roomNumber: roomInfo.roomCode,
+            originalPosition: roomObject.position.clone(),
+            targetPosition: roomObject.position.clone(),
+            isVisible: true,
+            opacity: 1.0,
+            associatedEquipment: [], // 后续通过设备关联功能填充
+        })
+
+        console.log(`🏠 发现房间: ${floorNumber}F-${roomInfo.roomCode}-${this.getModelName(roomObject)}`)
+    }
+
+    /**
+     * 验证解析结果
+     */
+    private validateParsingResult(result: ReturnType<typeof this.parseBuildingModel>): void {
+        // 检查是否有楼层
+        if (result.floors.size === 0) {
+            result.errors.push('未发现任何楼层，请检查命名规则是否正确')
         }
 
-        // 方法1: 查找明确标记的楼层组
-        this.floorsGroup.children.forEach(child => {
-            const floorGroup = child as THREE.Group
-            if (floorGroup.userData && floorGroup.userData.isFloorGroup) {
-                const floorNumber = floorGroup.userData.floorNumber
-                const originalPosition = floorGroup.position.clone()
+        // 检查楼层连续性
+        const floorNumbers = Array.from(result.floors.keys()).sort((a, b) => a - b)
+        for (let i = 0; i < floorNumbers.length - 1; i++) {
+            if (floorNumbers[i + 1] - floorNumbers[i] > 1) {
+                result.errors.push(`楼层不连续: 缺少 ${floorNumbers[i] + 1}F 到 ${floorNumbers[i + 1] - 1}F`)
+            }
+        }
 
-                const floorItem: FloorItem = {
-                    group: floorGroup,
-                    floorNumber: floorNumber,
-                    originalPosition: originalPosition,
-                    targetPosition: originalPosition.clone(),
-                    isVisible: true,
-                    opacity: 1.0,
-                    nodeCount: this.countFloorNodes(floorGroup),
-                    associatedEquipment: []
-                }
-
-                this.floors.set(floorNumber, floorItem)
+        // 检查是否有虚拟楼层（只有房间没有楼层对象）
+        result.floors.forEach((floor, floorNumber) => {
+            if (!floor.floorObject) {
+                result.errors.push(`楼层 ${floorNumber}F 只有房间没有楼层主体对象`)
             }
         })
 
-        // 方法2: 如果没有找到明确标记的楼层，尝试智能创建楼层
-        if (this.floors.size === 0) {
-            this.createSmartFloors()
+        // 检查外立面
+        if (result.facades.length === 0) {
+            console.warn('⚠️ 未发现外立面对象，建筑可能没有外立面或命名不符合规则')
         }
 
-        // 方法3: 如果仍然没有楼层，将建筑的所有直接子对象作为楼层
-        if (this.floors.size === 0 && this.currentBuildingModel) {
-            this.createFloorsFromBuildingChildren()
+        // 检查未识别对象
+        if (result.statistics.unrecognizedObjects.length > 0) {
+            console.warn(`⚠️ 发现 ${result.statistics.unrecognizedObjects.length} 个未识别的对象`)
         }
+
+    }
+
+    /**
+     * 生成解析报告
+     */
+    private generateParsingReport(result: ReturnType<typeof this.parseBuildingModel>): void {
+        console.log('📊 建筑模型解析报告:')
+        console.log(`   🏢 总楼层数: ${result.statistics.totalFloors}`)
+        console.log(`   🏠 总房间数: ${result.statistics.totalRooms}`)
+        console.log(`   🎭 外立面数: ${result.statistics.totalFacades}`)
+        console.log(`   ❓ 未识别对象: ${result.statistics.unrecognizedObjects.length}`)
+
+        if (result.floors.size > 0) {
+            console.log('   📋 楼层详情:')
+            const sortedFloors = Array.from(result.floors.entries()).sort(([a], [b]) => a - b)
+            sortedFloors.forEach(([floorNumber, floor]) => {
+                const roomList = floor.rooms.map(room => `${room.roomCode}`).join(', ')
+                console.log(`      ${floorNumber}F: ${floor.rooms.length}个房间 [${roomList}]`)
+            })
+        }
+
+        if (result.facades.length > 0) {
+            console.log('   🎭 外立面详情:')
+            result.facades.forEach((facade, index) => {
+                console.log(`      ${index + 1}. ${this.getModelName(facade)}`)
+            })
+        }
+
+        if (result.errors.length > 0) {
+            console.log('   ❌ 错误信息:')
+            result.errors.forEach((error, index) => {
+                console.log(`      ${index + 1}. ${error}`)
+            })
+        }
+
+        if (result.statistics.unrecognizedObjects.length > 0) {
+            console.log('   ❓ 未识别对象详情:')
+            result.statistics.unrecognizedObjects.forEach((obj, index) => {
+                console.log(`      ${index + 1}. ${this.getModelName(obj)} (${obj.name})`)
+            })
+        }
+
+        console.log(`✅ 解析${result.success ? '成功' : '完成(有错误)'}`)
     }
 
     /**
@@ -554,998 +632,607 @@ export class BuildingControlPlugin extends BasePlugin {
         return object.name || '未命名模型'
     }
 
-    /**
-     * 从模型名称中提取楼层号
-     */
-    private extractFloorNumberFromName(modelName: string): number | null {
-        if (!modelName) return null
-
-        // 楼层号提取规则
-        const patterns = [
-            // 格式1: Floor_1, Floor_2, level_1 等
-            /(?:floor|level|story|storey)_?(\d+)/i,
-            // 格式2: 1F, 2F, 3F 等
-            /(\d+)f$/i,
-            // 格式3: 一楼, 二楼, 三楼 等中文
-            /([一二三四五六七八九十]+)楼/,
-            // 格式4: 1楼, 2楼, 3楼 等
-            /(\d+)楼/,
-            // 格式5: 1层, 2层, 3层 等
-            /(\d+)层/,
-            // 格式6: L1, L2, L3 等
-            /l(\d+)/i,
-            // 格式7: B1, B2 等地下楼层（负数）
-            /b(\d+)/i
-        ]
-
-        for (const pattern of patterns) {
-            const match = modelName.match(pattern)
-            if (match) {
-                const numberStr = match[1]
-
-                // 处理中文数字
-                if (/[一二三四五六七八九十]+/.test(numberStr)) {
-                    const chineseNumbers: { [key: string]: number } = {
-                        '一': 1, '二': 2, '三': 3, '四': 4, '五': 5,
-                        '六': 6, '七': 7, '八': 8, '九': 9, '十': 10
-                    }
-                    return chineseNumbers[numberStr] || null
-                }
-
-                const floorNumber = parseInt(numberStr)
-                if (!isNaN(floorNumber)) {
-                    // 地下楼层处理（B1, B2等作为负数）
-                    if (pattern.source.includes('b') || pattern.source.includes('B')) {
-                        return -floorNumber
-                    }
-                    return floorNumber
-                }
-            }
-        }
-
-        return null
-    }
+    // 建筑结构管理属性
+    private facades: THREE.Object3D[] = []          // 外立面对象数组
+    private rooms: Map<string, RoomItem> = new Map() // 房间索引 roomCode -> Roomitem 
+    private parseResult: ReturnType<typeof this.parseBuildingModel> | null = null
 
     /**
-     * 自动发现场景中的可交互建筑（只查找顶层建筑，不包括子节点）
+     * 链接解析结果到插件属性（非侵入式）
+     * 将parseBuildingModel的解析结果映射到插件的管理属性中，不修改原始模型结构
      */
-    private autoDiscoverBuildingsInScene(scene: THREE.Scene): THREE.Group[] {
-        const buildings: THREE.Group[] = []
-
-
-        // 只遍历场景的直接子对象，避免把楼层子节点误认为建筑
-        scene.children.forEach((object) => {
-            if (!(object instanceof THREE.Group)) return
-
-            const modelName = this.getModelName(object)
-            // 检查是否为标记的建筑模型
-            if (object.userData && object.userData.isBuildingModel === true) {
-                buildings.push(object)
-                return
-            }
-
-            // 通过名称模式识别顶层建筑
-            if (this.isTopLevelBuildingModel(modelName, object)) {
-                // 为未标记的建筑模型添加标记
-                if (!object.userData) {
-                    object.userData = {}
-                }
-                object.userData.isBuildingModel = true
-                object.userData.isInteractive = true
-
-                buildings.push(object)
-            }
-        })
-
-        return buildings
-    }
-
-    /**
-     * 判断是否为顶层建筑模型（只识别主建筑，不包括楼层或设备）
-     */
-    private isTopLevelBuildingModel(modelName: string, object: THREE.Group): boolean {
-        const upperName = modelName.toUpperCase()
-
-        // 1. 必须包含建筑关键词
-        const buildingKeywords = ['BUILDING', '建筑', 'HOUSE', 'STRUCTURE']
-        const hasBuildingKeyword = buildingKeywords.some(keyword => upperName.includes(keyword))
-
-        if (!hasBuildingKeyword) {
+    public linkParsedStructure(): boolean {
+        // 首先解析建筑模型
+        const parseResult = this.parseBuildingModel()
+        
+        if (!parseResult.success) {
+            console.error('❌ 解析建筑模型失败，无法链接结构')
             return false
         }
 
-        // 2. 排除设备命名模式（建筑名_nF_设备名）
-        const equipmentPattern = /^.+_\d+F_.+$/i
-        if (equipmentPattern.test(modelName)) {
-            return false
-        }
+        // 保存解析结果
+        this.parseResult = parseResult
 
-        // 3. 排除楼层命名模式（Floor_X, 楼层_X, Level_X等）
-        const floorPatterns = [
-            /^(floor|楼层|level|story|storey)_?\d+$/i,
-            /^\d+(f|楼|层)$/i,
-            /^(一|二|三|四|五|六|七|八|九|十)楼$/i
-        ]
-        const isFloorName = floorPatterns.some(pattern => pattern.test(modelName))
-        if (isFloorName) {
-            return false
-        }
+        try {
+            // 清空现有数据
+            this.floors.clear()
+            this.facades = []
+            this.rooms.clear()
 
-        // 4. 排除设备关键词
-        const equipmentKeywords = ['设备', 'EQUIPMENT', '空调', '消防', '电梯', 'HVAC', 'FIRE', 'ELEVATOR']
-        const hasEquipmentKeyword = equipmentKeywords.some(keyword => upperName.includes(keyword))
+            // 链接楼层和房间
+            this.linkFloors(parseResult)
+            
+            // 链接外立面
+            this.linkFacades(parseResult)
+            
+            // 链接房间索引
+            this.linkRooms(parseResult)
 
-        if (hasEquipmentKeyword) {
-            return false
-        }
+            // 关联设备到楼层和房间
+            this.associateEquipmentToFloorsAndRooms()
 
-        // 5. 检查对象结构特征（主建筑通常有较多子对象）
-        if (object.children.length < 1) {
-            return false
-        }
+            console.log('✅ 建筑结构链接完成', {
+                楼层数: this.floors.size,
+                房间数: this.rooms.size / 2, // 除以2因为每个房间有两个键
+                外立面数: this.facades.length,
+                设备数: this.allDevices.length
+            })
 
-        return true
-    }
-
-    /**
-     * 判断是否为设备模型
-     */
-    private isEquipmentModel(modelName: string): boolean {
-        const upperName = modelName.toUpperCase()
-
-        // 1. 检查设备命名模式（建筑名_nF_设备名 或 建筑名_nF_房间_设备名）
-        const equipmentPattern = /^.+_\d+F_.+$/i
-        if (equipmentPattern.test(modelName)) {
             return true
+
+        } catch (error) {
+            console.error('❌ 链接建筑结构时发生错误:', error)
+            return false
         }
-
-        // 2. 检查设备关键词
-        const equipmentKeywords = ['设备', 'EQUIPMENT', '空调', '消防', '电梯', 'HVAC', 'FIRE', 'ELEVATOR',
-            '厨具', '家具', 'FURNITURE', '灯具', 'LIGHT', '管道', 'PIPE']
-        const hasEquipmentKeyword = equipmentKeywords.some(keyword => upperName.includes(keyword))
-
-        return hasEquipmentKeyword
     }
 
     /**
-     * 解析设备名称信息
-     * 支持格式: 建筑名_nF_房间号_设备名 或 建筑名_nF_设备名
+     * 链接楼层结构（非侵入式）
      */
-    private parseEquipmentNameInfo(equipmentName: string): {
-        buildingName: string | null
-        floorNumber: number | null
-        roomNumber: string | null
-        deviceName: string | null
-        isValid: boolean
-    } {
-        // 设备命名规则: 建筑名_nF_房间号_设备名 或 建筑名_nF_设备名
-        const patterns = [
-            // 格式1: 建筑名_nF_房间号_设备名 (如: MAIN_BUILDING_2F_K202_空调)
-            /^(.+?)_(\d+)F_([A-Z]\d+)_(.+)$/i,
-            // 格式2: 建筑名_nF_设备名 (如: MAIN_BUILDING_3F_消防设备)
-            /^(.+?)_(\d+)F_(.+)$/i
-        ]
+    private linkFloors(parseResult: ReturnType<typeof this.parseBuildingModel>): void {
+        parseResult.floors.forEach((floorData, floorNumber) => {
+            // 创建楼层管理项（不修改原始对象）
+            const floorItem: FloorItem = {
+                group: floorData.floorObject as THREE.Group, // 直接引用原始对象
+                floorNumber: floorNumber,
+                originalPosition: floorData.floorObject.position.clone(), // 克隆位置避免引用
+                targetPosition: floorData.floorObject.position.clone(),
+                isVisible: true,
+                opacity: 1.0,
+                nodeCount: this.countNodes(floorData.floorObject),
+                associatedEquipment: [], // 后续通过设备关联功能填充
+                rooms: this.createRoomItems(floorData.rooms) // 创建房间管理项
+            }
 
-        for (const pattern of patterns) {
-            const match = equipmentName.match(pattern)
-            if (match) {
-                if (match.length === 5) {
-                    // 格式1: 包含房间号
-                    return {
-                        buildingName: match[1],
-                        floorNumber: parseInt(match[2]),
-                        roomNumber: match[3],
-                        deviceName: match[4],
-                        isValid: true
-                    }
-                } else if (match.length === 4) {
-                    // 格式2: 不包含房间号
-                    return {
-                        buildingName: match[1],
-                        floorNumber: parseInt(match[2]),
-                        roomNumber: null,
-                        deviceName: match[3],
-                        isValid: true
-                    }
+            this.floors.set(floorNumber, floorItem)
+            
+            console.log(`🔗 链接楼层: ${floorNumber}F (${floorData.rooms.length}个房间)`)
+        })
+    }
+
+    /**
+     * 创建房间管理项（非侵入式）
+     */
+    private createRoomItems(roomsData: Array<{
+        roomObject: THREE.Object3D
+        roomCode: string
+    }>): RoomItem[] {
+        return roomsData.map(roomData => ({
+            group: roomData.roomObject as THREE.Group, // 直接引用原始对象
+            roomNumber: roomData.roomCode,
+            originalPosition: roomData.roomObject.position.clone(),
+            targetPosition: roomData.roomObject.position.clone(),
+            isVisible: true,
+            opacity: 1.0,
+            associatedEquipment: [] // 后续通过设备关联功能填充
+        }))
+    }
+
+    /**
+     * 链接外立面（非侵入式）
+     */
+    private linkFacades(parseResult: ReturnType<typeof this.parseBuildingModel>): void {
+        this.facades = [...parseResult.facades] // 浅拷贝数组，保持对象引用
+        
+        // 设置主要外立面组（如果存在）
+        if (this.facades.length > 0) {
+            this.facadeGroup = this.facades[0] as THREE.Group
+            console.log(`🔗 链接外立面: ${this.facades.length}个对象`)
+        }
+    }
+
+    /**
+     * 链接房间索引（非侵入式）
+     */
+    private linkRooms(parseResult: ReturnType<typeof this.parseBuildingModel>): void {
+        parseResult.floors.forEach((floorData) => {
+            floorData.rooms.forEach(roomData => {
+                // 创建房间管理项
+                const roomItem: RoomItem = {
+                    group: roomData.roomObject as THREE.Group,
+                    roomNumber: roomData.roomCode,
+                    originalPosition: roomData.roomObject.position.clone(),
+                    targetPosition: roomData.roomObject.position.clone(),
+                    isVisible: true,
+                    opacity: 1.0,
+                    associatedEquipment: []
                 }
+                
+                // 使用房间代码作为键
+                this.rooms.set(roomData.roomCode, roomItem)
+                
+                // 也可以用完整楼层+房间代码作为键
+                const fullRoomKey = `${floorData.floorNumber}F_${roomData.roomCode}`
+                this.rooms.set(fullRoomKey, roomItem)
+            })
+        })
+        
+        console.log(`🔗 房间索引创建完成: ${this.rooms.size / 2}个房间`) // 除以2因为每个房间有两个键
+    }
+
+    /**
+     * 计算对象节点数量
+     */
+    private countNodes(object: THREE.Object3D): number {
+        let count = 0
+        object.traverse(() => count++)
+        return count - 1 // 减去对象自身
+    }
+
+    /**
+     * 获取楼层对象（非侵入式访问）
+     * @param floorNumber 楼层号
+     * @returns 楼层对象，如果不存在返回null
+     */
+    public getFloorObject(floorNumber: number): THREE.Object3D | null {
+        const floor = this.floors.get(floorNumber)
+        return floor ? floor.group : null
+    }
+
+    /**
+     * 获取房间对象（非侵入式访问）
+     * @param roomCode 房间代码（如 "R101" 或 "1F_R101"）
+     * @returns 房间对象，如果不存在返回null
+     */
+    public getRoomObject(roomCode: string): THREE.Object3D | null {
+        return this.rooms.get(roomCode)?.group || null
+    }
+
+    /**
+     * 获取外立面对象列表（非侵入式访问）
+     * @returns 外立面对象数组
+     */
+    public getFacadeObjects(): THREE.Object3D[] {
+        return [...this.facades] // 返回副本避免外部修改
+    }
+
+    /**
+     * 获取指定楼层的房间列表（非侵入式访问）
+     * @param floorNumber 楼层号
+     * @returns 房间对象数组
+     */
+    public getFloorRooms(floorNumber: number): THREE.Object3D[] {
+        const floor = this.floors.get(floorNumber)
+        return floor ? floor.rooms.map((room: RoomItem) => room.group) : []
+    }
+
+    /**
+     * 获取完整的解析结果（只读）
+     * @returns 解析结果的副本
+     */
+    public getParseResult(): ReturnType<typeof this.parseBuildingModel> | null {
+        return this.parseResult ? { ...this.parseResult } : null
+    }
+
+    /**
+     * 检查结构是否已链接
+     * @returns 是否已成功链接
+     */
+    public isStructureLinked(): boolean {
+        return this.parseResult !== null && this.parseResult.success
+    }
+
+    /**
+     * 获取建筑结构概览
+     * @returns 建筑结构统计信息
+     */
+    public getBuildingOverview(): {
+        isLinked: boolean
+        totalFloors: number
+        totalRooms: number
+        totalFacades: number
+        floorNumbers: number[]
+        roomCodes: string[]
+    } {
+        if (!this.isStructureLinked()) {
+            return {
+                isLinked: false,
+                totalFloors: 0,
+                totalRooms: 0,
+                totalFacades: 0,
+                floorNumbers: [],
+                roomCodes: []
             }
         }
 
         return {
-            buildingName: null,
-            floorNumber: null,
-            roomNumber: null,
-            deviceName: null,
-            isValid: false
+            isLinked: true,
+            totalFloors: this.floors.size,
+            totalRooms: this.rooms.size,
+            totalFacades: this.facades.length,
+            floorNumbers: Array.from(this.floors.keys()).sort((a, b) => a - b),
+            roomCodes: Array.from(this.rooms.keys()).filter((key: string) => !key.includes('F_')) // 只返回简单房间代码
         }
     }
 
     /**
-     * 基于命名规则的智能设备关联（只识别独立的设备模型，不包括建筑内部结构）
+     * 楼层展开（执行动画）
+     * 将所有楼层在垂直方向上展开，其他楼层之间相互分离（具有一个渐进的补间动画）
      */
-    private autoAssociateEquipmentByNaming(scene: THREE.Scene): void {
-        if (!this.currentBuildingModel) {
-            console.warn('⚠️ 没有设置建筑模型，跳过设备关联')
-            return
-        }
-
-        const currentBuildingName = this.getModelName(this.currentBuildingModel).toUpperCase()
-
-        // 1. 扫描场景中的所有独立设备模型
-        const discoveredEquipment: Array<{
-            object: THREE.Object3D
-            nameInfo: {
-                buildingName: string | null
-                floorNumber: number | null
-                roomNumber: string | null
-                deviceName: string | null
-                isValid: boolean
-            }
-            modelName: string
-        }> = []
-
-        this.findEquipmentInScene(scene, discoveredEquipment)
-
-        if (discoveredEquipment.length === 0) {
-            return
-        }
-
-        discoveredEquipment.forEach((equipment, index) => {
-            const info = equipment.nameInfo
-        })
-
-        // 2. 筛选属于当前建筑的设备
-        const buildingEquipment = discoveredEquipment.filter((equipment) => {
-            const buildingName = equipment.nameInfo.buildingName?.toUpperCase()
-            return buildingName === currentBuildingName
-        })
-
-        if (buildingEquipment.length === 0) {
-            return
-        }
-
-        // 3. 按楼层分组设备
-        const equipmentByFloor = new Map<number, Array<typeof buildingEquipment[0]>>()
-
-        buildingEquipment.forEach((equipment) => {
-            const floorNumber = equipment.nameInfo.floorNumber!
-            if (!equipmentByFloor.has(floorNumber)) {
-                equipmentByFloor.set(floorNumber, [])
-            }
-            equipmentByFloor.get(floorNumber)!.push(equipment)
-        })
-
-        // 4. 将设备关联到对应楼层
-        let totalAssociated = 0
-        let totalSkipped = 0
-
-        equipmentByFloor.forEach((equipmentList, floorNumber) => {
-            const floor = this.floors.get(floorNumber)
-
-            if (!floor) {
-                console.warn(`⚠️ 楼层 ${floorNumber} 不存在，跳过 ${equipmentList.length} 个设备`)
-                totalSkipped += equipmentList.length
-                return
-            }
-
-            equipmentList.forEach((equipment) => {
-                try {
-                    // 将设备从场景中移除并添加到楼层组中
-                    this.associateEquipmentToFloor(equipment.object, floor, equipment.modelName)
-                    totalAssociated++
-                } catch (error) {
-                    console.error(`❌ 关联设备失败: ${equipment.modelName}`, error)
-                    totalSkipped++
-                }
-            })
-        })
-    }
-
-    /**
-     * 在场景中查找设备模型（只查找独立的设备模型，排除建筑内部结构）
-     */
-    private findEquipmentInScene(scene: THREE.Scene, equipmentList: Array<{
-        object: THREE.Object3D
-        nameInfo: {
-            buildingName: string | null
-            floorNumber: number | null
-            roomNumber: string | null
-            deviceName: string | null
-            isValid: boolean
-        }
-        modelName: string
-    }>): void {
-        scene.children.forEach((object) => {
-            this.findEquipmentInObject(object, equipmentList)
-        })
-    }
-
-    /**
-     * 在对象中查找设备模型（递归查找，但排除建筑内部结构）
-     */
-    private findEquipmentInObject(object: THREE.Object3D, equipmentList: Array<{
-        object: THREE.Object3D
-        nameInfo: {
-            buildingName: string | null
-            floorNumber: number | null
-            roomNumber: string | null
-            deviceName: string | null
-            isValid: boolean
-        }
-        modelName: string
-    }>): void {
-        const modelName = this.getModelName(object)
-
-        // 如果是建筑模型，跳过其内部结构（避免把楼层误认为设备）
-        if (object instanceof THREE.Group && object.userData?.isBuildingModel) {
-            return
-        }
-
-        // 检查当前对象是否是设备
-        const nameInfo = this.parseEquipmentNameInfo(modelName)
-        if (nameInfo.isValid) {
-            equipmentList.push({
-                object: object,
-                nameInfo: nameInfo,
-                modelName: modelName
-            })
-            return // 找到设备后不再遍历其子对象
-        }
-
-        // 如果不是设备，继续遍历子对象
-        if (object.children && object.children.length > 0) {
-            object.children.forEach((child) => {
-                this.findEquipmentInObject(child, equipmentList)
-            })
-        }
-    }
-
-    /**
-     * 将设备关联到指定楼层
-     */
-    private associateEquipmentToFloor(equipment: THREE.Object3D, floor: FloorItem, modelName: string): void {
-        // 记录关联关系
-        floor.associatedEquipment.push(equipment)
-    }
-
-    /**
-     * 智能创建楼层数据
-     */
-    private createSmartFloors(): void {
-        if (!this.floorsGroup) return
-
-        // 收集所有可能的楼层对象
-        const potentialFloors: { object: THREE.Object3D, y: number, name: string }[] = []
-
-        this.floorsGroup.children.forEach((child, index) => {
-            if (child.type === 'Group' || child.type === 'Mesh') {
-                const worldPos = new THREE.Vector3()
-                child.getWorldPosition(worldPos)
-
-                potentialFloors.push({
-                    object: child,
-                    y: worldPos.y,
-                    name: child.name || `Floor_${index}`
-                })
-            }
-        })
-
-        // 按Y坐标排序（从低到高）
-        potentialFloors.sort((a, b) => a.y - b.y)
-
-        // 创建楼层数据
-        potentialFloors.forEach((floorData, index) => {
-            const floorNumber = index + 1 // 从1楼开始
-            const originalPosition = floorData.object.position.clone()
-
-            const floorItem: FloorItem = {
-                group: floorData.object.type === 'Group' ? floorData.object as THREE.Group : this.wrapObjectInGroup(floorData.object),
-                floorNumber: floorNumber,
-                originalPosition: originalPosition,
-                targetPosition: originalPosition.clone(),
-                isVisible: true,
-                opacity: 1.0,
-                nodeCount: this.countFloorNodes(floorData.object),
-                associatedEquipment: []
-            }
-
-            this.floors.set(floorNumber, floorItem)
-        })
-
-        // 如果仍然没有楼层，创建一个默认楼层
-        if (this.floors.size === 0 && this.floorsGroup.children.length === 0) {
-            const floorItem: FloorItem = {
-                group: this.floorsGroup,
-                floorNumber: 1,
-                originalPosition: this.floorsGroup.position.clone(),
-                targetPosition: this.floorsGroup.position.clone(),
-                isVisible: true,
-                opacity: 1.0,
-                nodeCount: this.countFloorNodes(this.floorsGroup),
-                associatedEquipment: []
-            }
-            this.floors.set(1, floorItem)
-        }
-    }
-
-    /**
-     * 从建筑的直接子对象创建楼层（最后的备用方案）
-     */
-    private createFloorsFromBuildingChildren(): void {
-        if (!this.currentBuildingModel) return
-
-        // 收集所有可能的楼层对象（排除外立面，特别是mask）
-        const potentialFloors: { object: THREE.Object3D, y: number, name: string }[] = []
-        const facadeKeywords = ['mask', 'facade', 'exterior', 'wall', 'curtain', '外立面', '立面', '幕墙']
-
-        this.currentBuildingModel.children.forEach((child, index) => {
-            const name = child.name.toLowerCase()
-            const modelName = this.getModelName(child).toLowerCase()
-
-            // 跳过外立面对象（优先检查mask关键词）
-            const isFacade = facadeKeywords.some(keyword =>
-                name.includes(keyword) || modelName.includes(keyword)
-            )
-
-            if (isFacade) {
-                return
-            }
-
-            if (child.type === 'Group' || child.type === 'Mesh') {
-                const worldPos = new THREE.Vector3()
-                child.getWorldPosition(worldPos)
-
-                potentialFloors.push({
-                    object: child,
-                    y: worldPos.y,
-                    name: modelName || `Floor_${index}`
-                })
-            }
-        })
-
-        // 按Y坐标排序（从低到高）
-        potentialFloors.sort((a, b) => a.y - b.y)
-
-        // 创建楼层数据
-        potentialFloors.forEach((floorData, index) => {
-            const floorNumber = index + 1 // 从1楼开始
-            const originalPosition = floorData.object.position.clone()
-
-            const floorItem: FloorItem = {
-                group: floorData.object.type === 'Group' ? floorData.object as THREE.Group : this.wrapObjectInGroup(floorData.object),
-                floorNumber: floorNumber,
-                originalPosition: originalPosition,
-                targetPosition: originalPosition.clone(),
-                isVisible: true,
-                opacity: 1.0,
-                nodeCount: this.countFloorNodes(floorData.object),
-                associatedEquipment: []
-            }
-
-            this.floors.set(floorNumber, floorItem)
-        })
-
-        // 如果仍然没有楼层，创建一个默认楼层
-        if (this.floors.size === 0) {
-            const floorItem: FloorItem = {
-                group: this.currentBuildingModel,
-                floorNumber: 1,
-                originalPosition: this.currentBuildingModel.position.clone(),
-                targetPosition: this.currentBuildingModel.position.clone(),
-                isVisible: true,
-                opacity: 1.0,
-                nodeCount: this.countFloorNodes(this.currentBuildingModel),
-                associatedEquipment: []
-            }
-            this.floors.set(1, floorItem)
-        }
-    }
-
-    /**
-     * 将对象包装成Group
-     */
-    private wrapObjectInGroup(object: THREE.Object3D): THREE.Group {
-        const group = new THREE.Group()
-        group.name = `${object.name}_wrapper`
-        group.position.copy(object.position)
-        group.rotation.copy(object.rotation)
-        group.scale.copy(object.scale)
-
-        // 将原始对象重置位置然后添加到组中
-        const originalParent = object.parent
-        if (originalParent) {
-            originalParent.remove(object)
-        }
-        object.position.set(0, 0, 0)
-        object.rotation.set(0, 0, 0)
-        object.scale.set(1, 1, 1)
-        group.add(object)
-
-        // 将组添加回原始父对象
-        if (originalParent) {
-            originalParent.add(group)
-        }
-
-        return group
-    }
-
-    /**
-     * 计算楼层节点数量
-     */
-    private countFloorNodes(object: THREE.Object3D | THREE.Group): number {
-        let count = 0
-        object.traverse(() => count++)
-        return count - 1 // 减去object自身
-    }
-
-    /**
-     * 展开所有楼层(一个动画：所有楼层向上进行位移，一楼保持不动)
-     */
-    public expandFloors(): Promise<void> {
-        if (this.currentState === FloorState.EXPANDED) {
-            return Promise.resolve()
-        }
-
+    public expandFloor(): void {
         // 检查是否有楼层可以展开
         if (this.floors.size === 0) {
-            return Promise.resolve()
+            console.warn(`⚠️ 没有楼层可以展开`)
+            return
         }
 
-        if (this.floors.size === 1) {
-            return Promise.resolve()
+        // 如果已经是展开状态，则不重复执行
+        if (this.currentState === FloorState.EXPANDED) {
+            console.log(`ℹ️ 楼层已处于展开状态`)
+            return
         }
 
-        return new Promise((resolve) => {
+        console.log(`🏗️ 开始展开所有楼层`)
+
+        // 触发展开开始事件
+        this.events.onExpandStart?.()
+
+        // 停止所有活动的动画
+        this.stopAllAnimations()
+
+        // 如果配置了自动隐藏外立面，则隐藏外立面
+        if (this.config.autoHideFacade) {
+            this.hideFacades()
+        }
+
+        // 计算所有楼层的展开目标位置
+        this.calculateExpandedPositions()
+
+        // 执行展开动画
+        this.executeExpandAnimation(() => {
+            // 动画完成后的回调
             this.currentState = FloorState.EXPANDED
-            this.events.onExpandStart?.()
-
-            // 自动隐藏外立面
-            if (this.config.autoHideFacade && this.facadeGroup) {
-                this.setFacadeVisibility(false)
-            }
-
-            const floorNumbers = Array.from(this.floors.keys()).sort((a, b) => a - b)
-            const animations: Promise<void>[] = []
-            const lowestFloorNumber = floorNumbers[0] // 最低楼层（一楼）
-
-            // 获取最低楼层的原始Y坐标作为基准
-            const lowestFloor = this.floors.get(lowestFloorNumber)!
-            const baseY = lowestFloor.originalPosition.y
-
-            floorNumbers.forEach((floorNumber, index) => {
-                const floor = this.floors.get(floorNumber)!
-
-                // 计算相对于最低楼层的楼层差
-                const floorOffset = floorNumber - lowestFloorNumber
-
-                // 基于最低楼层的Y坐标和统一间距来计算目标位置
-                // 这样确保所有楼层之间的距离都是 expandDistance
-                const targetY = baseY + (floorOffset * this.config.expandDistance)
-
-                floor.targetPosition.set(
-                    floor.originalPosition.x,
-                    targetY,
-                    floor.originalPosition.z
-                )
-
-                // 同时移动楼层和关联的设备
-                animations.push(this.animateFloorPosition(floor))
-                animations.push(this.animateEquipmentWithFloor(floor))
-            })
-
-            Promise.all(animations).then(() => {
-                this.events.onExpandComplete?.()
-                resolve()
-            })
+            this.events.onExpandComplete?.()
+            console.log(`✅ 所有楼层展开完成`)
         })
     }
-
+    
     /**
-     * 收回楼层到原位置
+     * 楼层收起（执行动画）
+     * 将展开的楼层恢复到原始位置（具有一个渐进的补间动画）
      */
-    public collapseFloors(): Promise<void> {
-        if (this.currentState === FloorState.NORMAL) {
-            return Promise.resolve()
+    public collapseFloor(): void {
+        // 检查是否有楼层可以收起
+        if (this.floors.size === 0) {
+            console.warn(`⚠️ 没有楼层可以收起`)
+            return
         }
 
-        return new Promise((resolve) => {
+        // 如果已经是正常状态，则不重复执行
+        if (this.currentState === FloorState.NORMAL) {
+            console.log(`ℹ️ 楼层已处于正常状态`)
+            return
+        }
+
+        console.log(`🏗️ 开始收起所有楼层`)
+
+        // 触发收起开始事件
+        this.events.onCollapseStart?.()
+
+        // 停止所有活动的动画
+        this.stopAllAnimations()
+
+        // 执行收起动画
+        this.executeCollapseAnimation(() => {
+            // 动画完成后的回调
             this.currentState = FloorState.NORMAL
             this.focusedFloor = null
-            this.events.onCollapseStart?.()
-
+            
             // 恢复外立面显示
-            if (this.facadeGroup) {
-                this.setFacadeVisibility(this.config.showFacade)
-            }
-
-            const animations: Promise<void>[] = []
-
-            this.floors.forEach(floor => {
-                floor.targetPosition.copy(floor.originalPosition)
-                floor.opacity = 1.0
-                animations.push(this.animateFloorPosition(floor))
-                animations.push(this.animateFloorOpacity(floor, 1.0))
-                animations.push(this.animateEquipmentWithFloor(floor))
-            })
-
-            Promise.all(animations).then(() => {
-                this.events.onCollapseComplete?.()
-                resolve()
-            })
+            this.showFacades()
+            
+            // 恢复所有楼层透明度
+            this.restoreAllFloorOpacity()
+            
+            this.events.onCollapseComplete?.()
+            console.log(`✅ 所有楼层收起完成`)
         })
     }
-
+    
     /**
-     * 聚焦到指定楼层
+     * 楼层聚焦（执行动画）
+     * 聚焦到指定楼层，其他楼层变为半透明
      */
-    public focusOnFloor(floorNumber: number): Promise<void> {
-        const targetFloor = this.floors.get(floorNumber)
-        if (!targetFloor) {
-            console.warn(`⚠️ 未找到 ${floorNumber} 楼`)
-            return Promise.resolve()
+    public focusFloor(floorNumber: number): void {
+        const floor = this.floors.get(floorNumber)
+        if (!floor) {
+            console.warn(`⚠️ 楼层 ${floorNumber}F 不存在，无法聚焦`)
+            return
         }
 
-        return new Promise((resolve) => {
-            this.currentState = FloorState.FOCUSED
-            this.focusedFloor = floorNumber
-            this.events.onFloorFocus?.(floorNumber)
+        console.log(`🎯 开始聚焦楼层 ${floorNumber}F`)
 
-            // 隐藏外立面
-            if (this.facadeGroup) {
-                this.setFacadeVisibility(false)
-            }
+        // 如果已经聚焦到同一楼层，则不执行操作
+        if (this.focusedFloor === floorNumber && this.currentState === FloorState.FOCUSED) {
+            console.log(`ℹ️ 楼层 ${floorNumber}F 已经处于聚焦状态`)
+            return
+        }
 
-            const animations: Promise<void>[] = []
+        // 停止所有活动的动画
+        this.stopAllAnimations()
 
-            // 楼层透明度动画
-            this.floors.forEach(floor => {
-                if (floor.floorNumber === floorNumber) {
-                    // 聚焦楼层：完全不透明
-                    floor.opacity = this.config.focusOpacity
-                    animations.push(this.animateFloorOpacity(floor, this.config.focusOpacity))
-                    // 聚焦楼层的设备也完全不透明
-                    animations.push(this.animateEquipmentOpacity(floor, this.config.focusOpacity))
-                } else {
-                    // 其他楼层：半透明
-                    floor.opacity = this.config.unfocusOpacity
-                    animations.push(this.animateFloorOpacity(floor, this.config.unfocusOpacity))
-                    // 其他楼层的设备也半透明
-                    animations.push(this.animateEquipmentOpacity(floor, this.config.unfocusOpacity))
-                }
+        // 更新状态
+        this.currentState = FloorState.FOCUSED
+        this.focusedFloor = floorNumber
+
+        // 设置楼层透明度
+        this.setFloorsOpacityForFocus(floorNumber)
+
+        // 如果启用了相机动画，则移动相机到聚焦楼层
+        if (this.config.enableCameraAnimation) {
+            this.animateCameraToFloor(floorNumber, () => {
+                this.events.onCameraAnimationComplete?.(floorNumber)
             })
+        }
 
-            // 相机聚焦动画
-            if (this.config.enableCameraAnimation) {
-                animations.push(this.animateCameraToFloor(targetFloor))
-            }
-
-            Promise.all(animations).then(() => {
-                resolve()
-            })
-        })
+        // 触发聚焦事件
+        this.events.onFloorFocus?.(floorNumber)
+        console.log(`✅ 楼层 ${floorNumber}F 聚焦完成`)
     }
 
     /**
-     * 显示所有楼层（取消聚焦）
+     * 展开所有楼层（兼容性方法，内部调用expandFloor）
      */
-    public showAllFloors(): Promise<void> {
+    public expandAllFloors(): void {
+        this.expandFloor()
+    }
+
+    /**
+     * 收起所有楼层（兼容性方法，内部调用collapseFloor）
+     */
+    public collapseAllFloors(): void {
+        this.collapseFloor()
+    }
+
+    /**
+     * 取消楼层聚焦，恢复正常状态
+     */
+    public unfocusAllFloors(): void {
         if (this.currentState !== FloorState.FOCUSED) {
-            return Promise.resolve()
+            console.log(`ℹ️ 当前没有楼层处于聚焦状态`)
+            return
         }
 
-        return new Promise((resolve) => {
-            this.currentState = this.currentState === FloorState.FOCUSED ? FloorState.EXPANDED : FloorState.NORMAL
-            this.focusedFloor = null
-            this.events.onFloorUnfocus?.()
+        console.log(`🎯 取消楼层聚焦`)
 
-            const animations: Promise<void>[] = []
+        // 停止所有活动的动画
+        this.stopAllAnimations()
 
-            // 楼层透明度恢复动画
-            this.floors.forEach(floor => {
-                floor.opacity = 1.0
-                animations.push(this.animateFloorOpacity(floor, 1.0))
-                // 同时恢复设备的完全不透明
-                animations.push(this.animateEquipmentOpacity(floor, 1.0))
+        // 恢复所有楼层透明度
+        this.restoreAllFloorOpacity()
+
+        // 更新状态
+        this.currentState = FloorState.NORMAL
+        this.focusedFloor = null
+
+        // 如果启用了相机恢复，则恢复相机位置
+        if (this.config.restoreCameraOnUnfocus && this.originalCameraPosition) {
+            this.restoreCameraPosition(() => {
+                this.events.onCameraRestore?.()
+            })
+        }
+
+        // 触发取消聚焦事件
+        this.events.onFloorUnfocus?.()
+        console.log(`✅ 楼层聚焦已取消`)
+    }
+
+    /**
+     * 计算展开状态下所有楼层的目标位置
+     */
+    private calculateExpandedPositions(): void {
+        const floorNumbers = Array.from(this.floors.keys()).sort((a, b) => a - b)
+        const expandDistance = this.config.expandDistance
+
+        floorNumbers.forEach((floorNumber, index) => {
+            const floor = this.floors.get(floorNumber)!
+            
+            // 计算垂直偏移：以最底层为基准，向上依次展开
+            const verticalOffset = index * expandDistance
+            
+            floor.targetPosition = floor.originalPosition.clone()
+            floor.targetPosition.y += verticalOffset
+        })
+    }
+
+    /**
+     * 执行展开动画
+     * 使用渐进式动画，楼层依次展开，创建视觉层次感
+     */
+    private executeExpandAnimation(onComplete?: () => void): void {
+        const floorNumbers = Array.from(this.floors.keys()).sort((a, b) => a - b)
+        
+        if (floorNumbers.length === 0) {
+            console.warn('⚠️ 没有楼层可以展开')
+            onComplete?.()
+            return
+        }
+
+        // 创建渐进式动画序列
+        const animationPromises: Promise<void>[] = []
+
+        floorNumbers.forEach((floorNumber, index) => {
+            const floor = this.floors.get(floorNumber)!
+            const delay = index * 200 // 每个楼层延迟200ms开始动画，创建层次感
+
+            const promise = new Promise<void>((resolve) => {
+                // 延迟执行动画
+                const timeoutId = setTimeout(() => {
+                    const startPosition = floor.group.position.clone()
+                    const endPosition = floor.targetPosition.clone()
+
+                    // 创建位置动画
+                    const positionTween = new TWEEN.Tween(startPosition)
+                        .to(endPosition, this.config.animationDuration)
+                        .easing(this.getEasingFunction())
+                        .onUpdate(() => {
+                            const deltaY = startPosition.y - floor.originalPosition.y
+                            
+                            // 移动楼层
+                            floor.group.position.copy(startPosition)
+                            
+                            // 同时移动关联的设备
+                            floor.associatedEquipment.forEach(equipmentInfo => {
+                                const equipment = equipmentInfo.equipment
+                                if (equipment.userData.originalY === undefined) {
+                                    equipment.userData.originalY = equipment.position.y
+                                }
+                                equipment.position.y = equipment.userData.originalY + deltaY
+                            })
+                        })
+                        .onComplete(() => {
+                            console.log(`✅ 楼层 ${floorNumber}F 展开完成`)
+                            resolve()
+                        })
+
+                    this.activeTweens.add(positionTween)
+                    positionTween.start()
+                }, delay)
+
+                // 保存定时器ID以便后续清理
+                this.delayedAnimationTimeouts.push(timeoutId)
             })
 
-            // 相机恢复动画
-            if (this.config.restoreCameraOnUnfocus && this.config.enableCameraAnimation) {
-                animations.push(this.restoreCameraState())
-            }
+            animationPromises.push(promise)
+        })
 
-            Promise.all(animations).then(() => {
-                resolve()
+        // 等待所有动画完成
+        Promise.all(animationPromises).then(() => {
+            onComplete?.()
+        })
+    }
+
+    /**
+     * 执行收起动画
+     * 使用反向渐进式动画，楼层依次收起
+     */
+    private executeCollapseAnimation(onComplete?: () => void): void {
+        const floorNumbers = Array.from(this.floors.keys()).sort((a, b) => b - a) // 从高到低收起
+        
+        if (floorNumbers.length === 0) {
+            console.warn('⚠️ 没有楼层可以收起')
+            onComplete?.()
+            return
+        }
+
+        // 创建反向渐进式动画序列
+        const animationPromises: Promise<void>[] = []
+
+        floorNumbers.forEach((floorNumber, index) => {
+            const floor = this.floors.get(floorNumber)!
+            const delay = index * 150 // 收起动画稍快一些
+
+            const promise = new Promise<void>((resolve) => {
+                // 延迟执行动画
+                const timeoutId = setTimeout(() => {
+                    const startPosition = floor.group.position.clone()
+                    const endPosition = floor.originalPosition.clone()
+
+                    // 创建位置动画
+                    const positionTween = new TWEEN.Tween(startPosition)
+                        .to(endPosition, this.config.animationDuration)
+                        .easing(this.getEasingFunction())
+                        .onUpdate(() => {
+                            const deltaY = startPosition.y - floor.originalPosition.y
+                            
+                            // 移动楼层
+                            floor.group.position.copy(startPosition)
+                            
+                            // 恢复关联设备位置
+                            floor.associatedEquipment.forEach(equipmentInfo => {
+                                const equipment = equipmentInfo.equipment
+                                if (equipment.userData.originalY !== undefined) {
+                                    equipment.position.y = equipment.userData.originalY + deltaY
+                                }
+                            })
+                        })
+                        .onComplete(() => {
+                            console.log(`✅ 楼层 ${floorNumber}F 收起完成`)
+                            resolve()
+                        })
+
+                    this.activeTweens.add(positionTween)
+                    positionTween.start()
+                }, delay)
+
+                // 保存定时器ID以便后续清理
+                this.delayedAnimationTimeouts.push(timeoutId)
             })
+
+            animationPromises.push(promise)
+        })
+
+        // 等待所有动画完成
+        Promise.all(animationPromises).then(() => {
+            onComplete?.()
+        })
+    }
+
+    /**
+     * 设置楼层聚焦时的透明度
+     */
+    private setFloorsOpacityForFocus(focusedFloorNumber: number): void {
+        this.floors.forEach((floor, floorNumber) => {
+            const targetOpacity = floorNumber === focusedFloorNumber 
+                ? this.config.focusOpacity 
+                : this.config.unfocusOpacity
+
+            this.setFloorOpacity(floor, targetOpacity)
         })
     }
 
     /**
      * 设置楼层透明度
      */
-    public setFloorOpacity(floorNumber: number, opacity: number): void {
-        const floor = this.floors.get(floorNumber)
-        if (!floor) return
-
+    private setFloorOpacity(floor: FloorItem, opacity: number): void {
         floor.opacity = opacity
-        this.applyFloorOpacity(floor, opacity)
-        // 同时设置关联设备的透明度
-        this.applyEquipmentOpacity(floor, opacity)
-    }
-
-    /**
-     * 查找建筑的外立面对象（参考mousePickPlugin的实现）
-     */
-    private findBuildingFacades(buildingRoot: THREE.Object3D): THREE.Object3D[] {
-        const facades: THREE.Object3D[] = []
-
-        // 外立面关键词（mask优先，包含ResourceReaderPlugin中使用的MASK关键字）
-        const facadeKeywords = [
-            'mask', 'MASK', 'masks', 'MASKS', // ResourceReaderPlugin中使用的外立面标识（优先）
-            'facade', 'facades', '外立面', '立面',
-            'exterior', 'curtain', '幕墙', '外墙',
-            'cladding', 'skin', 'envelope', '外包围', '建筑表皮',
-            'outer', 'outside', 'external',
-            'facadegroup', 'facade_group' // 可能的组名称
-        ]
-
-        buildingRoot.traverse((child) => {
-            const name = child.name.toLowerCase()
-            const modelName = this.getModelName(child).toLowerCase()
-
-            // 检查是否匹配外立面关键词（优先检查mask）
-            const isFacade = facadeKeywords.some(keyword =>
-                name.includes(keyword) || modelName.includes(keyword)
-            )
-
-            if (isFacade) {
-                // 1. 查找外立面组（可能是由ResourceReaderPlugin创建的）
-                if (child.type === 'Group') {
-                    facades.push(child)
-                    const matchedKeyword = facadeKeywords.find(k => name.includes(k) || modelName.includes(k))
-                    return // 找到外立面组，不需要继续遍历其子节点
-                }
-
-                // 2. 查找单独的外立面网格对象
-                if (child.type === 'Mesh' || child.type === 'SkinnedMesh') {
-                    facades.push(child)
-                    const matchedKeyword = facadeKeywords.find(k => name.includes(k) || modelName.includes(k))
-                }
-            }
-        })
-
-        return facades
-    }
-
-    /**
-     * 隐藏建筑外立面（参考mousePickPlugin的实现）
-     */
-    private hideBuildingFacades(facades: THREE.Object3D[]): void {
-        facades.forEach(facade => {
-            facade.visible = false
-            this.hiddenFacades.push(facade)
-        })
-    }
-
-    /**
-     * 显示建筑外立面（参考mousePickPlugin的实现）
-     */
-    private showBuildingFacades(): void {
-        this.hiddenFacades.forEach(facade => {
-            facade.visible = true
-        })
-        this.hiddenFacades = []
-    }
-
-    /**
-     * 设置外立面可见性
-     */
-    public setFacadeVisibility(visible: boolean): void {
-        if (!this.currentBuildingModel) {
-            console.warn('⚠️ 没有设置建筑模型，无法控制外立面显隐')
-            return
-        }
-
-        if (visible) {
-            // 显示外立面
-            if (this.hiddenFacades.length > 0) {
-                this.showBuildingFacades()
-            }
-        } else {
-            // 隐藏外立面
-            if (this.hiddenFacades.length === 0) {
-                // 如果还没有隐藏的外立面，先查找并隐藏
-                const facades = this.findBuildingFacades(this.currentBuildingModel)
-                if (facades.length > 0) {
-                    this.hideBuildingFacades(facades)
-                } else {
-                    console.warn('⚠️ 未找到建筑外立面对象')
-                    // 打印所有子对象的名称用于调试
-                    const childNames: string[] = []
-                    this.currentBuildingModel.traverse((child) => {
-                        if (child !== this.currentBuildingModel) {
-                            childNames.push(`${child.name} (${child.type})`)
-                        }
-                    })
-                }
-            }
-        }
-    }
-
-    /**
-     * 获取外立面是否可见
-     */
-    public isFacadeVisible(): boolean {
-        return this.hiddenFacades.length === 0
-    }
-
-    /**
-     * 切换外立面显隐状态
-     */
-    public toggleFacadeVisibility(): void {
-        this.setFacadeVisibility(!this.isFacadeVisible())
-    }
-
-    /**
-     * 动画化关联设备与楼层的同步移动
-     */
-    private animateEquipmentWithFloor(floor: FloorItem): Promise<void> {
-        if (floor.associatedEquipment.length === 0) {
-            return Promise.resolve()
-        }
-
-        return new Promise((resolve) => {
-            const animations: Promise<void>[] = []
-
-            floor.associatedEquipment.forEach(equipment => {
-                // 计算设备相对于楼层的偏移量
-                const floorCurrentPos = floor.group.position.clone()
-                const floorTargetPos = floor.targetPosition.clone()
-                const equipmentCurrentPos = equipment.position.clone()
-
-                // 设备目标位置 = 当前位置 + (楼层目标位置 - 楼层当前位置)
-                const offset = floorTargetPos.clone().sub(floorCurrentPos)
-                const equipmentTargetPos = equipmentCurrentPos.clone().add(offset)
-
-                // 创建设备动画
-                const equipmentAnimation = new Promise<void>((equipResolve) => {
-                    const currentPos = equipment.position.clone()
-
-                    const tween = new TWEEN.Tween(currentPos, this.activeTweens)
-                        .to(equipmentTargetPos, this.config.animationDuration)
-                        .easing(this.getEasingFunction())
-                        .onUpdate(() => {
-                            equipment.position.copy(currentPos)
-                        })
-                        .onComplete(() => {
-                            this.removeTween(tween)
-                            equipResolve()
-                        })
-                        .start()
-                })
-
-                animations.push(equipmentAnimation)
-            })
-
-            Promise.all(animations).then(() => {
-                resolve()
-            })
-        })
-    }
-
-    /**
-     * 动画化楼层位置
-     */
-    private animateFloorPosition(floor: FloorItem): Promise<void> {
-        return new Promise((resolve) => {
-            const currentPos = floor.group.position.clone()
-            const targetPos = floor.targetPosition.clone()
-            // debugger
-            const tween = new TWEEN.Tween(currentPos, this.activeTweens)
-                .to(targetPos, this.config.animationDuration)
-                .easing(this.getEasingFunction())
-                .onUpdate(() => {
-                    floor.group.position.copy(currentPos)
-                })
-                .onComplete(() => {
-                    this.removeTween(tween)
-                    resolve()
-                })
-                .start()
-        })
-    }
-
-    /**
-     * 动画化楼层透明度
-     */
-    private animateFloorOpacity(floor: FloorItem, targetOpacity: number): Promise<void> {
-        return new Promise((resolve) => {
-            const current = { opacity: floor.opacity }
-
-            const tween = new TWEEN.Tween(current, this.activeTweens)
-                .to({ opacity: targetOpacity }, this.config.animationDuration)
-                .easing(this.getEasingFunction())
-                .onUpdate(() => {
-                    this.applyFloorOpacity(floor, current.opacity)
-                })
-                .onComplete(() => {
-                    this.removeTween(tween)
-                    resolve()
-                })
-                .start()
-        })
-    }
-
-    /**
-     * 动画化楼层关联设备的透明度
-     */
-    private animateEquipmentOpacity(floor: FloorItem, targetOpacity: number): Promise<void> {
-        return new Promise((resolve) => {
-            if (floor.associatedEquipment.length === 0) {
-                resolve()
-                return
-            }
-
-            // 提前克隆建筑材质，保持各楼层材质独立，避免所有楼层材质同步修改的问题
-            if (!this.floorMaterials.has(floor.floorNumber)) {
-                this.floorMaterials.set(floor.floorNumber, new Map())
-            }
-            
-            const floorMaterialMap = this.floorMaterials.get(floor.floorNumber)!
-            
-            floor.group.traverse((object) => {
-                if (object instanceof THREE.Mesh && object.material) {
-                    const materials = Array.isArray(object.material) ? object.material : [object.material]
-                    const clonedMaterials: THREE.Material[] = []
-                    
-                    materials.forEach(mat => {
-                        if (mat instanceof THREE.Material) {
-                            // 检查是否已经为此楼层克隆过
-                            if (floorMaterialMap.has(mat)) {
-                                clonedMaterials.push(floorMaterialMap.get(mat)!)
-                            } else {
-                                // 克隆材质并记录映射
-                                const clonedMat = mat.clone()
-                                clonedMat.userData.isClonedForFloor = true
-                                clonedMat.userData.floorNumber = floor.floorNumber
-                                floorMaterialMap.set(mat, clonedMat)
-                                clonedMaterials.push(clonedMat)
-                            }
-                        }
-                    })
-                    
-                    // 将克隆的材质赋值回对象
-                    object.material = Array.isArray(object.material) ? clonedMaterials : clonedMaterials[0]
-                }
-            })
-            
-            const current = { opacity: floor.opacity }
-
-            const tween = new TWEEN.Tween(current, this.activeTweens)
-                .to({ opacity: targetOpacity }, this.config.animationDuration)
-                .easing(this.getEasingFunction())
-                .onUpdate(() => {
-                    this.applyEquipmentOpacity(floor, current.opacity)
-                })
-                .onComplete(() => {
-                    this.removeTween(tween)
-                    resolve()
-                })
-                .start()
-        })
-    }
-
-    /**
-     * 应用楼层透明度
-     */
-    private applyFloorOpacity(floor: FloorItem, opacity: number): void {
+        
+        // 遍历楼层的所有材质并设置透明度
         floor.group.traverse((child) => {
             if (child instanceof THREE.Mesh && child.material) {
-                const material = Array.isArray(child.material) ? child.material : [child.material]
-                material.forEach(mat => {
-                    if (mat instanceof THREE.Material) {
-                        mat.transparent = opacity < 1.0
-                        mat.opacity = opacity
-                        mat.needsUpdate = true
+                const materials = Array.isArray(child.material) ? child.material : [child.material]
+                
+                materials.forEach((material) => {
+                    if (material instanceof THREE.MeshBasicMaterial || 
+                        material instanceof THREE.MeshLambertMaterial ||
+                        material instanceof THREE.MeshPhongMaterial ||
+                        material instanceof THREE.MeshStandardMaterial ||
+                        material instanceof THREE.MeshPhysicalMaterial) {
+                        
+                        // 保存原始透明度设置
+                        if (!this.floorMaterials.has(floor.floorNumber)) {
+                            this.floorMaterials.set(floor.floorNumber, new Map())
+                        }
+                        
+                        const floorMaterialMap = this.floorMaterials.get(floor.floorNumber)!
+                        if (!floorMaterialMap.has(material)) {
+                            floorMaterialMap.set(material, material.clone())
+                        }
+
+                        // 设置透明度
+                        material.transparent = opacity < 1.0
+                        material.opacity = opacity
+                        material.needsUpdate = true
                     }
                 })
             }
@@ -1553,30 +1240,158 @@ export class BuildingControlPlugin extends BasePlugin {
     }
 
     /**
-     * 应用楼层关联设备的透明度
+     * 恢复所有楼层透明度
      */
-    private applyEquipmentOpacity(floor: FloorItem, opacity: number): void {
-        floor.associatedEquipment.forEach(equipment => {
-            equipment.traverse((child) => {
-                if (child instanceof THREE.Mesh && child.material) {
-                    const material = Array.isArray(child.material) ? child.material : [child.material]
-                    material.forEach(mat => {
-                        if (mat instanceof THREE.Material) {
-                            mat.transparent = opacity < 1.0
-                            mat.opacity = opacity
-                            mat.needsUpdate = true
-                        }
-                    })
-                }
-            })
+    private restoreAllFloorOpacity(): void {
+        this.floors.forEach((floor) => {
+            this.setFloorOpacity(floor, 1.0)
         })
     }
 
     /**
-     * 获取缓动函数
+     * 隐藏外立面
      */
-    private getEasingFunction(): (k: number) => number {
-        const easingMap: { [key: string]: (k: number) => number } = {
+    private hideFacades(): void {
+        this.facades.forEach((facade: THREE.Object3D) => {
+            if (facade.visible) {
+                facade.visible = false
+                this.hiddenFacades.push(facade)
+            }
+        })
+    }
+
+    /**
+     * 显示外立面
+     */
+    private showFacades(): void {
+        this.hiddenFacades.forEach((facade) => {
+            facade.visible = true
+        })
+        this.hiddenFacades = []
+    }
+
+    /**
+     * 相机动画到指定楼层
+     */
+    private animateCameraToFloor(floorNumber: number, onComplete?: () => void): void {
+        if (!this.cameraControls) {
+            console.warn('⚠️ 相机控制器未初始化，无法执行相机动画')
+            onComplete?.()
+            return
+        }
+
+        const floor = this.floors.get(floorNumber)
+        if (!floor) {
+            console.warn(`⚠️ 楼层 ${floorNumber}F 不存在，无法执行相机动画`)
+            onComplete?.()
+            return
+        }
+
+        // 保存原始相机位置（如果还没有保存）
+        if (!this.originalCameraPosition && this.cameraControls.object) {
+            this.originalCameraPosition = this.cameraControls.object.position.clone()
+            this.originalCameraTarget = this.cameraControls.target.clone()
+        }
+
+        // 触发相机动画开始事件
+        this.events.onCameraAnimationStart?.(floorNumber)
+
+        // 计算目标相机位置
+        const floorBoundingBox = new THREE.Box3().setFromObject(floor.group)
+        const floorCenter = floorBoundingBox.getCenter(new THREE.Vector3())
+        const floorSize = floorBoundingBox.getSize(new THREE.Vector3())
+        
+        const distance = Math.max(floorSize.x, floorSize.z) * this.config.cameraDistanceMultiplier
+        const height = Math.max(this.config.cameraMinHeight, floorCenter.y + distance * 0.5)
+
+        const targetCameraPosition = new THREE.Vector3(
+            floorCenter.x + distance,
+            height,
+            floorCenter.z + distance
+        )
+
+        // 创建相机动画
+        const startPosition = this.cameraControls.object.position.clone()
+        const startTarget = this.cameraControls.target.clone()
+
+        const cameraPositionTween = new TWEEN.Tween(startPosition)
+            .to(targetCameraPosition, this.config.cameraAnimationDuration)
+            .easing(this.getEasingFunction())
+
+        const cameraTargetTween = new TWEEN.Tween(startTarget)
+            .to(floorCenter, this.config.cameraAnimationDuration)
+            .easing(this.getEasingFunction())
+
+        cameraPositionTween.onUpdate(() => {
+            this.cameraControls.object.position.copy(startPosition)
+        })
+
+        cameraTargetTween.onUpdate(() => {
+            this.cameraControls.target.copy(startTarget)
+            this.cameraControls.update()
+        })
+
+        cameraPositionTween.onComplete(() => {
+            onComplete?.()
+        })
+
+        this.activeTweens.add(cameraPositionTween)
+        this.activeTweens.add(cameraTargetTween)
+        
+        cameraPositionTween.start()
+        cameraTargetTween.start()
+
+        this.cameraAnimationTween = cameraPositionTween
+    }
+
+    /**
+     * 恢复相机位置
+     */
+    private restoreCameraPosition(onComplete?: () => void): void {
+        if (!this.cameraControls || !this.originalCameraPosition) {
+            console.warn('⚠️ 无法恢复相机位置：相机控制器或原始位置未设置')
+            onComplete?.()
+            return
+        }
+
+        const startPosition = this.cameraControls.object.position.clone()
+        const startTarget = this.cameraControls.target.clone()
+
+        const cameraPositionTween = new TWEEN.Tween(startPosition)
+            .to(this.originalCameraPosition, this.config.cameraAnimationDuration)
+            .easing(this.getEasingFunction())
+
+        const cameraTargetTween = new TWEEN.Tween(startTarget)
+            .to(this.originalCameraTarget || new THREE.Vector3(0, 0, 0), this.config.cameraAnimationDuration)
+            .easing(this.getEasingFunction())
+
+        cameraPositionTween.onUpdate(() => {
+            this.cameraControls.object.position.copy(startPosition)
+        })
+
+        cameraTargetTween.onUpdate(() => {
+            this.cameraControls.target.copy(startTarget)
+            this.cameraControls.update()
+        })
+
+        cameraPositionTween.onComplete(() => {
+            onComplete?.()
+        })
+
+        this.activeTweens.add(cameraPositionTween)
+        this.activeTweens.add(cameraTargetTween)
+        
+        cameraPositionTween.start()
+        cameraTargetTween.start()
+    }
+
+    /**
+     * 获取缓动函数
+     * @param easingFunction 缓动函数名称
+     * @returns 缓动函数 默认为线性
+     */
+    private getEasingFunction(): (t: number) => number {
+        const easingMap: { [key: string]: (t: number) => number } = {
             'Linear.None': TWEEN.Easing.Linear.None,
             'Quadratic.In': TWEEN.Easing.Quadratic.In,
             'Quadratic.Out': TWEEN.Easing.Quadratic.Out,
@@ -1584,238 +1399,35 @@ export class BuildingControlPlugin extends BasePlugin {
             'Cubic.In': TWEEN.Easing.Cubic.In,
             'Cubic.Out': TWEEN.Easing.Cubic.Out,
             'Cubic.InOut': TWEEN.Easing.Cubic.InOut,
+            'Quartic.In': TWEEN.Easing.Quartic.In,
+            'Quartic.Out': TWEEN.Easing.Quartic.Out,
+            'Quartic.InOut': TWEEN.Easing.Quartic.InOut,
         }
 
-        return easingMap[this.config.easingFunction] || TWEEN.Easing.Quadratic.InOut
+        return easingMap[this.config.easingFunction] || TWEEN.Easing.Linear.None
     }
+
+    // 用于存储延迟动画的计时器ID
+    private delayedAnimationTimeouts: NodeJS.Timeout[] = []
 
     /**
-     * 移除动画补间
+     * 停止所有活动的动画
      */
-    private removeTween(tween: TWEEN.Tween<any>): void {
-        this.activeTweens.remove(tween)
-    }
-
-    /**
-     * 计算楼层最佳观察位置（45度俯视角）
-     */
-    private calculateOptimalCameraPosition(floor: FloorItem): {
-        position: THREE.Vector3
-        target: THREE.Vector3
-    } {
-        // 获取楼层在世界坐标系中的包围盒
-        const bbox = new THREE.Box3().setFromObject(floor.group)
-        const worldCenter = bbox.getCenter(new THREE.Vector3())
-        const size = bbox.getSize(new THREE.Vector3())
-        
-        // Target始终是楼层的世界坐标中心
-        const target = worldCenter.clone()
-        
-        // 计算适合的观察距离（基于楼层的最大尺寸）
-        const maxSize = Math.max(size.x, size.z, size.y)
-        const baseDistance = Math.max(maxSize * 1.5, this.config.cameraMinHeight || 15)
-        
-        // 应用距离倍数
-        const observeDistance = baseDistance * (this.config.cameraDistanceMultiplier || 1.5)
-        
-        // 45度俯视角：相机高度 = 水平距离 * tan(45°) = 水平距离
-        // 为了保持45度角，水平距离和高度偏移相等
-        const horizontalOffset = observeDistance * 0.707 // cos(45°) ≈ 0.707
-        const heightOffset = observeDistance * 0.707     // sin(45°) ≈ 0.707
-        
-        // 计算相机位置（在楼层中心的东北方向，45度俯视）
-        const position = new THREE.Vector3(
-            target.x + horizontalOffset,
-            target.y + heightOffset,
-            target.z + horizontalOffset
-        )
-        
-        if (this.debugMode) {
-            console.log('📐 45度俯视相机计算', {
-                floorNumber: floor.floorNumber,
-                worldCenter: target,
-                floorSize: size,
-                observeDistance: observeDistance,
-                cameraPosition: position,
-                angle: '45度'
-            })
-        }
-        
-        return { position, target }
-    }
-
-    /**
-     * 保存当前相机状态
-     */
-    private saveCameraState(): void {
-        if (this.cameraControls) {
-            this.originalCameraPosition = this.cameraControls.object.position.clone()
-            this.originalCameraTarget = this.cameraControls.target.clone()
-        } else if (this.scenePlugin?.camera) {
-            // 备用方案：直接从场景插件获取相机信息
-            this.originalCameraPosition = this.scenePlugin.camera.position.clone()
-            this.originalCameraTarget = this.scenePlugin.cameraControls?.target?.clone() || new THREE.Vector3(0, 0, 0)
-        }
-    }
-
-        /**
-     * 执行相机动画（使用cameraFlyTo）
-     */
-    private executeCameraAnimation(targetPosition: THREE.Vector3, targetLookAt: THREE.Vector3): Promise<void> {
-        if (!this.scenePlugin?.cameraFlyTo) {
-            console.warn('⚠️ cameraFlyTo方法不可用，跳过相机动画')
-            return Promise.resolve()
-        }
-
-        return new Promise((resolve) => {
-            // 停止之前的相机动画
-            if (this.cameraAnimationTween) {
-                this.cameraAnimationTween.stop()
-                this.activeTweens.remove(this.cameraAnimationTween)
-                this.cameraAnimationTween = null
-            }
-
-            if (this.debugMode) {
-                console.log('🎥 相机动画开始', {
-                    position: targetPosition,
-                    target: targetLookAt,
-                    currentCameraPosition: this.cameraControls?.object?.position,
-                    currentCameraTarget: this.cameraControls?.target
-                })
-            }
-
-            // 使用cameraFlyTo执行相机动画
-            this.scenePlugin.cameraFlyTo({
-                position: targetPosition,
-                target: targetLookAt,
-                duration: this.config.cameraAnimationDuration,
-                onComplete: () => {
-                    // 动画完成后，确保相机控制器的状态同步
-                    this.ensureCameraControlsSync(targetPosition, targetLookAt)
-                    resolve()
-                }
-            })
-        })
-    }
-
-    /**
-     * 确保相机控制器状态同步
-     */
-    private ensureCameraControlsSync(position: THREE.Vector3, target: THREE.Vector3): void {
-        if (this.cameraControls) {
-            // 手动设置相机控制器的target，确保状态同步
-            this.cameraControls.target.copy(target)
-            this.cameraControls.object.position.copy(position)
-            
-            // 更新相机控制器
-            if (typeof this.cameraControls.update === 'function') {
-                this.cameraControls.update()
-            }
-            
-            if (this.debugMode) {
-                console.log('🎯 相机控制器状态已同步', {
-                    position: this.cameraControls.object.position,
-                    target: this.cameraControls.target
-                })
-            }
-        } else {
-            console.warn('⚠️ 相机控制器不可用，无法同步状态')
-        }
-    }
-
-    /**
-     * 相机聚焦到楼层
-     */
-    private animateCameraToFloor(floor: FloorItem): Promise<void> {
-        if (!this.scenePlugin?.cameraFlyTo || !this.config.enableCameraAnimation) {
-            return Promise.resolve()
-        }
-        
-        // 保存当前相机状态（仅在第一次聚焦时保存）
-        if (!this.originalCameraPosition) {
-            this.saveCameraState()
-        }
-        
-        // 触发相机动画开始事件
-        this.events.onCameraAnimationStart?.(floor.floorNumber)
-        
-        // 每次都重新计算目标位置，确保基于最新的楼层状态
-        const { position, target } = this.calculateOptimalCameraPosition(floor)
-        
-        if (this.debugMode) {
-            console.log(`🏢 聚焦楼层 ${floor.floorNumber}`, {
-                floorCenter: new THREE.Box3().setFromObject(floor.group).getCenter(new THREE.Vector3()),
-                calculatedPosition: position,
-                calculatedTarget: target,
-                currentState: this.currentState
-            })
-        }
-        
-        // 执行相机动画
-        return this.executeCameraAnimation(position, target).then(() => {
-            // 触发相机动画完成事件
-            this.events.onCameraAnimationComplete?.(floor.floorNumber)
-            
-            // 额外的验证：确保相机确实指向楼层中心
-            this.validateCameraFocus(floor, target)
-        })
-    }
-
-    /**
-     * 验证相机聚焦是否正确
-     */
-    private validateCameraFocus(floor: FloorItem, expectedTarget: THREE.Vector3): void {
-        if (!this.cameraControls) return
-        
-        const currentTarget = this.cameraControls.target.clone()
-        const distance = currentTarget.distanceTo(expectedTarget)
-        
-        if (distance > 1.0) { // 容差1米
-            if (this.debugMode) {
-                console.warn(`⚠️ 相机target可能不准确，距离楼层中心 ${distance.toFixed(2)} 米`)
-                console.log('当前target:', currentTarget)
-                console.log('期望target:', expectedTarget)
-            }
-            
-            // 强制修正target
-            this.cameraControls.target.copy(expectedTarget)
-            if (typeof this.cameraControls.update === 'function') {
-                this.cameraControls.update()
-            }
-            if (this.debugMode) {
-                console.log('🔧 已强制修正相机target')
-            }
-        } else if (this.debugMode) {
-            console.log('✅ 相机聚焦验证通过')
-        }
-    }
-
-    /**
-     * 恢复相机到原始状态
-     */
-    private restoreCameraState(): Promise<void> {
-        if (!this.originalCameraPosition || !this.originalCameraTarget || !this.config.enableCameraAnimation) {
-            return Promise.resolve()
-        }
-        
-        return this.executeCameraAnimation(
-            this.originalCameraPosition, 
-            this.originalCameraTarget
-        ).then(() => {
-            // 触发相机恢复事件
-            this.events.onCameraRestore?.()
-            
-            // 清除保存的状态
-            this.originalCameraPosition = null
-            this.originalCameraTarget = null
-        })
-    }
-
-    /**
-     * 停止所有动画
-     */
-    public stopAllAnimations(): void {
+    private stopAllAnimations(): void {
+        // 停止所有TWEEN动画
         this.activeTweens.removeAll()
+        
+        // 停止相机动画
+        if (this.cameraAnimationTween) {
+            this.cameraAnimationTween.stop()
+            this.cameraAnimationTween = null
+        }
+
+        // 清除所有延迟动画的定时器
+        this.delayedAnimationTimeouts.forEach(timeoutId => {
+            clearTimeout(timeoutId)
+        })
+        this.delayedAnimationTimeouts = []
     }
 
     /**
@@ -1826,123 +1438,220 @@ export class BuildingControlPlugin extends BasePlugin {
     }
 
     /**
-     * 获取当前聚焦的楼层号
+     * 获取当前聚焦的楼层
      */
     public getFocusedFloor(): number | null {
         return this.focusedFloor
     }
 
     /**
-     * 设置调试模式
-     * @param enabled 是否启用调试模式
+     * 检查指定楼层是否存在
      */
-    public setDebugMode(enabled: boolean): void {
-        this.debugMode = enabled
-        console.log(`🐛 调试模式已${enabled ? '启用' : '关闭'}`)
+    public hasFloor(floorNumber: number): boolean {
+        return this.floors.has(floorNumber)
     }
 
     /**
-     * 确保有可用的建筑模型
-     * 如果当前没有设置建筑模型，会自动从场景中查找并设置
+     * 获取所有楼层号
      */
-    public ensureBuildingModel(scene?: THREE.Scene): boolean {
-        // 如果已有建筑模型，直接返回成功
-        if (this.currentBuildingModel && this.floors.size > 0) {
-            return true
-        }
+    public getFloorNumbers(): number[] {
+        return Array.from(this.floors.keys()).sort((a, b) => a - b)
+    }
 
-        // 如果没有场景对象，无法自动查找
-        if (!scene) {
-            console.warn('⚠️ 没有提供场景对象，无法自动查找建筑模型')
+    /**
+     * 切换楼层展开/收起状态
+     * 如果当前是正常状态，则展开；如果是展开状态，则收起
+     */
+    public toggleFloorExpansion(): void {
+        if (this.currentState === FloorState.NORMAL) {
+            this.expandFloor()
+        } else if (this.currentState === FloorState.EXPANDED) {
+            this.collapseFloor()
+        } else {
+            console.warn('⚠️ 当前处于聚焦状态，请先取消聚焦再执行展开/收起操作')
+        }
+    }
+
+    /**
+     * 检查是否可以执行楼层操作
+     * @returns 是否可以执行操作
+     */
+    public canPerformFloorOperation(): boolean {
+        return this.floors.size > 0 && this.isStructureLinked()
+    }
+
+    /**
+     * 获取动画进度信息（用于调试）
+     */
+    public getAnimationInfo(): {
+        currentState: FloorState
+        focusedFloor: number | null
+        totalFloors: number
+        activeTweensCount: number
+        delayedTimeoutsCount: number
+    } {
+        return {
+            currentState: this.currentState,
+            focusedFloor: this.focusedFloor,
+            totalFloors: this.floors.size,
+            activeTweensCount: this.activeTweens.getAll().length,
+            delayedTimeoutsCount: this.delayedAnimationTimeouts.length
+        }
+    }
+
+    /**
+     * 关联设备模型到楼层
+     * 根据命名规则自动识别和关联设备
+     */
+    private associateEquipmentToFloorsAndRooms(): void {
+        this.allDevices.forEach((device) => {
+            const info = device.userData.equipmentInfo
+            if (!info) return
+
+            // 关联到楼层
+            const floor = this.floors.get(info.floorNumber)
+            if (floor) {
+                const exists = floor.associatedEquipment.some(eq => eq.equipment === device)
+                if (!exists) {
+                    floor.associatedEquipment.push(info)
+                }
+            }
+
+            // 关联到房间（如果有房间代码）
+            if (info.roomCode) {
+                const room = this.rooms.get(info.roomCode)
+                if (room) {
+                    const exists = room.associatedEquipment.some(eq => eq.equipment === device)
+                    if (!exists) {
+                        room.associatedEquipment.push(info)
+                    }
+                }
+            }
+        })
+    }
+
+    /**
+     * 解析所有设备列表
+     * 根据命名规则自动识别设备
+     */
+    private parseAllEquipments(): void {
+        if (!this.scene) return
+
+        // 清空现有设备列表，避免重复
+        this.allDevices = []
+
+        this.scene.children.forEach((child) => {
+            const modelName = this.getModelName(child)
+            
+            // 匹配设备命名规则: MAIN_BUILDING_1F_厨具 或 MAIN_BUILDING_1F_R101_厨具
+            const equipmentPattern = /^MAIN_BUILDING_(\d+)F_(.+)$/i
+            const match = modelName.match(equipmentPattern)
+            
+            if (match) {
+                const floorNumber = parseInt(match[1], 10)
+                const remaining = match[2]
+                
+                // 进一步解析房间代码和设备名称
+                const roomPattern = /^([A-Z]\d+)_(.+)$/i
+                const roomMatch = remaining.match(roomPattern)
+                
+                let roomCode = ''
+                let equipmentName = remaining
+                
+                if (roomMatch) {
+                    // 有房间代码的情况：MAIN_BUILDING_1F_R101_厨具
+                    roomCode = roomMatch[1]
+                    equipmentName = roomMatch[2]
+                } else {
+                    // 没有房间代码的情况：MAIN_BUILDING_1F_厨具
+                    equipmentName = remaining
+                }
+
+                const equipmentInfo = {
+                    equipment: child,
+                    equipmentName: equipmentName,
+                    roomCode: roomCode,
+                    floorNumber: floorNumber
+                }
+                
+                child.userData.equipmentInfo = equipmentInfo
+                this.allDevices.push(child)
+                
+                console.log(`🔧 发现设备: ${equipmentName} (楼层:${floorNumber}F, 房间:${roomCode || '无'})`)
+            }
+        })
+        
+        console.log(`✅ 设备解析完成，共发现 ${this.allDevices.length} 个设备`)
+    }
+
+    /**
+     * 获取楼层关联的设备列表
+     * @param floorNumber 楼层号
+     * @returns 设备对象数组
+     */
+    public getFloorEquipment(floorNumber: number): THREE.Object3D[] {
+        const floor = this.floors.get(floorNumber)
+        return floor ? floor.associatedEquipment.map(info => info.equipment) : []
+    }
+
+    /**
+     * 获取房间关联的设备列表
+     * @param roomCode 房间代码
+     * @returns 设备对象数组
+     */
+    public getRoomEquipment(roomCode: string): THREE.Object3D[] {
+        const room = this.rooms.get(roomCode)
+        return room ? room.associatedEquipment.map(info => info.equipment) : []
+    }
+
+    /**
+     * 手动关联设备到楼层
+     * @param equipment 设备对象
+     * @param floorNumber 楼层号
+     * @returns 是否关联成功
+     */
+    public associateEquipmentToFloor(equipment: THREE.Object3D, floorNumber: number): boolean {
+        const floor = this.floors.get(floorNumber)
+        if (!floor) {
+            console.warn(`⚠️ 楼层 ${floorNumber}F 不存在，无法关联设备`)
             return false
         }
 
-        // 自动发现并设置建筑模型
-        const discoveredBuildings = this.autoDiscoverBuildingsInScene(scene)
-
-        if (discoveredBuildings.length > 0) {
-            
-            // 使用第一个发现的建筑
-            const primaryBuilding = discoveredBuildings[0]
-            const success = this.setBuildingModel(primaryBuilding)
-            
-            if (success) {
-                // 执行设备关联
-                this.autoAssociateEquipmentByNaming(scene)
-                return true
+        const exists = floor.associatedEquipment.some(info => info.equipment === equipment)
+        if (!exists) {
+            const equipmentInfo = {
+                equipment: equipment,
+                equipmentName: this.getModelName(equipment),
+                roomCode: '',
+                floorNumber: floorNumber
             }
+            floor.associatedEquipment.push(equipmentInfo)
+            console.log(`🔧 手动关联设备: ${this.getModelName(equipment)} → ${floorNumber}F`)
+            return true
         }
 
-        console.warn('⚠️ 场景中未找到可用的建筑模型')
         return false
     }
 
     /**
-     * 获取楼层信息（供UI使用）
+     * 移除楼层的设备关联
+     * @param equipment 设备对象
+     * @param floorNumber 楼层号
+     * @returns 是否移除成功
      */
-    public getFloorInfo(): {
-        totalFloors: number
-        floorNumbers: number[]
-        currentState: string
-        focusedFloor: number | null
-    } {
-        return {
-            totalFloors: this.floors.size,
-            floorNumbers: Array.from(this.floors.keys()).sort((a, b) => a - b),
-            currentState: this.currentState,
-            focusedFloor: this.focusedFloor
+    public removeEquipmentFromFloor(equipment: THREE.Object3D, floorNumber: number): boolean {
+        const floor = this.floors.get(floorNumber)
+        if (!floor) {
+            return false
         }
-    }
 
-    /**
-     * 获取设备关联信息（供UI使用）
-     */
-    public getEquipmentAssociations(): { [floorNumber: number]: string[] } {
-        const associations: { [floorNumber: number]: string[] } = {}
-        
-        this.floors.forEach((floor, floorNumber) => {
-            associations[floorNumber] = floor.associatedEquipment.map(eq => this.getModelName(eq))
-        })
-        
-        return associations
-    }
-
-    /**
-     * 更新动画（在渲染循环中调用）
-     */
-    public update(): void {
-        this.activeTweens.update()
-    }
-
-    /**
-     * 销毁插件
-     */
-    public destroy(): void {
-        this.stopAllAnimations()
-        
-        // 停止相机动画
-        if (this.cameraAnimationTween) {
-            this.cameraAnimationTween.stop()
-            this.activeTweens.remove(this.cameraAnimationTween)
-            this.cameraAnimationTween = null
+        const index = floor.associatedEquipment.findIndex(info => info.equipment === equipment)
+        if (index > -1) {
+            floor.associatedEquipment.splice(index, 1)
+            console.log(`🔧 移除设备关联: ${this.getModelName(equipment)} ← ${floorNumber}F`)
+            return true
         }
-        
-        this.floors.clear()
-        this.floorMaterials.clear()
-        this.currentBuildingModel = null
-        this.facadeGroup = null
-        this.floorsGroup = null
-        
-        // 重置外立面状态
-        this.hiddenFacades = []
-        
-        // 清理相机相关资源
-        this.cameraControls = null
-        this.originalCameraPosition = null
-        this.originalCameraTarget = null
-        this.scenePlugin = null
-        this.scene = null
-        
-        console.log(`🏗️ ${this.name} 已销毁`)
+
+        return false
     }
-} 
+}
