@@ -21,7 +21,7 @@ export enum FloorState {
  * 楼层项接口
  */
 export interface FloorItem {
-    group: THREE.Group          // 楼层组对象
+    group: THREE.Group | THREE.Object3D | THREE.Scene // 楼层组对象
     floorNumber: number         // 楼层号
     originalPosition: THREE.Vector3  // 原始位置
     targetPosition: THREE.Vector3    // 目标位置
@@ -38,7 +38,7 @@ export interface FloorItem {
 }
 
 export interface RoomItem {
-    group: THREE.Group          // 房间组对象
+    group: THREE.Group | THREE.Object3D | THREE.Scene        // 房间组对象
     roomNumber: string          // 房间号
     originalPosition: THREE.Vector3  // 原始位置
     targetPosition: THREE.Vector3    // 目标位置
@@ -126,6 +126,11 @@ export class BuildingControlPlugin extends BasePlugin {
 
     // 外立面状态管理（参考mousePickPlugin的实现）
     private hiddenFacades: THREE.Object3D[] = []
+    
+    // 建筑结构管理属性
+    private facades: THREE.Object3D[] = []          // 外立面对象数组
+    private rooms: Map<string, RoomItem> = new Map() // 房间索引 roomCode -> Roomitem 
+    private parseResult: ReturnType<typeof this.parseBuildingModel> | null = null
 
     // 默认配置
     private config: FloorControlConfig = {
@@ -477,6 +482,18 @@ export class BuildingControlPlugin extends BasePlugin {
             rooms: [],
             isFloor: true,
         }
+
+        this.floors.set(floorNumber,{
+            group: floorObject,
+            floorNumber: floorNumber,
+            originalPosition: new THREE.Vector3(),
+            targetPosition: new THREE.Vector3(),
+            isVisible: true,
+            opacity:1,
+            nodeCount:0,
+            associatedEquipment:[],
+            rooms:[]
+        })
         
         if (!result.floors.has(floorNumber)) {
             result.floors.set(floorNumber, {
@@ -524,10 +541,12 @@ export class BuildingControlPlugin extends BasePlugin {
                 rooms: [],
                 equipments: []
             })
+
             console.warn(`⚠️ 为房间 ${roomInfo.roomCode} 创建了虚拟楼层 ${floorNumber}F`)
         }
-        const floor = this.floors.get(floorNumber)!
-        floor.rooms.push({
+        let floor = this.floors.get(floorNumber)
+
+        floor&&floor.rooms.push({
             group: roomObject as THREE.Group,
             roomNumber: roomInfo.roomCode,
             originalPosition: roomObject.position.clone(),
@@ -537,7 +556,17 @@ export class BuildingControlPlugin extends BasePlugin {
             associatedEquipment: [], // 后续通过设备关联功能填充
         })
 
-        console.log(`🏠 发现房间: ${floorNumber}F-${roomInfo.roomCode}-${this.getModelName(roomObject)}`)
+        this.rooms.set(roomInfo.roomCode,{
+            group:roomObject,
+            roomNumber:roomInfo.roomCode,
+            originalPosition: roomObject.position.clone(),
+            targetPosition: roomObject.position.clone(),
+            isVisible:true,
+            opacity:1,
+            associatedEquipment:[]
+        })
+
+        console.log("🏠 发现房间:", this.rooms.get(roomInfo.roomCode),this.rooms)
     }
 
     /**
@@ -634,10 +663,7 @@ export class BuildingControlPlugin extends BasePlugin {
         return object.name || '未命名模型'
     }
 
-    // 建筑结构管理属性
-    private facades: THREE.Object3D[] = []          // 外立面对象数组
-    private rooms: Map<string, RoomItem> = new Map() // 房间索引 roomCode -> Roomitem 
-    private parseResult: ReturnType<typeof this.parseBuildingModel> | null = null
+
 
     /**
      * 链接解析结果到插件属性（非侵入式）
@@ -667,8 +693,8 @@ export class BuildingControlPlugin extends BasePlugin {
             // 链接外立面
             this.linkFacades(parseResult)
             
-            // 链接房间索引
-            this.linkRooms(parseResult)
+            // // 链接房间索引
+            // this.linkRooms(parseResult)
 
             // 关联设备到楼层和房间
             this.associateEquipmentToFloorsAndRooms()
@@ -679,6 +705,10 @@ export class BuildingControlPlugin extends BasePlugin {
                 外立面数: this.facades.length,
                 设备数: this.allDevices.length
             })
+            
+            // 输出房间详细信息
+            console.log('🏠 最终房间列表:', Array.from(this.rooms.keys()).filter(key => !key.includes('F_')))
+            console.log('🏠 rooms Map 对象:', this.rooms)
 
             return true
 
@@ -762,10 +792,8 @@ export class BuildingControlPlugin extends BasePlugin {
                 
                 // 使用房间代码作为键
                 this.rooms.set(roomData.roomCode, roomItem)
-                
-                // 也可以用完整楼层+房间代码作为键
-                const fullRoomKey = `${floorData.floorNumber}F_${roomData.roomCode}`
-                this.rooms.set(fullRoomKey, roomItem)
+
+                console.log("🏠 房间已链接:", roomData.roomCode, "当前总数:", this.rooms.size)
             })
         })
         
