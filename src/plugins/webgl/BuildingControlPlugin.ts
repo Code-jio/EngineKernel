@@ -164,6 +164,110 @@ export class BuildingControlPlugin extends BasePlugin {
     // 调试模式
     private debugMode: boolean = false
 
+    // 新增：统一的材质键格式生成器
+    private generateMaterialKey(
+        objectType: 'floor' | 'room' | 'equipment', 
+        identifier: string | number, 
+        meshUuid: string, 
+        materialIndex: number
+    ): string {
+        return `${objectType}_${identifier}_${meshUuid}_${materialIndex}`
+    }
+
+    // 新增：检测是否为共享材质
+    private isSharedMaterial(material: THREE.Material): boolean {
+        if (!this.scene) return false
+        
+        let usageCount = 0
+        this.scene.traverse((object) => {
+            if (object instanceof THREE.Mesh) {
+                const materials = Array.isArray(object.material) ? object.material : [object.material]
+                if (materials.includes(material)) {
+                    usageCount++
+                    if (usageCount > 1) return true // 提前退出优化
+                }
+            }
+        })
+        return usageCount > 1
+    }
+
+    // 新增：统一的材质透明度处理方法
+    private applyOpacityWithMaterialCloning(
+        mesh: THREE.Mesh, 
+        opacity: number, 
+        objectType: 'floor' | 'room' | 'equipment',
+        identifier: string | number
+    ): void {
+        const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
+        
+        materials.forEach((material, index) => {
+            if (!(material instanceof THREE.MeshBasicMaterial ||
+                  material instanceof THREE.MeshLambertMaterial ||
+                  material instanceof THREE.MeshPhongMaterial ||
+                  material instanceof THREE.MeshStandardMaterial ||
+                  material instanceof THREE.MeshPhysicalMaterial)) {
+                return // 跳过不支持的材质类型
+            }
+
+            const key = this.generateMaterialKey(objectType, identifier, mesh.uuid, index)
+            
+            // 检查是否需要克隆材质
+            if (!this.materialsMap.has(key)) {
+                if (this.isSharedMaterial(material)) {
+                    // 共享材质需要克隆
+                    const clonedMaterial = material.clone()
+                    clonedMaterial.userData.originalMaterial = material
+                    clonedMaterial.userData.isClonedByPlugin = true
+                    this.materialsMap.set(key, clonedMaterial)
+                    
+                    // 替换材质
+                    if (Array.isArray(mesh.material)) {
+                        mesh.material[index] = clonedMaterial
+                    } else {
+                        mesh.material = clonedMaterial
+                    }
+                } else {
+                    // 非共享材质，直接使用但记录原始状态
+                    if (material.userData.originalOpacity === undefined) {
+                        material.userData.originalOpacity = material.opacity
+                        material.userData.originalTransparent = material.transparent
+                        material.userData.isModifiedByPlugin = true
+                    }
+                }
+            }
+            
+            // 设置透明度
+            const targetMaterial = this.materialsMap.get(key) || material
+            targetMaterial.transparent = opacity < 1.0
+            targetMaterial.opacity = opacity
+            targetMaterial.needsUpdate = true
+        })
+    }
+
+    // 新增：替换克隆材质为原始材质的辅助方法
+    private replaceClonedMaterialWithOriginal(
+        target: THREE.Object3D, 
+        clonedMaterial: THREE.Material, 
+        originalMaterial: THREE.Material
+    ): void {
+        target.traverse((child) => {
+            if (child instanceof THREE.Mesh && child.material) {
+                if (Array.isArray(child.material)) {
+                    child.material.forEach((mat, index) => {
+                        if (mat === clonedMaterial) {
+                            child.material[index] = originalMaterial
+                        }
+                    })
+                } else {
+                    if (child.material === clonedMaterial) {
+                        child.material = originalMaterial
+                    }
+                }
+            }
+        })
+        originalMaterial.needsUpdate = true
+    }
+
     constructor(params: any = {}) {
         super(params)
         this.updateConfig(params.floorControlConfig || {})
@@ -1205,6 +1309,19 @@ export class BuildingControlPlugin extends BasePlugin {
                             // 移动楼层
                             floor.group.position.copy(startPosition)
                             
+                            // 恢复房间位置（修复遗漏的房间位置同步）
+                            floor.rooms.forEach(roomItem => {
+                                const room = roomItem.group
+                                if (room.userData.originalY !== undefined) {
+                                    room.position.y = room.userData.originalY + deltaY
+                                    if (this.debugMode) {
+                                        console.log(`🏠 收起房间 ${roomItem.roomNumber}: originalY=${room.userData.originalY}, deltaY=${deltaY}, newY=${room.position.y}`)
+                                    }
+                                } else if (this.debugMode) {
+                                    console.warn(`⚠️ 房间 ${roomItem.roomNumber} 缺少 originalY 数据`)
+                                }
+                            })
+                            
                             // 恢复关联设备位置
                             floor.associatedEquipment.forEach(equipmentInfo => {
                                 const equipment = equipmentInfo.equipment
@@ -1214,6 +1331,22 @@ export class BuildingControlPlugin extends BasePlugin {
                             })
                         })
                         .onComplete(() => {
+                            // 清理房间的临时数据
+                            floor.rooms.forEach(roomItem => {
+                                const room = roomItem.group
+                                if (room.userData.originalY !== undefined) {
+                                    delete room.userData.originalY
+                                }
+                            })
+                            
+                            // 清理设备的临时数据
+                            floor.associatedEquipment.forEach(equipmentInfo => {
+                                const equipment = equipmentInfo.equipment
+                                if (equipment.userData.originalY !== undefined) {
+                                    delete equipment.userData.originalY
+                                }
+                            })
+                            
                             console.log(`✅ 楼层 ${floorNumber}F 收起完成`)
                             resolve()
                         })
@@ -1283,38 +1416,7 @@ export class BuildingControlPlugin extends BasePlugin {
     private setFloorOpacity(floor: FloorItem, opacity: number): void {
         floor.group.traverse((child) => {
             if (child instanceof THREE.Mesh && child.material) {
-                const materials = Array.isArray(child.material) ? child.material : [child.material]
-                materials.forEach((material, index) => {
-                    if (material instanceof THREE.MeshBasicMaterial ||
-                        material instanceof THREE.MeshLambertMaterial ||
-                        material instanceof THREE.MeshPhongMaterial ||
-                        material instanceof THREE.MeshStandardMaterial ||
-                        material instanceof THREE.MeshPhysicalMaterial) {
-                        
-                        // 生成唯一材质映射键
-                        const key = `${floor.floorNumber}_${child.uuid}_${index}`
-                        
-                        // 如果材质未被克隆过才创建新材质
-                        if (!this.materialsMap.has(key)) {
-                            const clonedMaterial = material.clone()
-                            clonedMaterial.userData.originalMaterial = material // 保存原始材质引用
-                            this.materialsMap.set(key, clonedMaterial)
-                            
-                            // 替换为克隆材质
-                            if (Array.isArray(child.material)) {
-                                child.material[index] = clonedMaterial
-                            } else {
-                                child.material = clonedMaterial
-                            }
-                        }
-                        
-                        // 设置透明度到克隆材质
-                        const clonedMat = this.materialsMap.get(key)!
-                        clonedMat.transparent = opacity < 1.0
-                        clonedMat.opacity = opacity
-                        clonedMat.needsUpdate = true
-                    }
-                })
+                this.applyOpacityWithMaterialCloning(child, opacity, 'floor', floor.floorNumber)
             }
         })
         floor.opacity = opacity
@@ -1328,27 +1430,7 @@ export class BuildingControlPlugin extends BasePlugin {
         // 遍历设备的所有材质并设置透明度
         equipment.traverse((child) => {
             if (child instanceof THREE.Mesh && child.material) {
-                const materials = Array.isArray(child.material) ? child.material : [child.material]
-                
-                materials.forEach((material,index) => {
-                    if (material instanceof THREE.MeshBasicMaterial || 
-                        material instanceof THREE.MeshLambertMaterial ||
-                        material instanceof THREE.MeshPhongMaterial ||
-                        material instanceof THREE.MeshStandardMaterial ||
-                        material instanceof THREE.MeshPhysicalMaterial) {
-
-                        // 保存原始透明度设置（如果还没有保存）
-                        if (!material.userData.originalOpacity) {
-                            material.userData.originalOpacity = material.opacity
-                            material.userData.originalTransparent = material.transparent
-                        }
-
-                        // 设置透明度
-                        material.transparent = opacity < 1.0
-                        material.opacity = opacity
-                        material.needsUpdate = true
-                    }
-                })
+                this.applyOpacityWithMaterialCloning(child, opacity, 'equipment', equipment.uuid)
             }
         })
     }
@@ -1356,36 +1438,57 @@ export class BuildingControlPlugin extends BasePlugin {
     private setRoomOpacity(room: THREE.Object3D|THREE.Scene|THREE.Group, opacity: number): void {
         room.traverse((child) => {
             if (child instanceof THREE.Mesh && child.material) {
+                this.applyOpacityWithMaterialCloning(child, opacity, 'room', room.name || room.uuid)
+            }
+        })
+    }
+
+    /**
+     * 统一的恢复透明度方法
+     * @param target 3D对象
+     * @param objectType 对象类型
+     * @param identifier 对象标识符
+     */
+    private restoreObjectOpacity(
+        target: THREE.Object3D | THREE.Scene | THREE.Group,
+        objectType: 'floor' | 'room' | 'equipment',
+        identifier: string | number
+    ): void {
+        const prefix = `${objectType}_${identifier}_`
+        
+        // 找到所有相关的材质映射并恢复
+        const keysToRestore = Array.from(this.materialsMap.keys())
+            .filter(key => key.startsWith(prefix))
+        
+        keysToRestore.forEach(key => {
+            const clonedMaterial = this.materialsMap.get(key)!
+            const originalMaterial = clonedMaterial.userData.originalMaterial as THREE.Material
+            
+            if (originalMaterial) {
+                // 恢复到原始材质
+                this.replaceClonedMaterialWithOriginal(target, clonedMaterial, originalMaterial)
+                // 清理克隆材质
+                clonedMaterial.dispose()
+            }
+            
+            this.materialsMap.delete(key)
+        })
+        
+        // 恢复非共享材质的透明度（直接修改的材质）
+        target.traverse((child) => {
+            if (child instanceof THREE.Mesh && child.material) {
                 const materials = Array.isArray(child.material) ? child.material : [child.material]
-                materials.forEach((material, index) => {
-                    if (material instanceof THREE.MeshBasicMaterial ||
-                        material instanceof THREE.MeshLambertMaterial ||
-                        material instanceof THREE.MeshPhongMaterial ||
-                        material instanceof THREE.MeshStandardMaterial ||
-                        material instanceof THREE.MeshPhysicalMaterial) {
+                materials.forEach(material => {
+                    if (material.userData.isModifiedByPlugin && 
+                        material.userData.originalOpacity !== undefined) {
+                        material.opacity = material.userData.originalOpacity
+                        material.transparent = material.userData.originalTransparent || false
+                        material.needsUpdate = true
                         
-                        // 生成唯一材质映射键
-                        const key = `room_${room.name}_${child.uuid}_${index}`
-                        
-                        // 如果材质未被克隆过才创建新材质
-                        if (!this.materialsMap.has(key)) {
-                            const clonedMaterial = material.clone()
-                            clonedMaterial.userData.originalMaterial = material // 保存原始材质引用
-                            this.materialsMap.set(key, clonedMaterial)
-                            
-                            // 替换为克隆材质
-                            if (Array.isArray(child.material)) {
-                                child.material[index] = clonedMaterial
-                            } else {
-                                child.material = clonedMaterial
-                            }
-                        }
-                        
-                        // 设置透明度到克隆材质
-                        const clonedMat = this.materialsMap.get(key)!
-                        clonedMat.transparent = opacity < 1.0
-                        clonedMat.opacity = opacity
-                        clonedMat.needsUpdate = true
+                        // 清理标记
+                        delete material.userData.originalOpacity
+                        delete material.userData.originalTransparent
+                        delete material.userData.isModifiedByPlugin
                     }
                 })
             }
@@ -1393,32 +1496,12 @@ export class BuildingControlPlugin extends BasePlugin {
     }
 
     /**
-     * 恢复原始透明度
+     * 恢复原始透明度（向后兼容方法）
      * @param target 3D对象
      */
     private restoreTargetOpacity(target: THREE.Object3D | THREE.Scene | THREE.Group): void {
-        // 遍历设备的所有材质并恢复原始透明度
-        target.traverse((child) => {
-            if (child instanceof THREE.Mesh && child.material) {
-                const materials = Array.isArray(child.material) ? child.material : [child.material]
-                
-                materials.forEach((material) => {
-                    if (material instanceof THREE.MeshBasicMaterial || 
-                        material instanceof THREE.MeshLambertMaterial ||
-                        material instanceof THREE.MeshPhongMaterial ||
-                        material instanceof THREE.MeshStandardMaterial ||
-                        material instanceof THREE.MeshPhysicalMaterial) {
-                        
-                        // 恢复原始透明度设置
-                        if (material.userData.originalOpacity !== undefined) {
-                            material.opacity = material.userData.originalOpacity
-                            material.transparent = material.userData.originalTransparent || false
-                            material.needsUpdate = true
-                        }
-                    }
-                })
-            }
-        })
+        // 对于设备，使用UUID作为标识符
+        this.restoreObjectOpacity(target, 'equipment', target.uuid)
     }
 
     /**
@@ -1427,17 +1510,20 @@ export class BuildingControlPlugin extends BasePlugin {
     private restoreAllFloorOpacity(): void {
         this.floors.forEach((floor) => {
             // 恢复楼层材质到原始状态
-            this.restoreFloorOpacity(floor)
+            this.restoreObjectOpacity(floor.group, 'floor', floor.floorNumber)
             
             // 恢复关联设备的透明度
             floor.associatedEquipment.forEach(equipmentInfo => {
                 const equipment = equipmentInfo.equipment
-                this.restoreTargetOpacity(equipment)
+                this.restoreObjectOpacity(equipment, 'equipment', equipment.uuid)
             })
 
             floor.rooms.forEach(room => {
-                this.restoreRoomOpacity(room.group)
+                this.restoreObjectOpacity(room.group, 'room', room.roomNumber)
             })
+            
+            // 更新楼层状态
+            floor.opacity = 1.0
         })
     }
 
@@ -1445,42 +1531,7 @@ export class BuildingControlPlugin extends BasePlugin {
      * 恢复单个楼层的原始透明度
      */
     private restoreFloorOpacity(floor: FloorItem): void {
-        if (!this.materialsMap.has(`${floor.floorNumber}`)) return
-        
-        // 遍历该楼层所有克隆材质
-        this.materialsMap.forEach((clonedMaterial, key) => {
-            if (key.startsWith(`${floor.floorNumber}_`)) {
-                const originalMaterial = clonedMaterial.userData.originalMaterial as THREE.Material
-                if (originalMaterial) {
-                    // 替换回原始材质
-                    const floorGroup = floor.group
-                    floorGroup.traverse((child) => {
-                        if (child instanceof THREE.Mesh && child.material) {
-                            const materials = Array.isArray(child.material) ? child.material : [child.material]
-                            materials.forEach((mat, index) => {
-                                if (mat === clonedMaterial) {
-                                    if (Array.isArray(child.material)) {
-                                        child.material[index] = originalMaterial
-                                    } else {
-                                        child.material = originalMaterial
-                                    }
-                                    originalMaterial.needsUpdate = true
-                                }
-                            })
-                        }
-                    })
-                    // 清理克隆材质
-                    clonedMaterial.dispose()
-                    clonedMaterial.userData.originalMaterial = null
-                }
-            }
-        })
-        
-        // 清理该楼层的材质映射
-        const keysToRemove = Array.from(this.materialsMap.keys())
-            .filter(key => key.startsWith(`${floor.floorNumber}_`))
-        keysToRemove.forEach(key => this.materialsMap.delete(key))
-        
+        this.restoreObjectOpacity(floor.group, 'floor', floor.floorNumber)
         floor.opacity = 1.0
     }
     
@@ -1489,40 +1540,7 @@ export class BuildingControlPlugin extends BasePlugin {
      * 恢复单个房间的透明度
      */
     private restoreRoomOpacity(roomGroup: THREE.Object3D | THREE.Scene | THREE.Group): void {
-        if (!this.materialsMap.has(`room_${roomGroup.name}`)) return
-        
-        // 遍历该房间所有克隆材质
-        this.materialsMap.forEach((clonedMaterial, key) => {
-            if (key.startsWith(`room_${roomGroup.name}_`)) {
-                const originalMaterial = clonedMaterial.userData.originalMaterial as THREE.Material
-                if (originalMaterial) {
-                    // 替换回原始材质
-                    roomGroup.traverse((child) => {
-                        if (child instanceof THREE.Mesh && child.material) {
-                            const materials = Array.isArray(child.material) ? child.material : [child.material]
-                            materials.forEach((mat, index) => {
-                                if (mat === clonedMaterial) {
-                                    if (Array.isArray(child.material)) {
-                                        child.material[index] = originalMaterial
-                                    } else {
-                                        child.material = originalMaterial
-                                    }
-                                    originalMaterial.needsUpdate = true
-                                }
-                            })
-                        }
-                    })
-                    // 清理克隆材质
-                    clonedMaterial.dispose()
-                    clonedMaterial.userData.originalMaterial = null
-                }
-            }
-        })
-        
-        // 清理该房间的材质映射
-        const keysToRemove = Array.from(this.materialsMap.keys())
-            .filter(key => key.startsWith(`room_${roomGroup.name}_`))
-        keysToRemove.forEach(key => this.materialsMap.delete(key))
+        this.restoreObjectOpacity(roomGroup, 'room', roomGroup.name || roomGroup.uuid)
     }
     
     /**
@@ -1777,6 +1795,118 @@ export class BuildingControlPlugin extends BasePlugin {
     }
 
     /**
+     * 获取材质映射状态信息（用于调试）
+     */
+    public getMaterialMappingInfo(): {
+        totalClonedMaterials: number
+        floorMaterials: number
+        roomMaterials: number
+        equipmentMaterials: number
+        materialsByType: { [key: string]: string[] }
+    } {
+        const materialsByType: { [key: string]: string[] } = {
+            floor: [],
+            room: [],
+            equipment: []
+        }
+
+        let floorCount = 0
+        let roomCount = 0
+        let equipmentCount = 0
+
+        this.materialsMap.forEach((material, key) => {
+            const parts = key.split('_')
+            if (parts.length >= 2) {
+                const type = parts[0]
+                switch (type) {
+                    case 'floor':
+                        floorCount++
+                        materialsByType.floor.push(key)
+                        break
+                    case 'room':
+                        roomCount++
+                        materialsByType.room.push(key)
+                        break
+                    case 'equipment':
+                        equipmentCount++
+                        materialsByType.equipment.push(key)
+                        break
+                }
+            }
+        })
+
+        return {
+            totalClonedMaterials: this.materialsMap.size,
+            floorMaterials: floorCount,
+            roomMaterials: roomCount,
+            equipmentMaterials: equipmentCount,
+            materialsByType
+        }
+    }
+
+    /**
+     * 验证材质映射完整性（用于调试）
+     */
+    public validateMaterialMapping(): {
+        isValid: boolean
+        issues: string[]
+        statistics: {
+            orphanedClones: number
+            missingOriginals: number
+            invalidKeys: number
+        }
+    } {
+        const issues: string[] = []
+        let orphanedClones = 0
+        let missingOriginals = 0
+        let invalidKeys = 0
+
+        this.materialsMap.forEach((clonedMaterial, key) => {
+            // 检查键格式
+            const parts = key.split('_')
+            if (parts.length < 4) {
+                invalidKeys++
+                issues.push(`无效的键格式: ${key}`)
+                return
+            }
+
+            // 检查是否有原始材质引用
+            if (!clonedMaterial.userData.originalMaterial) {
+                missingOriginals++
+                issues.push(`缺少原始材质引用: ${key}`)
+            }
+
+            // 检查是否为孤立的克隆材质（没有被任何Mesh使用）
+            let isInUse = false
+            if (this.scene) {
+                this.scene.traverse((child) => {
+                    if (child instanceof THREE.Mesh && child.material) {
+                        const materials = Array.isArray(child.material) ? child.material : [child.material]
+                        if (materials.includes(clonedMaterial)) {
+                            isInUse = true
+                        }
+                    }
+                })
+            }
+
+            if (!isInUse) {
+                orphanedClones++
+                issues.push(`孤立的克隆材质: ${key}`)
+            }
+        })
+
+        return {
+            isValid: issues.length === 0,
+            issues,
+            statistics: {
+                orphanedClones,
+                missingOriginals,
+                invalidKeys
+            }
+        }
+    }
+
+    /**
      * 关联设备模型到楼层
      * 根据命名规则自动识别和关联设备
      */
@@ -1947,7 +2077,7 @@ export class BuildingControlPlugin extends BasePlugin {
      * @param equipment 设备对象
      */
     public restoreEquipmentOpacityPublic(equipment: THREE.Object3D): void {
-        this.restoreTargetOpacity(equipment)
+        this.restoreObjectOpacity(equipment, 'equipment', equipment.uuid)
         console.log(`🎨 恢复设备透明度: ${this.getModelName(equipment)}`)
     }
 
@@ -1981,48 +2111,173 @@ export class BuildingControlPlugin extends BasePlugin {
     }
 
     /**
+     * 手动设置指定房间的透明度
+     * @param roomCode 房间代码
+     * @param opacity 透明度值 (0-1)
+     */
+    public setRoomOpacityPublic(roomCode: string, opacity: number): void {
+        const roomObject = this.getRoomObject(roomCode)
+        if (roomObject) {
+            this.setRoomOpacity(roomObject, opacity)
+            console.log(`🎨 设置房间透明度: ${roomCode} → ${opacity}`)
+        } else {
+            console.warn(`⚠️ 房间 ${roomCode} 不存在`)
+        }
+    }
+
+    /**
+     * 手动恢复指定房间的原始透明度
+     * @param roomCode 房间代码
+     */
+    public restoreRoomOpacityPublic(roomCode: string): void {
+        const roomObject = this.getRoomObject(roomCode)
+        if (roomObject) {
+            this.restoreRoomOpacity(roomObject)
+            console.log(`🎨 恢复房间透明度: ${roomCode}`)
+        } else {
+            console.warn(`⚠️ 房间 ${roomCode} 不存在`)
+        }
+    }
+
+    /**
+     * 获取楼层和房间位置状态信息（用于调试）
+     */
+    public getFloorAndRoomPositionInfo(): {
+        floorPositions: { [floorNumber: number]: {
+            originalPosition: THREE.Vector3
+            currentPosition: THREE.Vector3
+            targetPosition: THREE.Vector3
+            rooms: { [roomCode: string]: {
+                originalPosition: THREE.Vector3
+                currentPosition: THREE.Vector3
+                targetPosition: THREE.Vector3
+                hasOriginalY: boolean
+            }}
+        }}
+        summary: {
+            totalFloors: number
+            totalRooms: number
+            floorsWithPositionIssues: number[]
+            roomsWithPositionIssues: string[]
+        }
+    } {
+        const floorPositions: any = {}
+        const floorsWithIssues: number[] = []
+        const roomsWithIssues: string[] = []
+        let totalRooms = 0
+
+        this.floors.forEach((floor, floorNumber) => {
+            const floorInfo: any = {
+                originalPosition: floor.originalPosition.clone(),
+                currentPosition: floor.group.position.clone(),
+                targetPosition: floor.targetPosition.clone(),
+                rooms: {}
+            }
+
+            // 检查楼层位置是否有问题
+            const positionDiff = floor.group.position.distanceTo(floor.originalPosition)
+            if (this.currentState === FloorState.NORMAL && positionDiff > 0.1) {
+                floorsWithIssues.push(floorNumber)
+            }
+
+            // 检查房间位置
+            floor.rooms.forEach(roomItem => {
+                totalRooms++
+                const room = roomItem.group
+                const roomInfo = {
+                    originalPosition: roomItem.originalPosition.clone(),
+                    currentPosition: room.position.clone(),
+                    targetPosition: roomItem.targetPosition.clone(),
+                    hasOriginalY: room.userData.originalY !== undefined
+                }
+
+                // 检查房间位置是否有问题
+                const roomPositionDiff = room.position.distanceTo(roomItem.originalPosition)
+                if (this.currentState === FloorState.NORMAL && roomPositionDiff > 0.1) {
+                    roomsWithIssues.push(`${floorNumber}F_${roomItem.roomNumber}`)
+                }
+
+                floorInfo.rooms[roomItem.roomNumber] = roomInfo
+            })
+
+            floorPositions[floorNumber] = floorInfo
+        })
+
+        return {
+            floorPositions,
+            summary: {
+                totalFloors: this.floors.size,
+                totalRooms,
+                floorsWithPositionIssues: floorsWithIssues,
+                roomsWithPositionIssues: roomsWithIssues
+            }
+        }
+    }
+
+    /**
+     * 强制重置所有楼层和房间位置到原始状态（调试用）
+     */
+    public forceResetAllPositions(): void {
+        console.log('🔧 强制重置所有楼层和房间位置到原始状态')
+        
+        this.floors.forEach((floor, floorNumber) => {
+            // 重置楼层位置
+            floor.group.position.copy(floor.originalPosition)
+            console.log(`✅ 重置楼层 ${floorNumber}F 位置`)
+            
+            // 重置房间位置
+            floor.rooms.forEach(roomItem => {
+                roomItem.group.position.copy(roomItem.originalPosition)
+                
+                // 清理临时数据
+                if (roomItem.group.userData.originalY !== undefined) {
+                    delete roomItem.group.userData.originalY
+                }
+                
+                console.log(`✅ 重置房间 ${roomItem.roomNumber} 位置`)
+            })
+            
+            // 重置设备位置
+            floor.associatedEquipment.forEach(equipmentInfo => {
+                // 这里假设设备的原始位置保存在某个地方，如果没有则跳过
+                if (equipmentInfo.equipment.userData.originalY !== undefined) {
+                    delete equipmentInfo.equipment.userData.originalY
+                }
+            })
+        })
+        
+        // 更新状态
+        this.currentState = FloorState.NORMAL
+        this.focusedFloor = null
+        
+        console.log('✅ 所有位置重置完成')
+    }
+
+    /**
      * 清理所有材质副本（在插件销毁时调用）
      */
     public dispose(): void {
-        // 清理所有材质副本
-        this.materialsMap.forEach((clonedMaterial, key) => {
-            const originalMaterial = clonedMaterial.userData.originalMaterial as THREE.Material
-            if (originalMaterial) {
-                // 替换回原始材质
-                const parts = key.split('_')
-                if (parts.length >= 3) {
-                    const type = parts[0]
-                    const identifier = parts[1]
-                    const meshId = parts[2]
-                    const index = parts[3] ? parseInt(parts[3], 10) : 0
-                    
-                    if (type === 'floor' || type === 'room') {
-                        const target = this.getFloorObject(parseInt(identifier)) || this.getRoomObject(identifier)
-                        if (target) {
-                            target.traverse((child) => {
-                                if (child instanceof THREE.Mesh && child.material) {
-                                    const materials = Array.isArray(child.material) ? child.material : [child.material]
-                                    materials.forEach((mat, idx) => {
-                                        if (idx === index && mat === clonedMaterial) {
-                                            if (Array.isArray(child.material)) {
-                                                child.material[index] = originalMaterial
-                                            } else {
-                                                child.material = originalMaterial
-                                            }
-                                            originalMaterial.needsUpdate = true
-                                        }
-                                    })
-                                }
-                            })
-                        }
-                    }
-                }
-            }
-            clonedMaterial.dispose()
-            clonedMaterial.userData.originalMaterial = null
+        // 恢复所有楼层的材质
+        this.floors.forEach((floor) => {
+            this.restoreObjectOpacity(floor.group, 'floor', floor.floorNumber)
         })
         
-        // 清空材质映射
+        // 恢复所有房间的材质
+        this.rooms.forEach((room) => {
+            this.restoreObjectOpacity(room.group, 'room', room.roomNumber)
+        })
+        
+        // 恢复所有设备的材质
+        this.allDevices.forEach((device) => {
+            this.restoreObjectOpacity(device, 'equipment', device.uuid)
+        })
+        
+        // 清理任何遗留的材质映射
+        this.materialsMap.forEach((clonedMaterial) => {
+            if (clonedMaterial.userData.isClonedByPlugin) {
+                clonedMaterial.dispose()
+            }
+        })
         this.materialsMap.clear()
         
         // 停止所有动画
