@@ -110,7 +110,7 @@ interface moveConfig {
 }
 
 export class ModelMarker extends BasePlugin {
-  private scene: THREE.Scene | null = null
+  private scene: THREE.Scene | null = null // 主场景
   private resourceReaderPlugin: any = null
   private modelInstances: Map<string, ModelInstance> = new Map()
   private instanceIdCounter: number = 0
@@ -142,23 +142,20 @@ export class ModelMarker extends BasePlugin {
       scale: new THREE.Vector3(1, 1, 1),
       ...meta.userData.defaultConfig
     }
-    this.scene = meta.userData.scene || null
+    this.scene = meta.userData.scene
+    this.resourceReaderPlugin = meta.userData.resourceReaderPlugin
   }
 
   /**
    * 插件初始化
    */
-  async init(engine: any): Promise<void> {
-    console.log('🚀 ModelMarker插件初始化开始')
-    let scene = engine.getPlugin("baseScenePlugin").scene
+  async init(): Promise<void> {
     // 获取场景引用
-    this.scene = scene || null
     if (!this.scene) {
       throw new Error('ModelMarker: 无法获取场景引用')
     }
 
     // 获取资源加载插件
-    this.resourceReaderPlugin = engine.getPlugin?.('ResourceReaderPlugin')
     if (!this.resourceReaderPlugin) {
       console.warn('⚠️ ModelMarker: 未找到ResourceReaderPlugin，将使用默认加载器')
     }

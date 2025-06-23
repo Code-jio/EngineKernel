@@ -276,7 +276,7 @@ const DEFAULT_CONFIGS = {
             },
             depthSortConfig: {
                 enabled: false,
-                transparent: false,
+                transparent: true,
                 opaque: false
             }
         },
@@ -795,7 +795,7 @@ export class BaseScene extends BasePlugin {
             },
             depthSortConfig: {
                 enabled: false,
-                transparent: false,
+                transparent: true,
                 opaque: false
             }
         }
@@ -874,7 +874,7 @@ export class BaseScene extends BasePlugin {
             precision: rendererOption.precision, // 精度
             powerPreference: rendererOption.powerPreference, // 性能
             logarithmicDepthBuffer: true,
-            antialias: true
+            antialias: true,
         })
 
         // 直接将Three.js生成的canvas添加到body
@@ -970,7 +970,7 @@ export class BaseScene extends BasePlugin {
     /**
      * 初始化控制器系统
      */
-    private initializeControls(): void {
+    private initializeControls(): any {
         try {
             // 创建控制器实例
             this.controls = new BaseControls(this.camera, this.renderer.domElement)
@@ -987,6 +987,7 @@ export class BaseScene extends BasePlugin {
             console.error('❌ 控制器初始化失败:', error)
             this.controls = null
         }
+        return this.controls
     }
 
     /**
@@ -2403,7 +2404,7 @@ export class BaseScene extends BasePlugin {
             },
             depthSortConfig: {
                 enabled: false,
-                transparent: false,
+                transparent: true,
                 opaque: false
             }
         }
