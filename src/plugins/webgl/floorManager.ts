@@ -13,21 +13,23 @@ export interface FloorConfig {
     // 水面地板配置 - 简化版本，只保留基本水面效果
     waterConfig?: {
         // 基础参数
-        textureWidth: number       // 反射贴图宽度
-        textureHeight: number      // 反射贴图高度
-        alpha: number              // 透明度
-        time: number               // 初始时间
+        textureWidth?: number      // 反射贴图宽度
+        textureHeight?: number     // 反射贴图高度
+        alpha?: number             // 透明度
+        time?: number              // 初始时间
         
         // 视觉效果参数
-        waterColor: number         // 水面颜色
-        distortionScale: number    // 扭曲比例
+        waterColor?: number        // 水面颜色
+        color?: number             // 兼容性颜色属性（等同于waterColor）
+        sunColor?: number          // 太阳光颜色
+        distortionScale?: number   // 扭曲比例
         
         // 贴图
         waterNormalsUrl?: string   // 水面法线贴图URL
         
         // 动画控制
-        animationSpeed: number     // 动画速度倍数
-        waveScale: number          // 波浪缩放系数
+        animationSpeed?: number    // 动画速度倍数
+        waveScale?: number         // 波浪缩放系数
     }
     
     // 静态贴图地板配置
@@ -156,6 +158,18 @@ export class FloorManager {
             waveScale: 1.0
         }
         
+        // 处理color属性的兼容性（如果设置了color，使用color覆盖waterColor）
+        const finalWaterColor = waterConfig.color !== undefined ? waterConfig.color : (waterConfig.waterColor || 0x001e0f);
+        
+        // 处理sunColor属性（如果未设置，使用默认白色）
+        const finalSunColor = waterConfig.sunColor !== undefined ? waterConfig.sunColor : 0xffffff;
+        
+        // 处理其他可选属性的默认值
+        const finalTextureWidth = waterConfig.textureWidth || 512;
+        const finalTextureHeight = waterConfig.textureHeight || 512;
+        const finalAlpha = waterConfig.alpha !== undefined ? waterConfig.alpha : 0;
+        const finalDistortionScale = waterConfig.distortionScale !== undefined ? waterConfig.distortionScale : 3.7;
+        
         // 创建水面几何体
         const waterGeometry = new THREE.PlaneGeometry(config.size, config.size)
         
@@ -163,15 +177,15 @@ export class FloorManager {
         const water = new Water(
             waterGeometry,
             {
-                textureWidth: waterConfig.textureWidth,
-                textureHeight: waterConfig.textureHeight,
+                textureWidth: finalTextureWidth,
+                textureHeight: finalTextureHeight,
                 waterNormals: new THREE.TextureLoader().load(waterConfig.waterNormalsUrl || 'textures/waternormals.jpg', function (texture) {
                     texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
                 }),
                 sunDirection: new THREE.Vector3(),
-                sunColor: 0xffffff,
-                waterColor: waterConfig.waterColor,
-                distortionScale: waterConfig.distortionScale,
+                sunColor: finalSunColor,
+                waterColor: finalWaterColor,
+                distortionScale: finalDistortionScale,
                 fog: this.scene.fog !== undefined
             }
         );
@@ -185,16 +199,16 @@ export class FloorManager {
         
         // 设置初始时间
         if (this.waterUniforms.time) {
-            this.waterUniforms.time.value = waterConfig.time;
+            this.waterUniforms.time.value = waterConfig.time || 0;
         }
         
         // 设置透明度
-        if (waterConfig.alpha < 1.0) {
+        if (finalAlpha < 1.0) {
             water.material.transparent = true;
-            water.material.opacity = waterConfig.alpha;
+            water.material.opacity = finalAlpha;
             // 如果有alpha uniform，也更新它
             if (this.waterUniforms.alpha) {
-                this.waterUniforms.alpha.value = waterConfig.alpha;
+                this.waterUniforms.alpha.value = finalAlpha;
             }
         }
         

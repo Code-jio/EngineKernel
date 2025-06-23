@@ -2286,3 +2286,43 @@ export class BuildingControlPlugin extends BasePlugin {
         console.log('🧹 建筑控制插件已清理')
     }
 }
+
+/**
+ * 
+ * 
+ * 
+ * 
+ * 
+ * function getTopFaceVertices(cube) {
+  const geometry = cube.geometry;
+  const verticesArray = geometry.attributes.position.array;
+  
+  // 筛选Y值最大的顶点
+  const maxY = Math.max(...Array.from({ length: verticesArray.length / 3 }, (_, i) => verticesArray[i * 3 + 1]));
+  const topVertices = [];
+  for (let i = 0; i < verticesArray.length; i += 3) {
+    if (Math.abs(verticesArray[i + 1] - maxY) < 0.001) {
+      topVertices.push(new THREE.Vector3(
+        verticesArray[i], 
+        verticesArray[i + 1], 
+        verticesArray[i + 2]
+      ));
+    }
+  }
+
+  // 转换到世界坐标
+  const worldVertices = topVertices.map(v => v.applyMatrix4(cube.matrixWorld).toArray());
+  
+  // 顶点排序（顺时针）
+  const center = new THREE.Vector3();
+  worldVertices.forEach(v => center.add(new THREE.Vector3(...v)));
+  center.divideScalar(4);
+  
+  worldVertices.sort((a, b) => {
+    return Math.atan2(a[2] - center.z, a[0] - center.x) 
+         - Math.atan2(b[2] - center.z, b[0] - center.x);
+  });
+
+  return worldVertices; // 返回轮廓顶点数组
+}
+ */
