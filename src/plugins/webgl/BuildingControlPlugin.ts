@@ -671,6 +671,9 @@ export class BuildingControlPlugin extends BasePlugin {
             opacity:1,
             associatedEquipment:[]
         })
+
+        // 提取并保存房间地板轮廓
+        this.extractAndSaveRoomBounding(roomObject, roomInfo.roomCode)
     }
 
     /**
@@ -921,6 +924,145 @@ export class BuildingControlPlugin extends BasePlugin {
         let count = 0
         object.traverse(() => count++)
         return count - 1 // 减去对象自身
+    }
+
+    /**
+     * 提取mesh顶面轮廓顶点
+     * @param mesh 要提取轮廓的mesh对象
+     * @returns 顶面轮廓顶点数组（世界坐标）
+     */
+    private extractTopFaceVertices(mesh: THREE.Mesh): THREE.Vector3[] {
+        const geometry = mesh.geometry
+        if (!geometry.attributes.position) {
+            console.warn('⚠️ Mesh没有position属性，无法提取顶面轮廓')
+            return []
+        }
+
+        const verticesArray = geometry.attributes.position.array
+        const vertices: THREE.Vector3[] = []
+        
+        // 获取所有顶点的Y值，找到最大值
+        let maxY = -Infinity
+        for (let i = 0; i < verticesArray.length; i += 3) {
+            const y = verticesArray[i + 1]
+            if (y > maxY) {
+                maxY = y
+            }
+        }
+        
+        // 筛选Y值最大的顶点（顶面顶点）
+        const topVertices: THREE.Vector3[] = []
+        const tolerance = 0.001 // 容差值，处理浮点数精度问题
+        
+        for (let i = 0; i < verticesArray.length; i += 3) {
+            const x = verticesArray[i]
+            const y = verticesArray[i + 1]
+            const z = verticesArray[i + 2]
+            
+            if (Math.abs(y - maxY) < tolerance) {
+                const vertex = new THREE.Vector3(x, y, z)
+                // 转换到世界坐标
+                vertex.applyMatrix4(mesh.matrixWorld)
+                
+                // 检查是否已存在相同的顶点（去重）
+                const isDuplicate = topVertices.some(existing => 
+                    vertex.distanceTo(existing) < tolerance
+                )
+                
+                if (!isDuplicate) {
+                    topVertices.push(vertex)
+                }
+            }
+        }
+        
+        if (topVertices.length < 3) {
+            console.warn('⚠️ 顶面顶点数量不足，无法构成有效轮廓')
+            return []
+        }
+        
+        // 计算顶点的中心点
+        const center = new THREE.Vector3()
+        topVertices.forEach(v => center.add(v))
+        center.divideScalar(topVertices.length)
+        
+        // 按照逆时针方向排序顶点（从上方看）
+        topVertices.sort((a, b) => {
+            const angleA = Math.atan2(a.z - center.z, a.x - center.x)
+            const angleB = Math.atan2(b.z - center.z, b.x - center.x)
+            return angleA - angleB
+        })
+        
+        return topVertices
+    }
+
+    /**
+     * 为房间对象提取并保存轮廓信息
+     * @param roomObject 房间3D对象
+     * @param roomCode 房间代码
+     */
+    private extractAndSaveRoomBounding(roomObject: THREE.Object3D, roomCode: string): void {
+        const meshes: THREE.Mesh[] = []
+        
+        // 查找房间中的所有mesh
+        roomObject.traverse((child) => {
+            if (child instanceof THREE.Mesh) {
+                meshes.push(child)
+            }
+        })
+        
+        if (meshes.length === 0) {
+            console.warn(`⚠️ 房间 ${roomCode} 中未找到任何mesh`)
+            return
+        }
+        
+        // 选择面积最大的mesh作为地板
+        let floorMesh = meshes[0]
+        let maxArea = 0
+        
+        for (const mesh of meshes) {
+            const box = new THREE.Box3().setFromObject(mesh)
+            const size = box.getSize(new THREE.Vector3())
+            const area = size.x * size.z // X-Z平面的面积（地板面积）
+            
+            if (area > maxArea) {
+                maxArea = area
+                floorMesh = mesh
+            }
+        }
+        
+        try {
+            // 提取顶面轮廓
+            const boundingVertices = this.extractTopFaceVertices(floorMesh)
+            
+            if (boundingVertices.length > 0) {
+                // 将轮廓信息保存到房间的userData中
+                if (!roomObject.userData) {
+                    roomObject.userData = {}
+                }
+                
+                roomObject.userData.bounding = {
+                    vertices: boundingVertices.map(v => ({ x: v.x, y: v.y, z: v.z })),
+                    vertexCount: boundingVertices.length,
+                    center: {
+                        x: boundingVertices.reduce((sum, v) => sum + v.x, 0) / boundingVertices.length,
+                        y: boundingVertices.reduce((sum, v) => sum + v.y, 0) / boundingVertices.length,
+                        z: boundingVertices.reduce((sum, v) => sum + v.z, 0) / boundingVertices.length
+                    },
+                    extractedAt: Date.now(),
+                    meshName: floorMesh.name || 'unnamed_floor_mesh'
+                }
+                
+                console.log(`✅ 房间 ${roomCode} 轮廓提取完成，顶点数: ${boundingVertices.length}`)
+                
+                if (this.debugMode) {
+                    console.log(`🔍 房间 ${roomCode} 轮廓详情:`, roomObject.userData.bounding)
+                }
+            } else {
+                console.warn(`⚠️ 房间 ${roomCode} 轮廓提取失败：没有有效的顶面顶点`)
+            }
+        } catch (error) {
+            console.error(`❌ 房间 ${roomCode} 轮廓提取出错:`, error)
+        }
     }
 
     /**
@@ -2251,6 +2393,150 @@ export class BuildingControlPlugin extends BasePlugin {
         this.focusedFloor = null
         
         console.log('✅ 所有位置重置完成')
+    }
+
+    /**
+     * 获取房间轮廓信息
+     * @param roomCode 房间代码
+     * @returns 房间轮廓信息，如果不存在返回null
+     */
+    public getRoomBounding(roomCode: string): {
+        vertices: Array<{ x: number, y: number, z: number }>
+        vertexCount: number
+        center: { x: number, y: number, z: number }
+        extractedAt: number
+        meshName: string
+    } | null {
+        const roomObject = this.getRoomObject(roomCode)
+        if (!roomObject || !roomObject.userData || !roomObject.userData.bounding) {
+            return null
+        }
+        return roomObject.userData.bounding
+    }
+
+    /**
+     * 获取所有房间的轮廓信息
+     * @returns 房间轮廓信息的映射表
+     */
+    public getAllRoomBoundings(): Map<string, {
+        vertices: Array<{ x: number, y: number, z: number }>
+        vertexCount: number
+        center: { x: number, y: number, z: number }
+        extractedAt: number
+        meshName: string
+    }> {
+        const boundings = new Map()
+        
+        this.rooms.forEach((room, roomCode) => {
+            const bounding = this.getRoomBounding(roomCode)
+            if (bounding) {
+                boundings.set(roomCode, bounding)
+            }
+        })
+        
+        return boundings
+    }
+
+    /**
+     * 重新提取指定房间的轮廓
+     * @param roomCode 房间代码
+     * @returns 是否提取成功
+     */
+    public reextractRoomBounding(roomCode: string): boolean {
+        const roomObject = this.getRoomObject(roomCode)
+        if (!roomObject) {
+            console.warn(`⚠️ 房间 ${roomCode} 不存在`)
+            return false
+        }
+
+        try {
+            this.extractAndSaveRoomBounding(roomObject, roomCode)
+            return true
+        } catch (error) {
+            console.error(`❌ 重新提取房间 ${roomCode} 轮廓失败:`, error)
+            return false
+        }
+    }
+
+    /**
+     * 重新提取所有房间的轮廓
+     * @returns 提取成功的房间数量
+     */
+    public reextractAllRoomBoundings(): number {
+        let successCount = 0
+        
+        this.rooms.forEach((room, roomCode) => {
+            try {
+                this.extractAndSaveRoomBounding(room.group, roomCode)
+                successCount++
+            } catch (error) {
+                console.error(`❌ 重新提取房间 ${roomCode} 轮廓失败:`, error)
+            }
+        })
+        
+        console.log(`✅ 重新提取完成，成功处理 ${successCount}/${this.rooms.size} 个房间`)
+        return successCount
+    }
+
+    /**
+     * 获取房间轮廓提取状态概览
+     * @returns 轮廓提取状态信息
+     */
+    public getBoundingExtractionOverview(): {
+        totalRooms: number
+        extractedRooms: number
+        missingBoundings: string[]
+        averageVertexCount: number
+        extractionDetails: Array<{
+            roomCode: string
+            hasBeenExtracted: boolean
+            vertexCount: number
+            extractedAt?: number
+            meshName?: string
+        }>
+    } {
+        const details: Array<{
+            roomCode: string
+            hasBeenExtracted: boolean
+            vertexCount: number
+            extractedAt?: number
+            meshName?: string
+        }> = []
+        
+        const missingBoundings: string[] = []
+        let totalVertices = 0
+        let extractedCount = 0
+        
+        this.rooms.forEach((room, roomCode) => {
+            const bounding = this.getRoomBounding(roomCode)
+            
+            if (bounding) {
+                details.push({
+                    roomCode,
+                    hasBeenExtracted: true,
+                    vertexCount: bounding.vertexCount,
+                    extractedAt: bounding.extractedAt,
+                    meshName: bounding.meshName
+                })
+                totalVertices += bounding.vertexCount
+                extractedCount++
+            } else {
+                details.push({
+                    roomCode,
+                    hasBeenExtracted: false,
+                    vertexCount: 0
+                })
+                missingBoundings.push(roomCode)
+            }
+        })
+        
+        return {
+            totalRooms: this.rooms.size,
+            extractedRooms: extractedCount,
+            missingBoundings,
+            averageVertexCount: extractedCount > 0 ? Math.round(totalVertices / extractedCount) : 0,
+            extractionDetails: details
+        }
     }
 
     /**
