@@ -952,7 +952,7 @@ export class BuildingControlPlugin extends BasePlugin {
         
         // 筛选Y值最大的顶点（顶面顶点）
         const topVertices: THREE.Vector3[] = []
-        const tolerance = 0.001 // 容差值，处理浮点数精度问题
+        const tolerance = 0.01 // 容差值，处理浮点数精度问题
         
         for (let i = 0; i < verticesArray.length; i += 3) {
             const x = verticesArray[i]

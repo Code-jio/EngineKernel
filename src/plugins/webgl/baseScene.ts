@@ -238,7 +238,7 @@ const DEFAULT_CONFIGS = {
             lookAt: [0, 0, 0]
         },
         rendererConfig: {
-            alpha: false,
+            alpha: true,
             precision: "highp",
             powerPreference: "high-performance",
             physicallyCorrectLights: true,
@@ -248,7 +248,7 @@ const DEFAULT_CONFIGS = {
             pixelRatio: 1
         },
         antialiasConfig: {
-            enabled: false,
+            enabled: true,
             type: 'none' as const
         },
         depthConfig: {
@@ -318,7 +318,7 @@ const DEFAULT_CONFIGS = {
             lookAt: [0, 0, 0]
         },
         rendererConfig: {
-            alpha: false,
+            alpha: true,
             precision: "highp",
             powerPreference: "high-performance",
             physicallyCorrectLights: true,
@@ -402,7 +402,7 @@ const DEFAULT_CONFIGS = {
             lookAt: [0, 0, 0]
         },
         rendererConfig: {
-            alpha: false,
+            alpha: true,
             precision: "highp",
             powerPreference: "high-performance",
             physicallyCorrectLights: true,
@@ -870,11 +870,13 @@ export class BaseScene extends BasePlugin {
         
         this.renderer = new THREE.WebGLRenderer({
             // antialias: rendererOption.antialias, // 抗锯齿
-            alpha: rendererOption.alpha || false, // 透明
+            alpha: rendererOption.alpha || true, // 透明
             precision: rendererOption.precision, // 精度
             powerPreference: rendererOption.powerPreference, // 性能
             logarithmicDepthBuffer: true,
+            premultipliedAlpha: true, // 优化透明混合计算
             antialias: true,
+            stencil:true
         })
 
         // 直接将Three.js生成的canvas添加到body
@@ -1024,7 +1026,7 @@ export class BaseScene extends BasePlugin {
         (orthographicCamera as any).isTopDownCamera = true
 
         // 设置正交相机为俯视模式
-        orthographicCamera.position.set(0, 1000, 0); // 从上方俯视
+        orthographicCamera.position.set(0, 100, 0); // 从上方俯视
         orthographicCamera.lookAt(0, 0, 0); // 向下看向原点
         orthographicCamera.up.set(0, 0, 1); // Z轴为上方向（标准俯视）
 
@@ -3425,7 +3427,7 @@ export class BaseScene extends BasePlugin {
             
             // 设置正交相机位置和朝向
             this.camera.position.copy(currentPosition);
-            this.camera.quaternion.copy(currentQuaternion);
+            // this.camera.quaternion.copy(currentQuaternion);
 
             
             // 更新控制器
@@ -3438,6 +3440,11 @@ export class BaseScene extends BasePlugin {
                     control.enableRotate = false
                     control.enableZoom = true
                     control.enablePan = true
+
+                    control.minPolarAngle = control.maxPolarAngle = 0
+                    control.minAzimuthAngle = control.maxAzimuthAngle = 0
+
+                    control.update()
                 }
             }
             
@@ -3451,7 +3458,7 @@ export class BaseScene extends BasePlugin {
             
             // 设置透视相机位置和朝向
             this.camera.position.copy(currentPosition);
-            this.camera.quaternion.copy(currentQuaternion);
+            // this.camera.quaternion.copy(currentQuaternion);
             
             // 更新控制器
             if (this.controls) {
@@ -3463,6 +3470,12 @@ export class BaseScene extends BasePlugin {
                     control.enableRotate = true
                     control.enableZoom = true
                     control.enablePan = true
+                    control.minPolarAngle = 0;
+                    control.maxPolarAngle = THREE.MathUtils.degToRad(180);
+                    control.minAzimuthAngle = -Infinity;
+                    control.maxAzimuthAngle = +Infinity;
+
+                    control.update()
                 }
             }
         } else {
@@ -3473,11 +3486,6 @@ export class BaseScene extends BasePlugin {
         // 更新相机投影矩阵
         this.camera.updateProjectionMatrix();
         
-        // 更新控制器
-        if (this.controls) {
-            this.controls.update();
-        }
-
         console.log(`✅ 相机切换完成: ${this.cameraConfig.currentMode} 模式`);
         
         // 发送切换事件
@@ -3528,5 +3536,56 @@ export class BaseScene extends BasePlugin {
                 }
             }
         });
+    }
+
+        /**
+     * 切换相机模式
+     * @param mode 相机模式：“2D” | “3D”
+     */
+    async switchCameraMode(){
+        let currentMode = this.controls?.getControl()?.object instanceof THREE.PerspectiveCamera ? "3D" : "2D"
+
+        // 切换模式
+        if (currentMode === "3D") {
+            // 切换到2D模式
+            return new Promise((resolve, reject) => {
+            this.overLook(1500, ()=>{
+                resolve;
+            });
+            }).catch(() => {
+                this.switchCamera(); // 降级处理
+            });
+        } else {
+            // 切换到3D模式
+            return new Promise((resolve, reject) => {
+                this.switchCamera();
+                resolve("done");
+            })
+        }
+
+    }
+
+    /**
+     * 相机沿视线方向前进n个单位
+     * @param distance 距离,默认为10, 负值为后退
+     */
+    moveForward(distance:number = 10){
+        let currentAngle = this.camera.getWorldDirection(new THREE.Vector3())
+        // this.camera.position.add(currentAngle.multiplyScalar(distance))
+        // this.camera.updateMatrixWorld()
+        let targetPosition = this.camera.position.clone().add(currentAngle.multiplyScalar(distance))
+
+        let tween = new TWEEN.Tween(this.camera.position).to(targetPosition,1000)
+        .easing(TWEEN.Easing.Quadratic.InOut)
+        .onUpdate(()=>{
+            // this.camera.position.set(targetPosition)
+            this.camera.updateMatrixWorld()
+        })
+        .onComplete(()=>{
+            
+        })
+        .start()
+        
+        tween_group.add(tween)
     }
 }
