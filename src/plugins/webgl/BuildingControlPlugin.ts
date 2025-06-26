@@ -135,10 +135,10 @@ export class BuildingControlPlugin extends BasePlugin {
 
     // 默认配置
     private config: FloorControlConfig = {
-        expandDistance: 15,
+        expandDistance: 5, // 各楼层展开间距
         animationDuration: 1000,
         focusOpacity: 1.0,
-        unfocusOpacity: 0.2,
+        unfocusOpacity: 0,
         focusFloorStructureOpacity: false, // 聚焦楼层主体结构保持完全不透明
         easingFunction: 'Quadratic.InOut',
         showFacade: true,
@@ -285,8 +285,8 @@ export class BuildingControlPlugin extends BasePlugin {
             this.scene = scenePlugin.scene
             this.scenePlugin = scenePlugin
             // 初始化相机控制器
-            if (scenePlugin.cameraControls) {
-                this.cameraControls = scenePlugin.cameraControls
+            if (scenePlugin.controls) {
+                this.cameraControls = scenePlugin.controls.getControl()
             }
         }
 
@@ -1556,13 +1556,16 @@ export class BuildingControlPlugin extends BasePlugin {
      * 设置楼层透明度
      */
     private setFloorOpacity(floor: FloorItem, opacity: number): void {
-        floor.group.traverse((child) => {
-            if (child instanceof THREE.Mesh && child.material) {
-                this.applyOpacityWithMaterialCloning(child, opacity, 'floor', floor.floorNumber)
-            }
-        })
-        floor.opacity = opacity
+        floor.group.visible = opacity ? true : false
+
+        // floor.group.traverse((child) => {
+        //     if (child instanceof THREE.Mesh && child.material) {
+        //         this.applyOpacityWithMaterialCloning(child, opacity, 'floor', floor.floorNumber)
+        //     }
+        // })
+        // floor.opacity = opacity
     }
+
     /**
      * 设置设备透明度
      * @param equipment 设备对象
@@ -1570,19 +1573,21 @@ export class BuildingControlPlugin extends BasePlugin {
      */
     private setEquipmentOpacity(equipment: THREE.Object3D|THREE.Scene|THREE.Group, opacity: number): void {
         // 遍历设备的所有材质并设置透明度
-        equipment.traverse((child) => {
-            if (child instanceof THREE.Mesh && child.material) {
-                this.applyOpacityWithMaterialCloning(child, opacity, 'equipment', equipment.uuid)
-            }
-        })
+        // equipment.traverse((child) => {
+        //     if (child instanceof THREE.Mesh && child.material) {
+        //         this.applyOpacityWithMaterialCloning(child, opacity, 'equipment', equipment.uuid)
+        //     }
+        // })
+        equipment.visible = opacity ? true : false
     }
 
     private setRoomOpacity(room: THREE.Object3D|THREE.Scene|THREE.Group, opacity: number): void {
-        room.traverse((child) => {
-            if (child instanceof THREE.Mesh && child.material) {
-                this.applyOpacityWithMaterialCloning(child, opacity, 'room', room.name || room.uuid)
-            }
-        })
+        // room.traverse((child) => {
+        //     if (child instanceof THREE.Mesh && child.material) {
+        //         this.applyOpacityWithMaterialCloning(child, opacity, 'room', room.name || room.uuid)
+        //     }
+        // })
+        room.visible = opacity ? true : false
     }
 
     /**
@@ -1596,45 +1601,47 @@ export class BuildingControlPlugin extends BasePlugin {
         objectType: 'floor' | 'room' | 'equipment',
         identifier: string | number
     ): void {
-        const prefix = `${objectType}_${identifier}_`
+        // const prefix = `${objectType}_${identifier}_`
         
-        // 找到所有相关的材质映射并恢复
-        const keysToRestore = Array.from(this.materialsMap.keys())
-            .filter(key => key.startsWith(prefix))
+        // // 找到所有相关的材质映射并恢复
+        // const keysToRestore = Array.from(this.materialsMap.keys())
+        //     .filter(key => key.startsWith(prefix))
         
-        keysToRestore.forEach(key => {
-            const clonedMaterial = this.materialsMap.get(key)!
-            const originalMaterial = clonedMaterial.userData.originalMaterial as THREE.Material
+        // keysToRestore.forEach(key => {
+        //     const clonedMaterial = this.materialsMap.get(key)!
+        //     const originalMaterial = clonedMaterial.userData.originalMaterial as THREE.Material
             
-            if (originalMaterial) {
-                // 恢复到原始材质
-                this.replaceClonedMaterialWithOriginal(target, clonedMaterial, originalMaterial)
-                // 清理克隆材质
-                clonedMaterial.dispose()
-            }
+        //     if (originalMaterial) {
+        //         // 恢复到原始材质
+        //         this.replaceClonedMaterialWithOriginal(target, clonedMaterial, originalMaterial)
+        //         // 清理克隆材质
+        //         clonedMaterial.dispose()
+        //     }
             
-            this.materialsMap.delete(key)
-        })
+        //     this.materialsMap.delete(key)
+        // })
         
-        // 恢复非共享材质的透明度（直接修改的材质）
-        target.traverse((child) => {
-            if (child instanceof THREE.Mesh && child.material) {
-                const materials = Array.isArray(child.material) ? child.material : [child.material]
-                materials.forEach(material => {
-                    if (material.userData.isModifiedByPlugin && 
-                        material.userData.originalOpacity !== undefined) {
-                        material.opacity = material.userData.originalOpacity
-                        material.transparent = material.userData.originalTransparent || false
-                        material.needsUpdate = true
+        // // 恢复非共享材质的透明度（直接修改的材质）
+        // target.traverse((child) => {
+        //     if (child instanceof THREE.Mesh && child.material) {
+        //         const materials = Array.isArray(child.material) ? child.material : [child.material]
+        //         materials.forEach(material => {
+        //             if (material.userData.isModifiedByPlugin && 
+        //                 material.userData.originalOpacity !== undefined) {
+        //                 material.opacity = material.userData.originalOpacity
+        //                 material.transparent = material.userData.originalTransparent || false
+        //                 material.needsUpdate = true
                         
-                        // 清理标记
-                        delete material.userData.originalOpacity
-                        delete material.userData.originalTransparent
-                        delete material.userData.isModifiedByPlugin
-                    }
-                })
-            }
-        })
+        //                 // 清理标记
+        //                 delete material.userData.originalOpacity
+        //                 delete material.userData.originalTransparent
+        //                 delete material.userData.isModifiedByPlugin
+        //             }
+        //         })
+        //     }
+        // })
+
+        target.visible = true
     }
 
     /**
