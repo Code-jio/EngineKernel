@@ -5,8 +5,8 @@
     "sourceMap": true, // 生成源码映射文件
     "inlineSourceMap": false, // 不使用内联源码映射
     "sourceRoot": "../src", // 设置源码根路径
-    "typeRoots": ["./src/interface", "./node_modules/@types", "./src/types"],
-    "types": ["node", "three"],
+    "typeRoots": ["./node_modules/@types", "./src/types"],
+    "types": ["node"],
     // "module": "Node16",
     "moduleResolution": "node",
     "lib": ["es2016", "dom"],
@@ -14,11 +14,11 @@
     "strict": true,
     "declaration": true,
     "declarationDir": "./dist/types",
-    "baseUrl": "src"
-  },
-  "paths": {
-    "@/core/*": ["./src/core/*"],
-    "@/*": ["./src/*"], // 补全相对路径基准点
-    "three": ["node_modules/three/src/Three"]
+    "baseUrl": "src",
+    "paths": {
+      "@/core/*": ["./src/core/*"],
+      "@/*": ["./src/*"], // 补全相对路径基准点
+      "three": ["node_modules/three/src/Three"]
+    }
   }
 }

@@ -1,42 +1,47 @@
-import { Request, Response, NextFunction } from 'express';
-
-export class AppError extends Error {
-  statusCode: number;
+export class EngineError extends Error {
+  code: string;
   isOperational: boolean;
 
-  constructor(message: string, statusCode: number = 500, isOperational: boolean = true) {
+  constructor(message: string, code: string = 'UNKNOWN_ERROR', isOperational: boolean = true) {
     super(message);
-    this.statusCode = statusCode;
+    this.code = code;
     this.isOperational = isOperational;
+    this.name = 'EngineError';
     Error.captureStackTrace(this, this.constructor);
   }
 }
 
-export const errorHandler = (
-  err: AppError,
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
-  const statusCode = err.statusCode || 500;
-  const message = err.isOperational ? err.message : 'Internal Server Error';
+export const errorHandler = {
+  log: (error: Error | EngineError) => {
+    const timestamp = new Date().toISOString();
+    const errorInfo = {
+      timestamp,
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      ...(error instanceof EngineError && { code: error.code })
+    };
+    
+    console.error(`[EngineKernel Error] ${timestamp}:`, errorInfo);
+  },
 
-  // 记录错误日志
-  console.error(`[${new Date().toISOString()}] ${statusCode} - ${message}`, {
-    path: req.path,
-    method: req.method,
-    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
-  });
-
-  res.status(statusCode).json({
-    status: 'error',
-    statusCode,
-    message,
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
-  });
+  handle: (error: Error | EngineError, context?: string) => {
+    errorHandler.log(error);
+    
+    // 可以在这里添加更多处理逻辑，如发送到错误监控服务
+    if (context) {
+      console.error(`Error context: ${context}`);
+    }
+  }
 };
 
-export const asyncHandler = (fn: Function) => 
-  (req: Request, res: Response, next: NextFunction) => {
-    Promise.resolve(fn(req, res, next)).catch(next);
+export const asyncHandler = <T extends (...args: any[]) => Promise<any>>(fn: T) => {
+  return async (...args: Parameters<T>) => {
+    try {
+      return await fn(...args);
+    } catch (err) {
+      errorHandler.handle(err instanceof Error ? err : new Error(String(err)));
+      throw err;
+    }
   };
+};
