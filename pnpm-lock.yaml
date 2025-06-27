@@ -54,6 +54,9 @@ importers:
       cross-env:
         specifier: ^7.0.3
         version: 7.0.3
+      cross-spawn:
+        specifier: ^7.0.6
+        version: 7.0.6
       detect-port:
         specifier: ^2.1.0
         version: 2.1.0
