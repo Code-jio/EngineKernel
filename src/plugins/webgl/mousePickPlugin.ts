@@ -291,7 +291,7 @@ export class MousePickPlugin extends BasePlugin {
             this.updateBoxSelection(event)
         } else if (!this.isCtrlPressed) {
             // 只有在非Ctrl模式下才进行悬停检测
-            this.performHoverDetection(event)
+            // this.performHoverDetection(event)
         }
 
         // 更新调试射线
