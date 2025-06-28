@@ -53,6 +53,7 @@ interface ModelMarkerConfig {
   position?: Array<number> | THREE.Vector3 // 模型位置，支持数组或Vector3对象
   rotation?: Array<number> | THREE.Euler // 模型旋转，支持数组或Euler对象
   scale?: Array<number> | THREE.Vector3 // 模型缩放，支持数组或Vector3对象
+  color?:Array<number> | THREE.Vector4 | null // 额外添加模型颜色
   show?: boolean // 是否显示模型
   autoLoad?: boolean // 是否自动加载
   enableAnimations?: boolean // 是否启用动画
@@ -90,7 +91,8 @@ interface ModelInstance {
     state: AnimationState
     curve?: THREE.CatmullRomCurve3
   }
-  isLoaded: boolean
+  isLoaded: boolean,
+  material:null | THREE.Material
 }
 
 interface moveConfig {
@@ -107,6 +109,8 @@ interface moveConfig {
   onUpdate?: (progress: number) => void, // 更新回调
   onComplete?: () => void, // 完成回调
   onStop?: () => void // 停止回调
+
+  cycle?:boolean // 是否构成环形
 }
 
 export class ModelMarker extends BasePlugin {
@@ -140,6 +144,7 @@ export class ModelMarker extends BasePlugin {
       position: new THREE.Vector3(0, 0, 0),
       rotation: new THREE.Euler(0, 0, 0),
       scale: new THREE.Vector3(1, 1, 1),
+      color: null,
       ...meta.userData.defaultConfig
     }
     this.scene = meta.userData.scene
@@ -193,8 +198,9 @@ export class ModelMarker extends BasePlugin {
   /**
    * 添加3D模型标记
    */
-  public addModel(config: ModelMarkerConfig): string {
+  public addModel(config: ModelMarkerConfig): any {
     const modelId = this.generateModelId()
+    let model
 
     // 合并默认配置和用户配置
     const finalConfig = { ...this.defaultConfig, ...config }
@@ -209,7 +215,8 @@ export class ModelMarker extends BasePlugin {
       model: new THREE.Group(),
       config: finalConfig,
       animations: [],
-      isLoaded: false
+      isLoaded: false,
+      material:null
     }
 
     // 设置模型对象的名称（新规则：userData.modelName + 显示名称）
@@ -260,22 +267,42 @@ export class ModelMarker extends BasePlugin {
 
     // 添加到场景
     // debugger
-    if (this.scene) {
-      this.scene.add(instance.model)
-    }
+  
 
     // 存储实例
     this.modelInstances.set(modelId, instance)
 
     // 自动加载模型
     if (finalConfig.autoLoad !== false && finalConfig.modelUrl) {
-      let model = this.loadModelAsync(modelId, finalConfig.modelUrl)
+      model = this.loadModelAsync(modelId, finalConfig.modelUrl)
     }
 
-    console.log(`✅ 模型标记已添加: ${modelId}`)
+    // instance.model = model
+
+    if (this.scene) {
+      this.scene.add(instance.model)
+    }
+
+  // // 如果提供了颜色配置，创建标准材质
+  // if (finalConfig.color) {
+  //   // 创建标准网格材质
+  //   const color = this.getColorFromConfig(finalConfig.color)
+  //   // 遍历模型并应用材质
+  //   instance.model.traverse((item) => {
+  //     if (child instanceof THREE.Mesh && child.material) {
+  //       child.material.color = color
+  //       debugger
+  //     }
+  //   })
+  // }
+
+    console.log(`✅ 模型标记已添加: ${modelId}`, instance)
     eventBus.emit('model:added', { modelId, config: finalConfig })
 
-    return modelId
+    return {
+      modelId,
+      model
+    }
   }
 
   /**
@@ -284,6 +311,8 @@ export class ModelMarker extends BasePlugin {
   private loadModelAsync(modelId: string, modelUrl: string): void {
     const instance = this.modelInstances.get(modelId)
     if (!instance) return
+
+    let model
 
     const config = instance.config
 
@@ -302,7 +331,7 @@ export class ModelMarker extends BasePlugin {
           console.log(`⚡ 模型加载完成 (无缓存): ${modelUrl} - ${loadTime.toFixed(2)}ms`)
 
           this.onModelLoaded(modelId, gltf)
-
+          model = gltf.scene
           // 执行用户回调
           if (config.onComplete) {
             config.onComplete(gltf.scene)
@@ -333,6 +362,8 @@ export class ModelMarker extends BasePlugin {
       // 使用直接的GLTF加载器（不经过缓存系统）
       this.loadModelDirect(modelId, modelUrl, startTime)
     }
+
+    return model
   }
 
   /**
@@ -766,7 +797,7 @@ export class ModelMarker extends BasePlugin {
   /**
    * 创建路径动画
    */
-  public createPathAnimation(modelId: string, pathPoints: PathPoint[], loop: boolean = false): boolean {
+  public createPathAnimation(modelId: string, pathPoints: PathPoint[], loop: boolean = false, cycle:boolean = false): boolean {
     const instance = this.modelInstances.get(modelId)
     if (!instance) return false
 
@@ -778,7 +809,7 @@ export class ModelMarker extends BasePlugin {
     // 创建样条曲线
     const points = pathPoints.map(point => point.position)
     const curve = new THREE.CatmullRomCurve3(points)
-    curve.closed = loop
+    curve.closed = loop || cycle;
 
     // 计算总时长
     let totalDuration = 0
@@ -1158,7 +1189,7 @@ export class ModelMarker extends BasePlugin {
           }
         }
 
-        const modelId = this.addModel(enhancedConfig)
+        const { modelId, model} = this.addModel(enhancedConfig)
         modelIds.push(modelId)
       })
     })
@@ -1332,6 +1363,7 @@ export class ModelMarker extends BasePlugin {
       pathLineWidth: 5,
       easing: 'easeInOut',
       lookAtDirection: true,
+      cycle:false,
       ...options
     }
 
@@ -1351,8 +1383,17 @@ export class ModelMarker extends BasePlugin {
       return new THREE.Vector3(point.x, point.y, point.z)
     })
 
+    let curve
+    if (config.cycle) {
+      pathVector3s.push(pathVector3s[0].clone())
+      curve = new THREE.CatmullRomCurve3(pathVector3s)
+      curve.closed = config.loop
+    }else{
+      curve = new THREE.CatmullRomCurve3(pathVector3s)
+    }
+
+
     // 创建路径曲线
-    const curve = new THREE.CatmullRomCurve3(pathVector3s)
     
     // 创建路径可视化线条
     let pathLine: THREE.Object3D | undefined
@@ -1577,6 +1618,7 @@ export class ModelMarker extends BasePlugin {
       }
     }
 
+
     // 获取当前进度函数
     const getProgress = () => animationProgress
 
@@ -1641,5 +1683,41 @@ export class ModelMarker extends BasePlugin {
     }
 
     return instance
+  }
+  /**
+   * 从颜色配置中获取THREE.Color对象 
+   * @return THREE.Color 
+   */
+  private getColorFromConfig(color: Array<number> | THREE.Vector4 | THREE.Color | null): THREE.Color {
+    if (!color) {
+      // 如果没有提供颜色，返回默认颜色
+      return new THREE.Color(0x00ff00);
+    }
+    
+    if (Array.isArray(color)) {
+      // 如果是数组类型，确保数组长度至少为3，并使用前三个元素作为RGB值
+      return new THREE.Color(
+        `rgb(
+          ${color[0] !== undefined ? color[0] : 0},
+          ${color[1] !== undefined ? color[1] : 0},
+          ${color[2] !== undefined ? color[2] : 0}
+        )`
+      );
+    } else if (color instanceof THREE.Vector4) {
+      // 如果是THREE.Vector4类型，使用x、y、z作为RGB值
+      return new THREE.Color(
+        `rgb(
+          ${color.x !== undefined ? color.x : 0},
+          ${color.y !== undefined ? color.y : 0},
+          ${color.z !== undefined ? color.z : 0}
+        )`
+      );
+    } else if (color instanceof THREE.Color) {
+      // 如果已经是THREE.Color类型，直接返回
+      return color;
+    } else {
+      // 其他情况返回默认颜色
+      return new THREE.Color(0x00ff00);
+    }
   }
 }
