@@ -53,7 +53,7 @@ interface ModelMarkerConfig {
   position?: Array<number> | THREE.Vector3 // 模型位置，支持数组或Vector3对象
   rotation?: Array<number> | THREE.Euler // 模型旋转，支持数组或Euler对象
   scale?: Array<number> | THREE.Vector3 // 模型缩放，支持数组或Vector3对象
-  color?:Array<number> | THREE.Vector4 | null // 额外添加模型颜色
+  color?:Array<number> | THREE.Vector4 | THREE.Color | null // 额外添加模型颜色
   show?: boolean // 是否显示模型
   autoLoad?: boolean // 是否自动加载
   enableAnimations?: boolean // 是否启用动画
@@ -198,64 +198,55 @@ export class ModelMarker extends BasePlugin {
   /**
    * 添加3D模型标记
    */
-  public addModel(config: ModelMarkerConfig): any {
+  public async addModel(config: ModelMarkerConfig): Promise<ModelInstance> {
     const modelId = this.generateModelId()
-    let model
-
+    
     // 合并默认配置和用户配置
     const finalConfig = { ...this.defaultConfig, ...config }
-
-    // 从模型URL中提取文件名（改进的文件名处理逻辑）
+    
+    // 从模型URL中提取文件名
     const extractedFileName = this.extractFileNameFromUrl(finalConfig.modelUrl || '')
 
+    // 创建初始的空模型组
+    const model = new THREE.Group()
+    
+    // 创建模型实例
     const instance: ModelInstance = {
       id: modelId,
       fileName: extractedFileName,
-      name: finalConfig.name || extractedFileName, // 如果没有提供名称，使用文件名
-      model: new THREE.Group(),
+      name: finalConfig.name || extractedFileName,
+      model: model,
       config: finalConfig,
       animations: [],
       isLoaded: false,
-      material:null
+      material: null
     }
 
-    // 设置模型对象的名称（新规则：userData.modelName + 显示名称）
+    // 存储实例
+    this.modelInstances.set(modelId, instance)
+
+    // 1. 优先执行加载模型
+    if (finalConfig.autoLoad !== false && finalConfig.modelUrl) {
+      try {
+        await this.loadModelWithPromise(modelId, finalConfig.modelUrl)
+      } catch (error) {
+        console.error(`❌ 模型加载失败: ${finalConfig.modelUrl}`, error)
+        // 加载失败时执行错误回调
+        if (finalConfig.onError) {
+          finalConfig.onError(error as Error)
+        }
+      }
+    }
+
+    // 2. 然后设置模型变换等参数
+    this.applyTransformToInstance(instance, finalConfig)
+    
+    // 设置模型对象的名称
     if (!instance.model.userData) {
       instance.model.userData = {}
     }
     instance.model.userData.modelName = instance.name
-    instance.model.name = instance.name // 保留显示名称
-
-    // 设置初始变换（使用默认值）
-    if (finalConfig.position) {
-      if (Array.isArray(finalConfig.position)) {
-        instance.model.position.set(finalConfig.position[0] || 0, finalConfig.position[1] || 0, finalConfig.position[2] || 0)
-      } else {
-        instance.model.position.copy(finalConfig.position)
-      }
-    } else {
-      instance.model.position.set(0, 0, 0)
-    }
-
-    if (finalConfig.rotation) {
-      if (Array.isArray(finalConfig.rotation)) {
-        instance.model.rotation.set(finalConfig.rotation[0] || 0, finalConfig.rotation[1] || 0, finalConfig.rotation[2] || 0)
-      } else {
-        instance.model.rotation.copy(finalConfig.rotation)
-      }
-    } else {
-      instance.model.rotation.set(0, 0, 0)
-    }
-
-    if (finalConfig.scale) {
-      if (Array.isArray(finalConfig.scale)) {
-        instance.model.scale.set(finalConfig.scale[0] || 1, finalConfig.scale[1] || 1, finalConfig.scale[2] || 1)
-      } else {
-        instance.model.scale.copy(finalConfig.scale)
-      }
-    } else {
-      instance.model.scale.set(1, 1, 1)
-    }
+    instance.model.name = instance.name
 
     // 设置初始可见性
     instance.model.visible = finalConfig.show !== false
@@ -266,43 +257,15 @@ export class ModelMarker extends BasePlugin {
     }
 
     // 添加到场景
-    // debugger
-  
-
-    // 存储实例
-    this.modelInstances.set(modelId, instance)
-
-    // 自动加载模型
-    if (finalConfig.autoLoad !== false && finalConfig.modelUrl) {
-      model = this.loadModelAsync(modelId, finalConfig.modelUrl)
-    }
-
-    // instance.model = model
-
     if (this.scene) {
       this.scene.add(instance.model)
     }
 
-  // // 如果提供了颜色配置，创建标准材质
-  // if (finalConfig.color) {
-  //   // 创建标准网格材质
-  //   const color = this.getColorFromConfig(finalConfig.color)
-  //   // 遍历模型并应用材质
-  //   instance.model.traverse((item) => {
-  //     if (child instanceof THREE.Mesh && child.material) {
-  //       child.material.color = color
-  //       debugger
-  //     }
-  //   })
-  // }
-
     console.log(`✅ 模型标记已添加: ${modelId}`, instance)
     eventBus.emit('model:added', { modelId, config: finalConfig })
 
-    return {
-      modelId,
-      model
-    }
+    // 3. 返回完整的模型实例
+    return instance
   }
 
   /**
@@ -367,9 +330,32 @@ export class ModelMarker extends BasePlugin {
   }
 
   /**
+   * Promise版本的模型加载方法
+   */
+  private loadModelWithPromise(modelId: string, modelUrl: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const startTime = performance.now()
+      this.loadModelDirectWithCallback(modelId, modelUrl, startTime, resolve, reject)
+    })
+  }
+
+  /**
    * 直接加载模型（绕过缓存系统，提升性能）
    */
   private loadModelDirect(modelId: string, modelUrl: string, startTime: number): void {
+    this.loadModelDirectWithCallback(modelId, modelUrl, startTime)
+  }
+
+  /**
+   * 加载模型的核心实现
+   */
+  private loadModelDirectWithCallback(
+    modelId: string, 
+    modelUrl: string, 
+    startTime: number, 
+    resolve?: () => void, 
+    reject?: (error: Error) => void
+  ): void {
     const instance = this.modelInstances.get(modelId)
     if (!instance) return
 
@@ -385,40 +371,86 @@ export class ModelMarker extends BasePlugin {
 
     console.log(`🚀 开始直接加载模型 (无缓存): ${modelUrl}`)
 
-    loader.load(
-      modelUrl,
-      (gltf: any) => {
-        const loadTime = performance.now() - startTime
-        console.log(`⚡ 模型直接加载完成: ${modelUrl} - ${loadTime.toFixed(2)}ms`)
+          loader.load(
+        modelUrl,
+        (gltf: any) => {
+          const loadTime = performance.now() - startTime
+          console.log(`⚡ 模型直接加载完成: ${modelUrl} - ${loadTime.toFixed(2)}ms`)
 
-        this.onModelLoaded(modelId, gltf)
+          this.onModelLoaded(modelId, gltf)
 
-        // 执行用户回调
-        if (config.onComplete) {
-          config.onComplete(gltf.scene)
-        }
-      },
-      (progress: any) => {
-        if (progress.lengthComputable) {
-          const percent = (progress.loaded / progress.total * 100).toFixed(2)
-          eventBus.emit('model:loadProgress', { modelId, progress: percent })
+          // 执行用户回调
+          if (config.onComplete) {
+            config.onComplete(gltf.scene)
+          }
 
-          // 执行用户进度回调
-          if (config.onProgress) {
-            config.onProgress(progress)
+          // 调用Promise resolve
+          if (resolve) {
+            resolve()
+          }
+        },
+        (progress: any) => {
+          if (progress.lengthComputable) {
+            const percent = (progress.loaded / progress.total * 100).toFixed(2)
+            eventBus.emit('model:loadProgress', { modelId, progress: percent })
+
+            // 执行用户进度回调
+            if (config.onProgress) {
+              config.onProgress(progress)
+            }
+          }
+        },
+        (error: any) => {
+          console.error(`❌ 模型直接加载失败: ${modelUrl}`, error)
+          eventBus.emit('model:loadError', { modelId, error: error.message })
+
+          // 执行用户错误回调
+          if (config.onError) {
+            config.onError(error)
+          }
+
+          // 调用Promise reject
+          if (reject) {
+            reject(error)
           }
         }
-      },
-      (error: any) => {
-        console.error(`❌ 模型直接加载失败: ${modelUrl}`, error)
-        eventBus.emit('model:loadError', { modelId, error: error.message })
+      )
+  }
 
-        // 执行用户错误回调
-        if (config.onError) {
-          config.onError(error)
-        }
+  /**
+   * 应用变换参数到模型实例
+   */
+  private applyTransformToInstance(instance: ModelInstance, config: ModelMarkerConfig): void {
+    // 设置初始变换
+    if (config.position) {
+      if (Array.isArray(config.position)) {
+        instance.model.position.set(config.position[0] || 0, config.position[1] || 0, config.position[2] || 0)
+      } else {
+        instance.model.position.copy(config.position)
       }
-    )
+    } else {
+      instance.model.position.set(0, 0, 0)
+    }
+
+    if (config.rotation) {
+      if (Array.isArray(config.rotation)) {
+        instance.model.rotation.set(config.rotation[0] || 0, config.rotation[1] || 0, config.rotation[2] || 0)
+      } else {
+        instance.model.rotation.copy(config.rotation)
+      }
+    } else {
+      instance.model.rotation.set(0, 0, 0)
+    }
+
+    if (config.scale) {
+      if (Array.isArray(config.scale)) {
+        instance.model.scale.set(config.scale[0] || 1, config.scale[1] || 1, config.scale[2] || 1)
+      } else {
+        instance.model.scale.copy(config.scale)
+      }
+    } else {
+      instance.model.scale.set(1, 1, 1)
+    }
   }
 
   /**
@@ -1149,50 +1181,56 @@ export class ModelMarker extends BasePlugin {
   /**
    * 批量加载模型
    */
-  public addModelBatch(configs: ModelMarkerConfig[]): Promise<string[]> {
-    return new Promise((resolve, reject) => {
-      const modelIds: string[] = []
-      const loadedCount = { value: 0 }
-      const totalCount = configs.length
+  public async addModelBatch(configs: ModelMarkerConfig[]): Promise<string[]> {
+    const modelIds: string[] = []
+    const totalCount = configs.length
 
-      if (totalCount === 0) {
-        resolve([])
-        return
-      }
+    if (totalCount === 0) {
+      return []
+    }
 
-      configs.forEach((config, index) => {
-        const enhancedConfig = {
-          ...config,
-          onComplete: (model: THREE.Group) => {
-            loadedCount.value++
+    console.log(`🚀 开始批量加载 ${totalCount} 个模型`)
 
-            // 执行原始回调
-            if (config.onComplete) {
-              config.onComplete(model)
+    try {
+      // 使用Promise.all来并行处理所有模型
+      const instances = await Promise.all(
+        configs.map(async (config, index) => {
+          try {
+            console.log(`📦 [${index + 1}/${totalCount}] 加载模型: ${config.modelUrl}`)
+            const instance = await this.addModel(config)
+            
+            // 执行原始完成回调
+            if (config.onComplete && instance.model) {
+              config.onComplete(instance.model as THREE.Group)
             }
-
-            // 检查是否全部加载完成
-            if (loadedCount.value === totalCount) {
-              console.log(`🎯 批量加载完成: ${totalCount}个模型`)
-              eventBus.emit('model:batchLoadCompleted', { modelIds, totalCount })
-              resolve(modelIds)
-            }
-          },
-          onError: (error: Error) => {
+            
+            return instance
+          } catch (error) {
+            console.error(`❌ 批量加载中的模型失败 [${index + 1}]:`, error)
+            
             // 执行原始错误回调
             if (config.onError) {
-              config.onError(error)
+              config.onError(error as Error)
             }
-
-            console.error(`❌ 批量加载中的模型失败 [${index}]:`, error)
-            reject(error)
+            
+            throw error
           }
-        }
+        })
+      )
 
-        const { modelId, model} = this.addModel(enhancedConfig)
-        modelIds.push(modelId)
+      // 收集所有模型ID
+      instances.forEach(instance => {
+        modelIds.push(instance.id)
       })
-    })
+
+      console.log(`🎯 批量加载完成: ${totalCount}个模型`)
+      eventBus.emit('model:batchLoadCompleted', { modelIds, totalCount })
+      
+      return modelIds
+    } catch (error) {
+      console.error(`❌ 批量加载失败:`, error)
+      throw error
+    }
   }
 
   /**
@@ -1688,12 +1726,12 @@ export class ModelMarker extends BasePlugin {
    * 从颜色配置中获取THREE.Color对象 
    * @return THREE.Color 
    */
-  private getColorFromConfig(color: Array<number> | THREE.Vector4 | THREE.Color | null): THREE.Color {
+  private getColorFromConfig(color: Array<number> | THREE.Vector4 | THREE.Color | null): THREE.Color | null {
     if (!color) {
-      // 如果没有提供颜色，返回默认颜色
-      return new THREE.Color(0x00ff00);
+      // 如果没有提供颜色，就不设置
+      return null
     }
-    
+    console.log(color)
     if (Array.isArray(color)) {
       // 如果是数组类型，确保数组长度至少为3，并使用前三个元素作为RGB值
       return new THREE.Color(
@@ -1718,6 +1756,250 @@ export class ModelMarker extends BasePlugin {
     } else {
       // 其他情况返回默认颜色
       return new THREE.Color(0x00ff00);
+    }
+  }
+
+  /**
+   * 设置模型颜色
+   * @param modelId 模型ID
+   * @param color 颜色 - 支持数组[r,g,b]、THREE.Vector4、THREE.Color或null
+   * @returns boolean 是否设置成功
+   */
+  public setModelColor(modelId: string, color: Array<number> | THREE.Vector4 | THREE.Color | null): boolean {
+    // 参数验证
+    if (!modelId || typeof modelId !== 'string') {
+      console.warn('⚠️ setModelColor: 无效的模型ID')
+      return false
+    }
+
+    // 获取模型实例
+    const instance = this.modelInstances.get(modelId)
+    if (!instance) {
+      console.warn(`⚠️ setModelColor: 未找到ID为 "${modelId}" 的模型`)
+      return false
+    }
+
+    // 检查模型是否已加载
+    if (!instance.isLoaded) {
+      console.warn(`⚠️ setModelColor: 模型 "${modelId}" 尚未加载完成`)
+      return false
+    }
+
+    try {
+      // 转换颜色格式
+      const targetColor = this.getColorFromConfig(color)
+
+      if (!targetColor) {
+        return false
+      }
+
+      console.log(targetColor)
+      // 遍历模型中的所有材质并应用颜色
+      let materialCount = 0
+      let updatedMaterials = 0
+
+      instance.model.traverse((child) => {
+        if (child instanceof THREE.Mesh && child.material) {
+          materialCount++
+          
+          // 处理单个材质或材质数组
+          const materials = Array.isArray(child.material) ? child.material : [child.material]
+          
+          materials.forEach((material, index) => {
+            if (this.applyColorToMaterial(material, targetColor)) {
+              updatedMaterials++
+              
+              if (this.enableDebugMode) {
+                console.log(`  ✅ 材质更新成功: ${material.type} (${index})`)
+              }
+            }
+          })
+        }
+      })
+
+      // 更新实例配置中的颜色信息
+      instance.config.color = color as Array<number> | THREE.Vector4 | null | THREE.Color
+      
+      // 触发颜色变化事件
+      eventBus.emit('model:colorChanged', {
+        modelId,
+        color: targetColor,
+        originalColor: color,
+        materialCount,
+        updatedMaterials,
+        timestamp: Date.now()
+      })
+
+      if (this.enableDebugMode) {
+        console.log(`🎨 模型颜色设置完成: ${modelId}`, {
+          totalMaterials: materialCount,
+          updatedMaterials: updatedMaterials,
+          success: updatedMaterials > 0
+        })
+      }
+
+      return updatedMaterials > 0
+
+    } catch (error) {
+      console.error(`❌ 设置模型颜色失败: ${modelId}`, error)
+      return false
+    }
+  }
+
+  /**
+   * 将颜色应用到指定材质
+   * @param material THREE.js材质对象
+   * @param color THREE.Color颜色对象
+   * @returns boolean 是否应用成功
+   */
+  private applyColorToMaterial(material: THREE.Material, color: THREE.Color): boolean {
+    try {
+      // 根据材质类型应用颜色
+      if (material instanceof THREE.MeshBasicMaterial ||
+          material instanceof THREE.MeshLambertMaterial ||
+          material instanceof THREE.MeshPhongMaterial ||
+          material instanceof THREE.MeshStandardMaterial ||
+          material instanceof THREE.MeshPhysicalMaterial) {
+        
+        // 保存原始颜色（如果需要恢复）
+        if (!material.userData.originalColor) {
+          material.userData.originalColor = material.color.clone()
+        }
+        
+        // 应用新颜色
+        material.color.copy(color)
+        material.needsUpdate = true
+        
+        return true
+        
+      } else if (material instanceof THREE.MeshToonMaterial) {
+        // 卡通材质
+        if (!material.userData.originalColor) {
+          material.userData.originalColor = material.color.clone()
+        }
+        material.color.copy(color)
+        material.needsUpdate = true
+        
+        return true
+        
+      } else if (material instanceof THREE.PointsMaterial) {
+        // 点材质
+        if (!material.userData.originalColor) {
+          material.userData.originalColor = material.color.clone()
+        }
+        material.color.copy(color)
+        material.needsUpdate = true
+        
+        return true
+        
+      } else if (material instanceof THREE.LineBasicMaterial ||
+                 material instanceof THREE.LineDashedMaterial) {
+        // 线材质
+        if (!material.userData.originalColor) {
+          material.userData.originalColor = material.color.clone()
+        }
+        material.color.copy(color)
+        material.needsUpdate = true
+        
+        return true
+        
+      } else if (material instanceof THREE.SpriteMaterial) {
+        // 精灵材质
+        if (!material.userData.originalColor) {
+          material.userData.originalColor = material.color.clone()
+        }
+        material.color.copy(color)
+        material.needsUpdate = true
+        
+        return true
+        
+      } else {
+        // 其他材质类型，尝试通用方法
+        if (material.hasOwnProperty('color')) {
+          if (!material.userData.originalColor) {
+            material.userData.originalColor = (material as any).color.clone()
+          }
+          (material as any).color.copy(color)
+          material.needsUpdate = true
+          return true
+        }
+        
+        if (this.enableDebugMode) {
+          console.warn(`⚠️ 不支持的材质类型: ${material.type}`)
+        }
+        return false
+      }
+      
+    } catch (error) {
+      console.error(`❌ 应用颜色到材质失败: ${material.type}`, error)
+      return false
+    }
+  }
+
+  /**
+   * 恢复模型原始颜色
+   * @param modelId 模型ID
+   * @returns boolean 是否恢复成功
+   */
+  public restoreModelOriginalColor(modelId: string): boolean {
+    // 参数验证
+    if (!modelId || typeof modelId !== 'string') {
+      console.warn('⚠️ restoreModelOriginalColor: 无效的模型ID')
+      return false
+    }
+
+    // 获取模型实例
+    const instance = this.modelInstances.get(modelId)
+    if (!instance) {
+      console.warn(`⚠️ restoreModelOriginalColor: 未找到ID为 "${modelId}" 的模型`)
+      return false
+    }
+
+    if (!instance.isLoaded) {
+      console.warn(`⚠️ restoreModelOriginalColor: 模型 "${modelId}" 尚未加载完成`)
+      return false
+    }
+
+    try {
+      let restoredCount = 0
+
+      instance.model.traverse((child) => {
+        if (child instanceof THREE.Mesh && child.material) {
+          const materials = Array.isArray(child.material) ? child.material : [child.material]
+          
+          materials.forEach((material) => {
+            if (material.userData.originalColor) {
+              if (material.hasOwnProperty('color')) {
+                (material as any).color.copy(material.userData.originalColor)
+                material.needsUpdate = true
+                restoredCount++
+              }
+            }
+          })
+        }
+      })
+
+      // 清除配置中的颜色信息
+      instance.config.color = null
+
+      // 触发颜色恢复事件
+      eventBus.emit('model:colorRestored', {
+        modelId,
+        restoredMaterials: restoredCount,
+        timestamp: Date.now()
+      })
+
+      if (this.enableDebugMode) {
+        console.log(`🔄 模型原始颜色已恢复: ${modelId}`, {
+          restoredMaterials: restoredCount
+        })
+      }
+
+      return restoredCount > 0
+
+    } catch (error) {
+      console.error(`❌ 恢复模型原始颜色失败: ${modelId}`, error)
+      return false
     }
   }
 }
