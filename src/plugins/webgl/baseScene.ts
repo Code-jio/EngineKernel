@@ -3393,6 +3393,32 @@ export class BaseScene extends BasePlugin {
     }
 
     /**
+     * 计算视野匹配的正交相机参数
+     * 根据透视相机的FOV和距离计算正交相机应有的视锥体大小
+     * @param perspectiveCamera 透视相机
+     * @param distance 相机到目标的距离
+     * @returns 正交相机的视锥体参数
+     */
+    private calculateOrthographicFrustum(perspectiveCamera: THREE.PerspectiveCamera, distance: number): {
+        left: number;
+        right: number;
+        top: number;
+        bottom: number;
+        visibleHeight: number;
+    } {
+        const fov = perspectiveCamera.fov * (Math.PI / 180); // 转换为弧度
+        const visibleHeight = 2 * Math.tan(fov / 2) * distance; // 透视相机在当前距离的可见高度
+
+        return {
+            left: visibleHeight * this.aspectRatio / -2,
+            right: visibleHeight * this.aspectRatio / 2,
+            top: visibleHeight / 2,
+            bottom: visibleHeight / -2,
+            visibleHeight
+        };
+    }
+
+ /**
      * 切换相机类型
      * 检查当前相机类型，如果是透视相机则切换为正交相机，反之亦然
      * 保持相机位置和朝向不变，只改变投影方式
@@ -3420,14 +3446,27 @@ export class BaseScene extends BasePlugin {
                 position: currentPosition,
                 quaternion: currentQuaternion
             };
-            
+
+            // 🔧 计算视野匹配 - 关键修复
+            const perspectiveCamera = this.camera;
+            const distance = currentPosition.distanceTo(currentTarget);
+            const frustum = this.calculateOrthographicFrustum(perspectiveCamera, distance);
+
             // 切换到正交相机
             this.camera = this.orthographicCamera;
             this.cameraConfig.currentMode = '2D';
             
             // 设置正交相机位置和朝向
             this.camera.position.copy(currentPosition);
-            // this.camera.quaternion.copy(currentQuaternion);
+
+            // 🚨 关键修复：调整正交相机的视野匹配透视相机
+            this.camera.left = frustum.left;
+            this.camera.right = frustum.right;
+            this.camera.top = frustum.top;
+            this.camera.bottom = frustum.bottom;
+            this.camera.zoom = 1.0; // 重置缩放
+
+            console.log(`🔍 视野匹配: 距离=${distance.toFixed(2)}, 视野高度=${frustum.visibleHeight.toFixed(2)}, FOV=${perspectiveCamera.fov}°`);
 
             
             // 更新控制器
@@ -3538,32 +3577,158 @@ export class BaseScene extends BasePlugin {
         });
     }
 
+
         /**
      * 切换相机模式
      * @param mode 相机模式：“2D” | “3D”
      */
-    async switchCameraMode(){
-        let currentMode = this.controls?.getControl()?.object instanceof THREE.PerspectiveCamera ? "3D" : "2D"
+    async switchCameraMode(mode: string | null = "auto"): Promise<string> {
+        // mode参数支持："2D" | "3D" | "auto" | null，默认为"auto"自动切换
+        const currentMode = this.controls?.getControl()?.object instanceof THREE.PerspectiveCamera ? "3D" : "2D";
+        
+        // 参数处理和验证
+        const normalizedMode = mode?.toLowerCase() || "auto";
+        if (!["2d", "3d", "auto"].includes(normalizedMode)) {
+            throw new Error(`❌ 无效的相机模式: ${mode}，支持的模式: "2D", "3D", "auto", null`);
+        }
+        
+        // 确定目标模式
+        let targetMode: string;
+        if (normalizedMode === "auto") {
+            // 自动模式：切换到相反的模式
+            targetMode = currentMode === "3D" ? "2D" : "3D";
+        } else {
+            // 指定模式
+            targetMode = normalizedMode === "2d" ? "2D" : "3D";
+        }
+        
+        // 检查是否需要切换
+        if (currentMode === targetMode) {
+            console.log(`ℹ️ 当前已经是 ${currentMode} 模式，无需切换`);
+            return `already_in_${targetMode.toLowerCase()}`;
+        }
+        
+        console.log(`🔄 开始相机模式切换: ${currentMode} → ${targetMode}`);
 
-        // 切换模式
-        if (currentMode === "3D") {
-            // 切换到2D模式
+        // 执行切换逻辑
+        if (targetMode === "2D") {
+            // 3D → 2D: 先俯视，再切换到正交相机
             return new Promise((resolve, reject) => {
-            this.overLook(1500, ()=>{
-                resolve;
-            });
-            }).catch(() => {
-                this.switchCamera(); // 降级处理
+                try {
+                    this.overLook(1500, () => {
+                        try {
+                            // 🚨 关键修复: 俯视完成后，切换到正交相机
+                            this.switchCamera();
+                            console.log('✅ 3D → 2D 切换完成');
+                            resolve("switched_to_2D");
+                        } catch (error) {
+                            console.error('❌ 相机切换失败:', error);
+                            reject(error);
+                        }
+                    });
+                } catch (error) {
+                    console.error('❌ 俯视动画失败:', error);
+                    // 降级处理：直接切换相机
+                    try {
+                        this.switchCamera();
+                        resolve("switched_to_2D_fallback");
+                    } catch (fallbackError) {
+                        reject(fallbackError);
+                    }
+                }
             });
         } else {
             // 切换到3D模式
             return new Promise((resolve, reject) => {
-                this.switchCamera();
-                resolve("done");
-            })
+                try {
+                    this.switchCamera();
+                    console.log('✅ 2D → 3D 切换完成');
+                    resolve("switched_to_3D");
+                } catch (error) {
+                    console.error('❌ 相机切换失败:', error);
+                    reject(error);
+                }
+            });
+        }
+    }
+
+        /**
+     * 手动调整正交相机的缩放以匹配当前视野
+     * 用于解决3D到2D切换时视野不匹配的问题
+     * @param targetZoom 目标缩放值，可选，如果不提供则自动计算
+     */
+    public adjustOrthographicZoom(targetZoom?: number): void {
+        if (!(this.camera instanceof THREE.OrthographicCamera)) {
+            console.warn('⚠️ 当前不是正交相机，无法调整缩放');
+            return;
         }
 
+        const control = this.controls?.getControl();
+        if (!control || !control.target) {
+            console.warn('⚠️ 控制器未初始化，无法计算距离');
+            return;
+        }
+
+        if (targetZoom) {
+            // 使用用户指定的缩放值
+            this.camera.zoom = targetZoom;
+        } else {
+            // 自动计算合适的缩放值
+            // 基于相机到目标的距离和场景大小
+            const distance = this.camera.position.distanceTo(control.target);
+
+            // 经验公式：距离越远，缩放值越小（看到的范围越大）
+            const autoZoom = Math.max(0.1, Math.min(5.0, 1000 / distance));
+            this.camera.zoom = autoZoom;
+
+            console.log(`🔍 自动调整正交相机缩放: 距离=${distance.toFixed(2)}, 缩放=${autoZoom.toFixed(3)}`);
+        }
+
+        this.camera.updateProjectionMatrix();
+        console.log(`✅ 正交相机缩放已调整为: ${this.camera.zoom.toFixed(3)}`);
     }
+
+    /**
+     * 获取当前相机的视野信息
+     * @returns 视野信息对象
+     */
+    public getCameraViewInfo(): any {
+        const control = this.controls?.getControl();
+        const distance = control?.target ? this.camera.position.distanceTo(control.target) : 0;
+
+        if (this.camera instanceof THREE.PerspectiveCamera) {
+            const fov = this.camera.fov * (Math.PI / 180);
+            const visibleHeight = 2 * Math.tan(fov / 2) * distance;
+            return {
+                type: 'perspective',
+                fov: this.camera.fov,
+                distance,
+                visibleHeight: visibleHeight,
+                visibleWidth: visibleHeight * this.camera.aspect,
+                near: this.camera.near,
+                far: this.camera.far
+            };
+        } else if (this.camera instanceof THREE.OrthographicCamera) {
+            const frustumHeight = this.camera.top - this.camera.bottom;
+            const frustumWidth = this.camera.right - this.camera.left;
+            return {
+                type: 'orthographic',
+                zoom: this.camera.zoom,
+                distance,
+                frustumHeight: frustumHeight / this.camera.zoom,
+                frustumWidth: frustumWidth / this.camera.zoom,
+                near: this.camera.near,
+                far: this.camera.far,
+                left: this.camera.left,
+                right: this.camera.right,
+                top: this.camera.top,
+                bottom: this.camera.bottom
+            };
+        }
+
+        return { type: 'unknown' };
+    }
+
 
     /**
      * 相机沿视线方向前进n个单位
@@ -3587,5 +3752,106 @@ export class BaseScene extends BasePlugin {
         .start()
         
         tween_group.add(tween)
+    }
+
+        // ================================
+    // 便捷的相机切换方法
+    // ================================
+
+    /**
+     * 强制切换到2D模式（俯视正交相机）
+     * @returns Promise<string> 切换结果
+     */
+    public async switchTo2D(): Promise<string> {
+        return this.switchCameraMode("2D");
+    }
+
+    /**
+     * 强制切换到3D模式（透视相机）
+     * @returns Promise<string> 切换结果
+     */
+    public async switchTo3D(): Promise<string> {
+        return this.switchCameraMode("3D");
+    }
+
+    /**
+     * 自动切换相机模式（3D⇄2D）
+     * @returns Promise<string> 切换结果
+     */
+    public async toggleCameraMode(): Promise<string> {
+        return this.switchCameraMode("auto");
+    }
+
+    /**
+     * 获取当前相机模式
+     * @returns "2D" | "3D"
+     */
+    public getCameraMode(): "2D" | "3D" {
+        return this.controls?.getControl()?.object instanceof THREE.PerspectiveCamera ? "3D" : "2D";
+    }
+
+    /**
+     * 检查当前是否为2D模式
+     * @returns boolean
+     */
+    public is2DMode(): boolean {
+        return this.getCameraMode() === "2D";
+    }
+
+    /**
+     * 检查当前是否为3D模式
+     * @returns boolean
+     */
+    public is3DMode(): boolean {
+        return this.getCameraMode() === "3D";
+    }
+
+    /**
+     * 获取当前激活的相机对象
+     * @returns THREE.Camera
+     */
+    public getCurrentCamera(): THREE.Camera {
+        return this.camera;
+    }
+
+    /**
+     * 获取2D相机的缩放值
+     * @returns number | null 如果不是正交相机则返回null
+     */
+    public get2DCameraZoom(): number | null {
+        if (this.camera instanceof THREE.OrthographicCamera) {
+            return this.camera.zoom;
+        }
+        return null;
+    }
+
+    /**
+     * 设置2D相机的缩放值
+     * @param zoom 缩放值（大于0）
+     * @returns boolean 是否设置成功
+     */
+    public set2DCameraZoom(zoom: number): boolean {
+        if (this.camera instanceof THREE.OrthographicCamera && zoom > 0) {
+            this.camera.zoom = zoom;
+            this.camera.updateProjectionMatrix();
+            console.log(`✅ 2D相机缩放已设置为: ${zoom.toFixed(3)}`);
+            return true;
+        }
+        console.warn('⚠️ 当前不是2D模式或缩放值无效');
+        return false;
+    }
+
+    /**
+     * 应用2D相机缩放增量
+     * @param delta 缩放增量（可正可负）
+     * @returns boolean 是否应用成功
+     */
+    public apply2DCameraZoomDelta(delta: number): boolean {
+        const currentZoom = this.get2DCameraZoom();
+        if (currentZoom !== null) {
+            const newZoom = Math.max(0.1, currentZoom + delta);
+            return this.set2DCameraZoom(newZoom);
+        }
+        return false;
     }
 }
