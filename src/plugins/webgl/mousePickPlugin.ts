@@ -35,6 +35,7 @@ debug模式：显示射线、包围盒、碰撞网格
 enum PickMode {
     SINGLE = "single", // 单选
     BOX_SELECT = "box", // 框选
+    LINE = "Line", // 拾取点集
 }
 
 // 拾取结果接口
@@ -93,7 +94,7 @@ export class MousePickPlugin extends BasePlugin {
     // 拾取配置
     private config: PickConfig = {
         mode: PickMode.SINGLE, // 拾取模式
-        tolerance: 0, // 拾取容差（像素）
+        tolerance: 0.001, // 拾取容差（像素）
         maxDistance: Infinity, // 最大拾取距离
         sortByDistance: true, // 是否按距离排序
         includeInvisible: false, // 是否包含不可见物体
@@ -143,13 +144,17 @@ export class MousePickPlugin extends BasePlugin {
 
     // 建筑控制状态管理
     private openedBuilding: THREE.Object3D | null = null
-    private hiddenFacades: THREE.Object3D[] = []
+    private facades: THREE.Object3D[] = []
     private buildingMode: boolean = false
 
     // 双击检测状态
     private lastClickTime: number = 0
     private lastClickedObject: THREE.Object3D | null = null
     private doubleClickDelay: number = 300 // 双击间隔时间（毫秒）
+
+    private linePoints: THREE.Vector3[] = [] // 拾取的点集
+
+    public enable: Boolean = true
 
     constructor(meta: any) {
         super(meta)
@@ -173,6 +178,7 @@ export class MousePickPlugin extends BasePlugin {
         this.scene = meta.userData.scene
         this.renderer = meta.userData.renderer
         this.controller = meta.userData.controller
+        this.debugEnabled = meta.userData.debugEnabled
 
         // 绑定事件处理函数
         this.boundMouseDown = this.handleMouseDown.bind(this)
@@ -189,7 +195,7 @@ export class MousePickPlugin extends BasePlugin {
             color: 0x00ffff, // 亮蓝色
             linewidth: 2,
             transparent: true,
-            opacity: 0.8
+            opacity: 0.8,
         })
 
         console.log("✅ MousePickPlugin 初始化完成")
@@ -253,6 +259,10 @@ export class MousePickPlugin extends BasePlugin {
      * 鼠标按下事件处理
      */
     private handleMouseDown(event: MouseEvent): void {
+        if (!this.enable) {
+            return
+        }
+
         if (event.button !== 0) {
             return // 只处理左键
         }
@@ -424,15 +434,16 @@ export class MousePickPlugin extends BasePlugin {
                     worldMatrix: result.worldMatrix,
                     boundingBox: result.boundingBox
                         ? {
-                            min: result.boundingBox.min,
-                            max: result.boundingBox.max,
-                        }
+                              min: result.boundingBox.min,
+                              max: result.boundingBox.max,
+                          }
                         : undefined,
-                    objectList: result.objectList?.map(obj => ({
-                        id: obj.id,
-                        name: this.getModelName(obj),
-                        type: obj.type
-                    })) || [], // 添加对象列表信息
+                    objectList:
+                        result.objectList?.map(obj => ({
+                            id: obj.id,
+                            name: this.getModelName(obj),
+                            type: obj.type,
+                        })) || [], // 添加对象列表信息
                 })),
                 selectedObjectId: filteredResults[0].object.id,
                 selectedObjectName: this.getModelName(filteredResults[0].object),
@@ -441,20 +452,20 @@ export class MousePickPlugin extends BasePlugin {
                 objectList: filteredResults.map(result => ({
                     id: result.object.id,
                     name: this.getModelName(result.object),
-                    type: result.object.type
+                    type: result.object.type,
                 })), // 在事件根级别添加对象列表
                 // 点击到的三维场景实际位置：三维场景坐标系
                 mousePosition: {
                     x: filteredResults[0].point.x,
                     y: filteredResults[0].point.y,
-                    z: filteredResults[0].point.z
+                    z: filteredResults[0].point.z,
                 },
                 screenPosition: {
                     x: event.clientX,
-                    y: event.clientY
-                }
+                    y: event.clientY,
+                },
             })
-            debugger
+            // debugger
             // 处理选择和高亮
             this.handlePickResults(filteredResults, event)
         } else {
@@ -467,6 +478,25 @@ export class MousePickPlugin extends BasePlugin {
             if (!this.isCtrlPressed) {
                 this.clearSelection()
                 this.clearOutlineHighlight()
+            }
+        }
+
+        // 如果是点集模式，记录当前拾取点
+        if (this.getPickMode() == PickMode.LINE) {
+            if (filteredResults.length > 0) {
+                const currentPoint = filteredResults[0].point
+                this.linePoints.push(currentPoint)
+
+                // 发送点集更新事件
+                this.emitPickEvent("line-points-updated", {
+                    point: currentPoint,
+                    linePoints: this.linePoints.map(p => ({ x: p.x, y: p.y, z: p.z })),
+                    timestamp: Date.now(),
+                })
+                console.log({
+                    point: currentPoint,
+                    linePoints: this.linePoints.map(p => ({ x: p.x, y: p.y, z: p.z })),
+                })
             }
         }
     }
@@ -566,10 +596,9 @@ export class MousePickPlugin extends BasePlugin {
         if (!this.isCtrlPressed) {
             // 检测双击
             const currentTime = Date.now()
-            const isDoubleClick = (
+            const isDoubleClick =
                 this.lastClickedObject === closestResult.object &&
                 currentTime - this.lastClickTime < this.doubleClickDelay
-            )
 
             if (isDoubleClick) {
                 // 双击事件：尝试打开建筑
@@ -581,10 +610,10 @@ export class MousePickPlugin extends BasePlugin {
                         object: {
                             id: closestResult.object.id,
                             name: closestResult.object.name,
-                            type: closestResult.object.type
+                            type: closestResult.object.type,
                         },
                         buildingMode: this.buildingMode,
-                        timestamp: currentTime
+                        timestamp: currentTime,
                     })
                 }
 
@@ -598,22 +627,21 @@ export class MousePickPlugin extends BasePlugin {
                     this.emitPickEvent("emptyClick", {
                         mousePosition: {
                             x: this.mouse.x,
-                            y: this.mouse.y
+                            y: this.mouse.y,
                         },
                         screenPosition: {
                             x: event.clientX,
-                            y: event.clientY
+                            y: event.clientY,
                         },
-                        timestamp: Date.now()
+                        timestamp: Date.now(),
                     })
                     this.clearSelection()
                     this.clearOutlineHighlight()
                 } else {
-
                     if (this.isPickedBuilding(results)) {
                         this.emitPickEvent("getBuilding", {
                             object: closestResult.object,
-                            timestamp: Date.now()
+                            timestamp: Date.now(),
                         })
                     }
 
@@ -621,7 +649,6 @@ export class MousePickPlugin extends BasePlugin {
                     this.selectSingleObject(closestResult.object)
                     this.highlightObjectWithOutline(closestResult.object)
                 }
-
 
                 // 更新双击检测状态
                 this.lastClickTime = currentTime
@@ -652,9 +679,9 @@ export class MousePickPlugin extends BasePlugin {
                 worldMatrix: result.worldMatrix,
                 boundingBox: result.boundingBox
                     ? {
-                        min: result.boundingBox.min,
-                        max: result.boundingBox.max,
-                    }
+                          min: result.boundingBox.min,
+                          max: result.boundingBox.max,
+                      }
                     : undefined,
             })),
             selectedObjectId: closestResult.object.id,
@@ -762,14 +789,17 @@ export class MousePickPlugin extends BasePlugin {
         })
 
         if (this.selectedObjects.size > 0) {
-            console.log("选中的物体详情:", Array.from(this.selectedObjects).map(obj => ({
-                id: obj.id,
-                name: this.getModelName(obj),
-                type: obj.type,
-                position: obj.position,
-                rotation: obj.rotation,
-                scale: obj.scale,
-            })))
+            console.log(
+                "选中的物体详情:",
+                Array.from(this.selectedObjects).map(obj => ({
+                    id: obj.id,
+                    name: this.getModelName(obj),
+                    type: obj.type,
+                    position: obj.position,
+                    rotation: obj.rotation,
+                    scale: obj.scale,
+                })),
+            )
         }
     }
 
@@ -824,19 +854,19 @@ export class MousePickPlugin extends BasePlugin {
             this.emitPickEvent("hover-changed", {
                 previousObject: this.hoveredObject
                     ? {
-                        id: this.hoveredObject.id,
-                        name: this.hoveredObject.name,
-                        type: this.hoveredObject.type,
-                    }
+                          id: this.hoveredObject.id,
+                          name: this.hoveredObject.name,
+                          type: this.hoveredObject.type,
+                      }
                     : null,
                 currentObject: newHoveredObject
                     ? {
-                        id: newHoveredObject.id,
-                        name: newHoveredObject.name,
-                        type: newHoveredObject.type,
-                        position: intersects[0].point,
-                        distance: intersects[0].distance,
-                    }
+                          id: newHoveredObject.id,
+                          name: newHoveredObject.name,
+                          type: newHoveredObject.type,
+                          position: intersects[0].point,
+                          distance: intersects[0].distance,
+                      }
                     : null,
                 timestamp: Date.now(),
             })
@@ -902,17 +932,17 @@ export class MousePickPlugin extends BasePlugin {
         const name = object.name.toLowerCase()
 
         // 排除天空盒
-        if (name.includes('sky') || name.includes('skybox') || name.includes('dome')) {
+        if (name.includes("sky") || name.includes("skybox") || name.includes("dome")) {
             return true
         }
 
         // 排除地板
-        if (name.includes('floor') || name.includes('ground') || name.includes('plane')) {
+        if (name.includes("floor") || name.includes("ground") || name.includes("plane")) {
             return true
         }
 
         // 只对网格对象进行高亮
-        if (object.type !== 'Mesh' && object.type !== 'SkinnedMesh') {
+        if (object.type !== "Mesh" && object.type !== "SkinnedMesh") {
             return true
         }
 
@@ -940,7 +970,7 @@ export class MousePickPlugin extends BasePlugin {
 
             return outline
         } catch (error) {
-            console.warn('创建边框高亮失败:', error)
+            console.warn("创建边框高亮失败:", error)
             return null
         }
     }
@@ -956,7 +986,7 @@ export class MousePickPlugin extends BasePlugin {
 
         // 如果对象应该被排除，直接返回
         if (this.isExcludedFromHighlight(object)) {
-            console.log('🚫 对象被排除高亮:', object.name, object.type)
+            console.log("🚫 对象被排除高亮:", object.name, object.type)
             return
         }
 
@@ -966,7 +996,7 @@ export class MousePickPlugin extends BasePlugin {
         // 创建新的边框高亮
         const outline = this.createOutlineForObject(object)
         if (!outline || !this.scene) {
-            console.warn('❌ 无法为对象创建边框高亮:', object.name)
+            console.warn("❌ 无法为对象创建边框高亮:", object.name)
             return
         }
 
@@ -977,10 +1007,10 @@ export class MousePickPlugin extends BasePlugin {
         this.highlightedObject = object
         this.highlightOutline = outline
 
-        console.log('✨ 对象高亮成功:', {
+        console.log("✨ 对象高亮成功:", {
             name: this.getModelName(object),
             type: object.type,
-            id: object.id
+            id: object.id,
         })
     }
 
@@ -1040,6 +1070,13 @@ export class MousePickPlugin extends BasePlugin {
     }
 
     /**
+     * 获取拾取模式
+     */
+    public getPickMode(): string {
+        return this.config.mode
+    }
+
+    /**
      * 设置拾取容差
      */
     public setTolerance(tolerance: number): void {
@@ -1085,7 +1122,7 @@ export class MousePickPlugin extends BasePlugin {
             this.clearOutlineHighlight()
         }
 
-        console.log(`🔆 轮廓高亮已${enable ? '启用' : '禁用'}`)
+        console.log(`🔆 轮廓高亮已${enable ? "启用" : "禁用"}`)
     }
 
     /**
@@ -1111,7 +1148,7 @@ export class MousePickPlugin extends BasePlugin {
             // 移除调试射线
             this.scene.remove(this.debugRayLine)
             this.debugRayLine.geometry.dispose()
-                ; (this.debugRayLine.material as THREE.Material).dispose()
+            ;(this.debugRayLine.material as THREE.Material).dispose()
             this.debugRayLine = null
         }
     }
@@ -1328,14 +1365,30 @@ export class MousePickPlugin extends BasePlugin {
     private isBuildingObject(object: THREE.Object3D): boolean {
         // 定义建筑相关关键词
         const buildingKeywords = [
-            'building', 'buildings', '建筑', '构筑物', '楼', '大楼', '楼房',
-            'house', 'office', 'tower', 'mall', 'center', 'complex',
-            '办公楼', '住宅楼', '商场', '中心', '综合体', '写字楼'
+            "building",
+            "buildings",
+            "建筑",
+            "构筑物",
+            "楼",
+            "大楼",
+            "楼房",
+            "house",
+            "office",
+            "tower",
+            "mall",
+            "center",
+            "complex",
+            "办公楼",
+            "住宅楼",
+            "商场",
+            "中心",
+            "综合体",
+            "写字楼",
         ]
 
         // 1. 检查对象的userData是否标记为建筑模型（ResourceReaderPlugin设置的）
         let current = object
-        while (current && current.type !== 'Scene') {
+        while (current && current.type !== "Scene") {
             if (current.userData?.isBuildingModel === true) {
                 return true
             }
@@ -1350,7 +1403,7 @@ export class MousePickPlugin extends BasePlugin {
 
         // 3. 向上遍历父对象查找建筑根节点
         let parent = object.parent
-        while (parent && parent.type !== 'Scene') {
+        while (parent && parent.type !== "Scene") {
             const parentName = this.getModelName(parent).toLowerCase()
             if (buildingKeywords.some(keyword => parentName.includes(keyword))) {
                 return true
@@ -1366,16 +1419,32 @@ export class MousePickPlugin extends BasePlugin {
      */
     private findBuildingRoot(object: THREE.Object3D): THREE.Object3D | null {
         const buildingKeywords = [
-            'building', 'buildings', '建筑', '构筑物', '楼', '大楼', '楼房',
-            'house', 'office', 'tower', 'mall', 'center', 'complex',
-            '办公楼', '住宅楼', '商场', '中心', '综合体', '写字楼'
+            "building",
+            "buildings",
+            "建筑",
+            "构筑物",
+            "楼",
+            "大楼",
+            "楼房",
+            "house",
+            "office",
+            "tower",
+            "mall",
+            "center",
+            "complex",
+            "办公楼",
+            "住宅楼",
+            "商场",
+            "中心",
+            "综合体",
+            "写字楼",
         ]
 
         let current = object
         let buildingRoot = null
 
         // 向上遍历查找建筑根节点
-        while (current && current.type !== 'Scene') {
+        while (current && current.type !== "Scene") {
             // 1. 优先检查是否有建筑模型标记（ResourceReaderPlugin设置的）
             if (current.userData?.isBuildingModel === true) {
                 buildingRoot = current
@@ -1401,27 +1470,45 @@ export class MousePickPlugin extends BasePlugin {
 
         // 外立面关键词（包含ResourceReaderPlugin中使用的MASK关键字）
         const facadeKeywords = [
-            'mask', 'masks', // ResourceReaderPlugin中使用的外立面标识
-            'facade', 'facades', '外立面', '立面',
-            'exterior', 'wall', 'walls', 'curtain', '幕墙', '外墙',
-            'cladding', 'skin', 'envelope', '外包围', '建筑表皮',
-            'outer', 'outside', 'external',
-            'facadegroup', 'facade_group' // 可能的组名称
+            "mask",
+            "masks", // ResourceReaderPlugin中使用的外立面标识
+            "facade",
+            "facades",
+            "外立面",
+            "立面",
+            "exterior",
+            "wall",
+            "walls",
+            "curtain",
+            "幕墙",
+            "外墙",
+            "cladding",
+            "skin",
+            "envelope",
+            "外包围",
+            "建筑表皮",
+            "outer",
+            "outside",
+            "external",
+            "facadegroup",
+            "facade_group", // 可能的组名称
         ]
 
-        buildingRoot.traverse((child) => {
+        buildingRoot.traverse(child => {
             const name = this.getModelName(child).toLowerCase()
 
             // 1. 查找外立面组（可能是由ResourceReaderPlugin创建的）
-            if (child.type === 'Group' && facadeKeywords.some(keyword => name.includes(keyword))) {
+            if (child.type === "Group" && facadeKeywords.some(keyword => name.includes(keyword))) {
                 facades.push(child)
                 console.log(`🎯 找到外立面组: ${this.getModelName(child)} (${child.type})`)
                 return // 找到外立面组，不需要继续遍历其子节点
             }
 
             // 2. 查找单独的外立面网格对象
-            if ((child.type === 'Mesh' || child.type === 'SkinnedMesh') &&
-                facadeKeywords.some(keyword => name.includes(keyword))) {
+            if (
+                (child.type === "Mesh" || child.type === "SkinnedMesh") &&
+                facadeKeywords.some(keyword => name.includes(keyword))
+            ) {
                 facades.push(child)
                 console.log(`🎯 找到外立面网格: ${this.getModelName(child)} (${child.type})`)
             }
@@ -1437,7 +1524,7 @@ export class MousePickPlugin extends BasePlugin {
     private hideBuildingFacades(facades: THREE.Object3D[]): void {
         facades.forEach(facade => {
             facade.visible = false
-            this.hiddenFacades.push(facade)
+            this.facades.push(facade)
         })
     }
 
@@ -1445,10 +1532,10 @@ export class MousePickPlugin extends BasePlugin {
      * 显示建筑外立面
      */
     private showBuildingFacades(): void {
-        this.hiddenFacades.forEach(facade => {
+        this.facades.forEach(facade => {
             facade.visible = true
         })
-        this.hiddenFacades = []
+        this.facades = []
     }
 
     /**
@@ -1468,20 +1555,20 @@ export class MousePickPlugin extends BasePlugin {
         }
 
         if (!objectToCheck) {
-            console.warn('⚠️ 没有可操作的对象来打开建筑')
+            console.warn("⚠️ 没有可操作的对象来打开建筑")
             return
         }
 
         // 检查对象是否属于建筑
         if (!this.isBuildingObject(objectToCheck)) {
-            console.log('🚫 选中的对象不属于建筑:', objectToCheck.name)
+            console.log("🚫 选中的对象不属于建筑:", objectToCheck.name)
             return
         }
 
         // 查找建筑根对象
         const buildingRoot = this.findBuildingRoot(objectToCheck)
         if (!buildingRoot) {
-            console.warn('❌ 无法找到建筑根对象')
+            console.warn("❌ 无法找到建筑根对象")
             return
         }
 
@@ -1493,19 +1580,19 @@ export class MousePickPlugin extends BasePlugin {
         // 查找并隐藏外立面
         const facades = this.findBuildingFacades(buildingRoot)
         if (facades.length === 0) {
-            console.warn('⚠️ 未找到建筑外立面对象')
-            console.log('🔍 调试信息 - 建筑根对象结构:')
-            console.log('建筑根对象名称:', buildingRoot.name)
-            console.log('建筑根对象userData:', buildingRoot.userData)
+            console.warn("⚠️ 未找到建筑外立面对象")
+            console.log("🔍 调试信息 - 建筑根对象结构:")
+            console.log("建筑根对象名称:", buildingRoot.name)
+            console.log("建筑根对象userData:", buildingRoot.userData)
 
             // 打印所有子对象的名称用于调试
             const childNames: string[] = []
-            buildingRoot.traverse((child) => {
+            buildingRoot.traverse(child => {
                 if (child !== buildingRoot) {
                     childNames.push(`${child.name} (${child.type})`)
                 }
             })
-            console.log('所有子对象:', childNames)
+            console.log("所有子对象:", childNames)
             return
         }
 
@@ -1521,19 +1608,19 @@ export class MousePickPlugin extends BasePlugin {
             building: {
                 id: buildingRoot.id,
                 name: this.getModelName(buildingRoot),
-                type: buildingRoot.type
+                type: buildingRoot.type,
             },
-            hiddenFacades: facades.map(facade => ({
+            facades: facades.map(facade => ({
                 id: facade.id,
                 name: this.getModelName(facade),
-                type: facade.type
+                type: facade.type,
             })),
-            timestamp: Date.now()
+            timestamp: Date.now(),
         })
 
-        console.log('🏢 建筑已打开:', {
+        console.log("🏢 建筑已打开:", {
             building: this.getModelName(buildingRoot),
-            hiddenFacades: facades.length
+            facades: facades.length,
         })
     }
 
@@ -1542,7 +1629,7 @@ export class MousePickPlugin extends BasePlugin {
      */
     public closeBuilding(): void {
         if (!this.buildingMode || !this.openedBuilding) {
-            console.log('📋 当前没有打开的建筑')
+            console.log("📋 当前没有打开的建筑")
             return
         }
 
@@ -1554,12 +1641,12 @@ export class MousePickPlugin extends BasePlugin {
             building: {
                 id: this.openedBuilding.id,
                 name: this.getModelName(this.openedBuilding),
-                type: this.openedBuilding.type
+                type: this.openedBuilding.type,
             },
-            timestamp: Date.now()
+            timestamp: Date.now(),
         })
 
-        console.log('🏢 建筑已关闭:', this.getModelName(this.openedBuilding))
+        console.log("🏢 建筑已关闭:", this.getModelName(this.openedBuilding))
 
         // 重置状态
         this.openedBuilding = null
@@ -1595,7 +1682,7 @@ export class MousePickPlugin extends BasePlugin {
      * 获取对象的模型名称（优先从userData.modelName读取）
      */
     private getModelName(object: THREE.Object3D): string {
-        if (!object) return '未命名模型'
+        if (!object) return "未命名模型"
 
         // 优先使用userData.modelName
         if (object.userData && object.userData.modelName) {
@@ -1603,14 +1690,14 @@ export class MousePickPlugin extends BasePlugin {
         }
 
         // 向后兼容：如果userData.modelName不存在，使用object.name
-        return object.name || '未命名模型'
+        return object.name || "未命名模型"
     }
 
     // 检测是不是拾取到空白区域
     private isPickEmptyArea(results: PickResult[]): boolean {
         // 如果拾取结果里面只包含天空盒和地板则认定为拾取到空白区域
         for (const result of results) {
-            if (result.object.name !== 'skyBox' && result.object.name !== 'ground') {
+            if (result.object.name !== "skyBox" && result.object.name !== "ground") {
                 return false
             }
         }
@@ -1621,10 +1708,24 @@ export class MousePickPlugin extends BasePlugin {
     private isPickedBuilding(results: PickResult[]): boolean {
         // 如果拾取结果里面包含建筑则认定为拾取到建筑
         for (const result of results) {
-            if (result.object.name.toLocaleLowerCase().includes('building')) {
+            if (result.object.name.toLocaleLowerCase().includes("building")) {
                 return true
             }
         }
         return false
+    }
+
+    /**
+     * 获取当前的点集
+     */
+    public getLinePoints(): THREE.Vector3[] {
+        return this.linePoints
+    }
+
+    /**
+     * 清空点集
+     */
+    public clearLinePoints(): void {
+        this.linePoints = []
     }
 }

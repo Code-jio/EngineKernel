@@ -30,13 +30,13 @@ export class AnimationControls extends BasePlugin {
 
     // 后续功能扩展 动画播放，动画暂停，循环播放，动画状态重置，动画过渡
     // 上一帧，下一帧，动画关键帧轨道剪辑
-    nextFrame() {}
+    nextFrame() { }
     // 下一帧
-    prevFrame() {}
+    prevFrame() { }
 
-    reset() {}
+    reset() { }
 
-    pause() {}
+    pause() { }
 
     play(options: Object | null) {
         // 
@@ -53,8 +53,8 @@ export class AnimationControls extends BasePlugin {
         } else {
             options = defaultOptions
         }
-    
-        this.action.enabled = true 
+
+        this.action.enabled = true
 
 
     }

@@ -1,6 +1,6 @@
 // LOD多层次渲染插件
 import { THREE, BasePlugin } from "../basePlugin"
-import eventBus from '../../eventBus/eventBus'
+import eventBus from "../../eventBus/eventBus"
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls"
 
 export class LODPlugin extends BasePlugin {
@@ -21,7 +21,7 @@ export class LODPlugin extends BasePlugin {
     public initialize() {
         // 注册相机移动事件监听器
         eventBus.on("CAMERA_MOVE", this.updateLODLevels.bind(this))
-        eventBus.on('MODEL_LOADED', this.handleModelLoaded)
+        eventBus.on("MODEL_LOADED", this.handleModelLoaded)
         this.updateLODLevels()
     }
 
@@ -39,7 +39,7 @@ export class LODPlugin extends BasePlugin {
 
     public destroy() {
         eventBus.off("CAMERA_MOVE", this.updateLODLevels)
-        eventBus.off('MODEL_LOADED', this.handleModelLoaded)
+        eventBus.off("MODEL_LOADED", this.handleModelLoaded)
         this.lodGroups.clear()
     }
 

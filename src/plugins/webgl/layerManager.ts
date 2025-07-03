@@ -3,13 +3,13 @@ import eventBus from "../../eventBus/eventBus"
 
 // 预定义图层类型
 export enum LayerType {
-    BASE_SCENE = 'baseScene',           // 基础场景图层
-    BASE_MODEL = 'baseModel',           // 基础模型图层
-    MODEL_ANNOTATION = 'modelAnnotation', // 模型标注图层
-    SPRITE = 'sprite',                  // 精灵图层
-    CSS3D = 'css3d',                   // CSS3D图层
-    IMAGE_ANNOTATION = 'imageAnnotation', // 图片标注图层
-    CUSTOM = 'custom'                   // 自定义图层
+    BASE_SCENE = "baseScene", // 基础场景图层
+    BASE_MODEL = "baseModel", // 基础模型图层
+    MODEL_ANNOTATION = "modelAnnotation", // 模型标注图层
+    SPRITE = "sprite", // 精灵图层
+    CSS3D = "css3d", // CSS3D图层
+    IMAGE_ANNOTATION = "imageAnnotation", // 图片标注图层
+    CUSTOM = "custom", // 自定义图层
 }
 
 // 图层配置接口
@@ -42,88 +42,88 @@ interface Layer {
 
 // 图层事件类型
 interface LayerEvents {
-    'layer:created': { layer: Layer }
-    'layer:deleted': { layerId: string }
-    'layer:visibility-changed': { layerId: string, visible: boolean }
-    'layer:order-changed': { layerId: string, oldOrder: number, newOrder: number }
-    'layer:opacity-changed': { layerId: string, opacity: number }
-    'layer:object-added': { layerId: string, object: THREE.Object3D }
-    'layer:object-removed': { layerId: string, object: THREE.Object3D }
-    'layers:reordered': { layers: string[] }
+    "layer:created": { layer: Layer }
+    "layer:deleted": { layerId: string }
+    "layer:visibility-changed": { layerId: string; visible: boolean }
+    "layer:order-changed": { layerId: string; oldOrder: number; newOrder: number }
+    "layer:opacity-changed": { layerId: string; opacity: number }
+    "layer:object-added": { layerId: string; object: THREE.Object3D }
+    "layer:object-removed": { layerId: string; object: THREE.Object3D }
+    "layers:reordered": { layers: string[] }
 }
 
 // 默认图层配置
-const DEFAULT_LAYERS: Omit<LayerConfig, 'id'>[] = [
+const DEFAULT_LAYERS: Omit<LayerConfig, "id">[] = [
     {
-        name: '基础场景',
+        name: "基础场景",
         type: LayerType.BASE_SCENE,
         renderOrder: 0,
         visible: true,
         opacity: 1.0,
-        metadata: { description: '天空盒、地面、环境等基础场景元素' }
+        metadata: { description: "天空盒、地面、环境等基础场景元素" },
     },
     {
-        name: '基础模型',
+        name: "基础模型",
         type: LayerType.BASE_MODEL,
         renderOrder: 100,
         visible: true,
         opacity: 1.0,
-        metadata: { description: '室内外模型等基础几何体' }
+        metadata: { description: "室内外模型等基础几何体" },
     },
     {
-        name: '模型标注',
+        name: "模型标注",
         type: LayerType.MODEL_ANNOTATION,
         renderOrder: 200,
         visible: true,
         opacity: 1.0,
-        metadata: { description: '3D模型形式的标注和标记' }
+        metadata: { description: "3D模型形式的标注和标记" },
     },
     {
-        name: '精灵图层',
+        name: "精灵图层",
         type: LayerType.SPRITE,
         renderOrder: 300,
         visible: true,
         opacity: 1.0,
-        metadata: { description: '2D精灵图和始终面向相机的元素' }
+        metadata: { description: "2D精灵图和始终面向相机的元素" },
     },
     {
-        name: 'CSS3D图层',
+        name: "CSS3D图层",
         type: LayerType.CSS3D,
         renderOrder: 400,
         visible: true,
         opacity: 1.0,
-        metadata: { description: 'HTML元素转换为3D空间的对象' }
+        metadata: { description: "HTML元素转换为3D空间的对象" },
     },
     {
-        name: '图片标注',
+        name: "图片标注",
         type: LayerType.IMAGE_ANNOTATION,
         renderOrder: 500,
         visible: true,
         opacity: 1.0,
-        metadata: { description: '图片形式的标注和信息面板' }
-    }
+        metadata: { description: "图片形式的标注和信息面板" },
+    },
 ]
 
 export class LayerManager extends BasePlugin {
     private layers: Map<string, Layer> = new Map()
     private scene: THREE.Scene | null = null
     private layerOrder: string[] = []
-    
+
     constructor(meta: any) {
         super(meta)
-        
+
         // 监听场景就绪事件
-        eventBus.on('scene-ready', this.onSceneReady.bind(this))
-        console.log('🎭 LayerManager初始化完成')
+        eventBus.on("scene-ready", this.onSceneReady.bind(this))
+        console.log("🎭 LayerManager初始化完成")
     }
 
     /**
      * 场景就绪时的回调
      */
-    private onSceneReady(data: { scene: THREE.Scene, camera: THREE.Camera, renderer: THREE.WebGLRenderer }) {
+    private onSceneReady(data: { scene: THREE.Scene; camera: THREE.Camera; renderer: THREE.WebGLRenderer }) {
         this.scene = data.scene
         this.initializeDefaultLayers()
-        console.log('🎭 LayerManager已连接到场景，默认图层已创建')
+        console.log("🎭 LayerManager已连接到场景，默认图层已创建")
     }
 
     /**
@@ -131,7 +131,7 @@ export class LayerManager extends BasePlugin {
      */
     private initializeDefaultLayers(): void {
         if (!this.scene) {
-            console.warn('⚠️ 场景未就绪，无法创建默认图层')
+            console.warn("⚠️ 场景未就绪，无法创建默认图层")
             return
         }
 
@@ -139,7 +139,7 @@ export class LayerManager extends BasePlugin {
             const layerId = `default_${config.type}_${index}`
             this.createLayer({
                 id: layerId,
-                ...config
+                ...config,
             })
         })
 
@@ -153,7 +153,7 @@ export class LayerManager extends BasePlugin {
         try {
             // 验证配置
             if (!config.id || !config.name || !config.type) {
-                throw new Error('图层配置无效：id、name、type为必填项')
+                throw new Error("图层配置无效：id、name、type为必填项")
             }
 
             if (this.layers.has(config.id)) {
@@ -170,10 +170,10 @@ export class LayerManager extends BasePlugin {
             group.name = config.name
             group.visible = config.visible !== false
             group.renderOrder = config.renderOrder || 0
-            
+
             // 设置透明度
             if (config.opacity !== undefined && config.opacity < 1) {
-                group.traverse((child) => {
+                group.traverse(child => {
                     if (child instanceof THREE.Mesh && child.material) {
                         const material = Array.isArray(child.material) ? child.material : [child.material]
                         material.forEach(mat => {
@@ -197,7 +197,7 @@ export class LayerManager extends BasePlugin {
                 children: new Set(),
                 metadata: config.metadata || {},
                 created: Date.now(),
-                updated: Date.now()
+                updated: Date.now(),
             }
 
             // 添加到场景
@@ -214,15 +214,14 @@ export class LayerManager extends BasePlugin {
             // 存储图层
             this.layers.set(config.id, layer)
             this.layerOrder.push(config.id)
-            
+
             // 触发事件
-            eventBus.emit('layer:created', { layer })
-            
+            eventBus.emit("layer:created", { layer })
+
             console.log(`✅ 图层 "${config.name}" (${config.id}) 创建成功`)
             return layer
-
         } catch (error: any) {
-            console.error('❌ 创建图层失败:', error.message)
+            console.error("❌ 创建图层失败:", error.message)
             return null
         }
     }
@@ -265,13 +264,12 @@ export class LayerManager extends BasePlugin {
             }
 
             // 触发事件
-            eventBus.emit('layer:deleted', { layerId })
-            
+            eventBus.emit("layer:deleted", { layerId })
+
             console.log(`✅ 图层 "${layer.name}" (${layerId}) 已删除`)
             return true
-
         } catch (error: any) {
-            console.error('❌ 删除图层失败:', error.message)
+            console.error("❌ 删除图层失败:", error.message)
             return false
         }
     }
@@ -280,7 +278,7 @@ export class LayerManager extends BasePlugin {
      * 清理图层中的THREE对象
      */
     private disposeLayerObjects(group: THREE.Group): void {
-        group.traverse((object) => {
+        group.traverse(object => {
             if (object instanceof THREE.Mesh) {
                 if (object.geometry) {
                     object.geometry.dispose()
@@ -313,13 +311,12 @@ export class LayerManager extends BasePlugin {
             layer.updated = Date.now()
 
             // 触发事件
-            eventBus.emit('layer:visibility-changed', { layerId, visible })
-            
-            console.log(`✅ 图层 "${layer.name}" ${visible ? '已显示' : '已隐藏'}`)
-            return true
+            eventBus.emit("layer:visibility-changed", { layerId, visible })
 
+            console.log(`✅ 图层 "${layer.name}" ${visible ? "已显示" : "已隐藏"}`)
+            return true
         } catch (error: any) {
-            console.error('❌ 设置图层可见性失败:', error.message)
+            console.error("❌ 设置图层可见性失败:", error.message)
             return false
         }
     }
@@ -335,14 +332,14 @@ export class LayerManager extends BasePlugin {
             }
 
             if (opacity < 0 || opacity > 1) {
-                throw new Error('透明度值必须在0-1之间')
+                throw new Error("透明度值必须在0-1之间")
             }
 
             layer.opacity = opacity
             layer.updated = Date.now()
 
             // 更新图层中所有材质的透明度
-            layer.group.traverse((child) => {
+            layer.group.traverse(child => {
                 if (child instanceof THREE.Mesh && child.material) {
                     const materials = Array.isArray(child.material) ? child.material : [child.material]
                     materials.forEach(material => {
@@ -353,13 +350,12 @@ export class LayerManager extends BasePlugin {
             })
 
             // 触发事件
-            eventBus.emit('layer:opacity-changed', { layerId, opacity })
-            
+            eventBus.emit("layer:opacity-changed", { layerId, opacity })
+
             console.log(`✅ 图层 "${layer.name}" 透明度设置为 ${opacity}`)
             return true
-
         } catch (error: any) {
-            console.error('❌ 设置图层透明度失败:', error.message)
+            console.error("❌ 设置图层透明度失败:", error.message)
             return false
         }
     }
@@ -380,13 +376,12 @@ export class LayerManager extends BasePlugin {
             layer.updated = Date.now()
 
             // 触发事件
-            eventBus.emit('layer:order-changed', { layerId, oldOrder, newOrder: renderOrder })
-            
+            eventBus.emit("layer:order-changed", { layerId, oldOrder, newOrder: renderOrder })
+
             console.log(`✅ 图层 "${layer.name}" 渲染顺序设置为 ${renderOrder}`)
             return true
-
         } catch (error: any) {
-            console.error('❌ 设置图层渲染顺序失败:', error.message)
+            console.error("❌ 设置图层渲染顺序失败:", error.message)
             return false
         }
     }
@@ -402,7 +397,7 @@ export class LayerManager extends BasePlugin {
             }
 
             if (newIndex < 0 || newIndex >= this.layerOrder.length) {
-                throw new Error('新位置超出范围')
+                throw new Error("新位置超出范围")
             }
 
             if (currentIndex === newIndex) {
@@ -414,14 +409,13 @@ export class LayerManager extends BasePlugin {
             this.layerOrder.splice(newIndex, 0, layerId)
 
             // 触发事件
-            eventBus.emit('layers:reordered', { layers: [...this.layerOrder] })
-            
+            eventBus.emit("layers:reordered", { layers: [...this.layerOrder] })
+
             const layer = this.layers.get(layerId)
             console.log(`✅ 图层 "${layer?.name}" 移动到位置 ${newIndex}`)
             return true
-
         } catch (error: any) {
-            console.error('❌ 移动图层失败:', error.message)
+            console.error("❌ 移动图层失败:", error.message)
             return false
         }
     }
@@ -440,13 +434,12 @@ export class LayerManager extends BasePlugin {
             layer.updated = Date.now()
 
             // 触发事件
-            eventBus.emit('layer:object-added', { layerId, object })
-            
+            eventBus.emit("layer:object-added", { layerId, object })
+
             console.log(`✅ 对象已添加到图层 "${layer.name}"`)
             return true
-
         } catch (error: any) {
-            console.error('❌ 添加对象到图层失败:', error.message)
+            console.error("❌ 添加对象到图层失败:", error.message)
             return false
         }
     }
@@ -465,13 +458,12 @@ export class LayerManager extends BasePlugin {
             layer.updated = Date.now()
 
             // 触发事件
-            eventBus.emit('layer:object-removed', { layerId, object })
-            
+            eventBus.emit("layer:object-removed", { layerId, object })
+
             console.log(`✅ 对象已从图层 "${layer.name}" 移除`)
             return true
-
         } catch (error: any) {
-            console.error('❌ 从图层移除对象失败:', error.message)
+            console.error("❌ 从图层移除对象失败:", error.message)
             return false
         }
     }
@@ -508,9 +500,7 @@ export class LayerManager extends BasePlugin {
      * 根据名称查找图层
      */
     public findLayersByName(name: string): Layer[] {
-        return Array.from(this.layers.values()).filter(layer => 
-            layer.name.toLowerCase().includes(name.toLowerCase())
-        )
+        return Array.from(this.layers.values()).filter(layer => layer.name.toLowerCase().includes(name.toLowerCase()))
     }
 
     /**
@@ -521,14 +511,14 @@ export class LayerManager extends BasePlugin {
             totalLayers: this.layers.size,
             visibleLayers: 0,
             layersByType: {} as { [key: string]: number },
-            totalObjects: 0
+            totalObjects: 0,
         }
 
         this.layers.forEach(layer => {
             if (layer.visible) stats.visibleLayers++
-            
+
             stats.layersByType[layer.type] = (stats.layersByType[layer.type] || 0) + 1
-            
+
             // 计算图层中的对象数量
             layer.group.traverse(() => {
                 stats.totalObjects++
@@ -560,7 +550,7 @@ export class LayerManager extends BasePlugin {
      * 获取默认图层ID（按类型）
      */
     public getDefaultLayerId(type: LayerType): string | null {
-        const layer = this.getLayersByType(type).find(l => l.id.startsWith('default_'))
+        const layer = this.getLayersByType(type).find(l => l.id.startsWith("default_"))
         return layer ? layer.id : null
     }
 
@@ -582,9 +572,9 @@ export class LayerManager extends BasePlugin {
      */
     public exportLayerConfig(): any {
         const config = {
-            version: '1.0',
+            version: "1.0",
             created: Date.now(),
-            layers: [] as any[]
+            layers: [] as any[],
         }
 
         this.layerOrder.forEach(layerId => {
@@ -598,7 +588,7 @@ export class LayerManager extends BasePlugin {
                     renderOrder: layer.renderOrder,
                     opacity: layer.opacity,
                     parent: layer.parent,
-                    metadata: layer.metadata
+                    metadata: layer.metadata,
                 })
             }
         })
@@ -612,27 +602,26 @@ export class LayerManager extends BasePlugin {
     public importLayerConfig(config: any): boolean {
         try {
             if (!config.layers || !Array.isArray(config.layers)) {
-                throw new Error('无效的图层配置格式')
+                throw new Error("无效的图层配置格式")
             }
 
             // 清除现有图层（除了默认图层）
-            const layersToDelete = Array.from(this.layers.keys()).filter(id => !id.startsWith('default_'))
+            const layersToDelete = Array.from(this.layers.keys()).filter(id => !id.startsWith("default_"))
             layersToDelete.forEach(layerId => {
                 this.deleteLayer(layerId)
             })
 
             // 创建导入的图层
             config.layers.forEach((layerConfig: any) => {
-                if (!layerConfig.id.startsWith('default_')) {
+                if (!layerConfig.id.startsWith("default_")) {
                     this.createLayer(layerConfig)
                 }
             })
 
             console.log(`✅ 成功导入 ${config.layers.length} 个图层配置`)
             return true
-
         } catch (error: any) {
-            console.error('❌ 导入图层配置失败:', error.message)
+            console.error("❌ 导入图层配置失败:", error.message)
             return false
         }
     }
@@ -653,9 +642,9 @@ export class LayerManager extends BasePlugin {
         this.scene = null
 
         // 移除事件监听
-        eventBus.off('scene-ready', this.onSceneReady.bind(this))
+        eventBus.off("scene-ready", this.onSceneReady.bind(this))
 
-        console.log('🧹 LayerManager已销毁')
+        console.log("🧹 LayerManager已销毁")
     }
 
     /**

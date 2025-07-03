@@ -7,18 +7,18 @@ import { THREE } from "../basePlugin";
 
 // 水体配置接口
 interface WaterMarkerOptions {
-    height: number;                    // 水体高度
-    contour: THREE.Vector3[];         // 轮廓坐标数组
-    position?: THREE.Vector3;         // 水体位置
-    waterColor?: number;              // 水体颜色
-    transparency?: number;            // 透明度 (0-1)
-    reflectivity?: number;            // 反射强度 (0-1)
-    refractionRatio?: number;         // 折射比率
-    flowSpeed?: number;               // 水流速度
-    waveScale?: number;               // 波纹缩放
-    distortionScale?: number;         // 扭曲强度
-    enableAnimation?: boolean;        // 是否启用动画
-    waterNormalsTexture?: string;     // 水面法线贴图路径
+    height: number; // 水体高度
+    contour: THREE.Vector3[]; // 轮廓坐标数组
+    position?: THREE.Vector3; // 水体位置
+    waterColor?: number; // 水体颜色
+    transparency?: number; // 透明度 (0-1)
+    reflectivity?: number; // 反射强度 (0-1)
+    refractionRatio?: number; // 折射比率
+    flowSpeed?: number; // 水流速度
+    waveScale?: number; // 波纹缩放
+    distortionScale?: number; // 扭曲强度
+    enableAnimation?: boolean; // 是否启用动画
+    waterNormalsTexture?: string; // 水面法线贴图路径
 }
 
 export default class WaterMarker {
@@ -47,12 +47,12 @@ export default class WaterMarker {
             waveScale: 1.0,
             distortionScale: 3.7,
             enableAnimation: true,
-            ...options
+            ...options,
         };
 
         this.group = new THREE.Group();
         this.group.position.copy(this.options.position!);
-        
+
         this.validateOptions();
         this.init();
     }
@@ -62,11 +62,11 @@ export default class WaterMarker {
      */
     private validateOptions(): void {
         if (!this.options.contour || this.options.contour.length < 3) {
-            throw new Error('WaterMarker: 轮廓至少需要3个点');
+            throw new Error("WaterMarker: 轮廓至少需要3个点");
         }
 
         if (this.options.height <= 0) {
-            throw new Error('WaterMarker: 高度必须大于0');
+            throw new Error("WaterMarker: 高度必须大于0");
         }
 
         console.log(`🌊 WaterMarker 初始化: 轮廓点数=${this.options.contour.length}, 高度=${this.options.height}`);
@@ -78,7 +78,7 @@ export default class WaterMarker {
     private init(): void {
         this.createMaterials();
         this.createGeometry();
-        console.log('✅ WaterMarker 初始化完成');
+        console.log("✅ WaterMarker 初始化完成");
     }
 
     /**
@@ -87,13 +87,13 @@ export default class WaterMarker {
     private createMaterials(): void {
         // 创建水面材质（顶面）
         this.createWaterMaterial();
-        
+
         // 创建侧面材质（半透明）
         this.sideMaterial = new THREE.MeshPhongMaterial({
             color: this.options.waterColor,
             transparent: true,
             opacity: this.options.transparency! * 0.3,
-            side: THREE.DoubleSide
+            side: THREE.DoubleSide,
         });
 
         // 创建底面材质（更深的水色）
@@ -101,7 +101,7 @@ export default class WaterMarker {
             color: this.darkenColor(this.options.waterColor!, 0.3),
             transparent: true,
             opacity: this.options.transparency! * 0.8,
-            side: THREE.FrontSide
+            side: THREE.FrontSide,
         });
     }
 
@@ -173,12 +173,12 @@ export default class WaterMarker {
                 transparency: { value: this.options.transparency! },
                 reflectivity: { value: this.options.reflectivity! },
                 waveScale: { value: this.options.waveScale! },
-                distortionScale: { value: this.options.distortionScale! }
+                distortionScale: { value: this.options.distortionScale! },
             },
             vertexShader: waterVertexShader,
             fragmentShader: waterFragmentShader,
             transparent: true,
-            side: THREE.DoubleSide
+            side: THREE.DoubleSide,
         });
     }
 
@@ -191,7 +191,7 @@ export default class WaterMarker {
 
         // 确保材质已创建
         if (!this.waterMaterial || !this.sideMaterial || !this.bottomMaterial) {
-            throw new Error('材质未正确初始化');
+            throw new Error("材质未正确初始化");
         }
 
         // 创建顶面和底面几何体
@@ -200,12 +200,12 @@ export default class WaterMarker {
 
         // 创建水面网格（顶面）
         this.waterMesh = new THREE.Mesh(topGeometry, this.waterMaterial);
-        this.waterMesh.name = 'WaterSurface';
+        this.waterMesh.name = "WaterSurface";
         this.group.add(this.waterMesh);
 
         // 创建底面网格
         this.bottomMesh = new THREE.Mesh(bottomGeometry, this.bottomMaterial);
-        this.bottomMesh.name = 'WaterBottom';
+        this.bottomMesh.name = "WaterBottom";
         this.group.add(this.bottomMesh);
 
         // 创建侧面网格
@@ -218,7 +218,7 @@ export default class WaterMarker {
     private createPolygonGeometry(contour: THREE.Vector3[], y: number): THREE.BufferGeometry {
         // 将三维轮廓投影到XZ平面
         const shape = new THREE.Shape();
-        
+
         if (contour.length > 0) {
             shape.moveTo(contour[0].x, contour[0].z);
             for (let i = 1; i < contour.length; i++) {
@@ -228,16 +228,16 @@ export default class WaterMarker {
         }
 
         const geometry = new THREE.ShapeGeometry(shape);
-        
+
         // 设置所有顶点的Y坐标
         const positions = geometry.attributes.position.array as Float32Array;
         for (let i = 1; i < positions.length; i += 3) {
             positions[i] = y;
         }
-        
+
         geometry.attributes.position.needsUpdate = true;
         geometry.computeVertexNormals();
-        
+
         return geometry;
     }
 
@@ -247,7 +247,7 @@ export default class WaterMarker {
     private createSideWalls(contour: THREE.Vector3[], height: number): void {
         // 确保侧面材质已创建
         if (!this.sideMaterial) {
-            throw new Error('侧面材质未正确初始化');
+            throw new Error("侧面材质未正确初始化");
         }
 
         for (let i = 0; i < contour.length; i++) {
@@ -255,27 +255,16 @@ export default class WaterMarker {
             const next = contour[(i + 1) % contour.length];
 
             // 创建侧面四边形
-            const sideGeometry = new THREE.PlaneGeometry(
-                current.distanceTo(next), 
-                height
-            );
+            const sideGeometry = new THREE.PlaneGeometry(current.distanceTo(next), height);
 
             // 计算侧面的位置和旋转
-            const midPoint = new THREE.Vector3()
-                .addVectors(current, next)
-                .multiplyScalar(0.5);
+            const midPoint = new THREE.Vector3().addVectors(current, next).multiplyScalar(0.5);
 
-            const direction = new THREE.Vector3()
-                .subVectors(next, current)
-                .normalize();
+            const direction = new THREE.Vector3().subVectors(next, current).normalize();
 
             const sideMesh = new THREE.Mesh(sideGeometry, this.sideMaterial);
             sideMesh.position.copy(midPoint);
-            sideMesh.lookAt(
-                midPoint.x + direction.x,
-                midPoint.y,
-                midPoint.z + direction.z
-            );
+            sideMesh.lookAt(midPoint.x + direction.x, midPoint.y, midPoint.z + direction.z);
             sideMesh.rotateY(Math.PI / 2);
             sideMesh.name = `WaterSide_${i}`;
 
@@ -289,9 +278,9 @@ export default class WaterMarker {
      */
     private darkenColor(color: number, factor: number): number {
         const c = new THREE.Color(color);
-        c.r *= (1 - factor);
-        c.g *= (1 - factor);
-        c.b *= (1 - factor);
+        c.r *= 1 - factor;
+        c.g *= 1 - factor;
+        c.b *= 1 - factor;
         return c.getHex();
     }
 
@@ -314,7 +303,7 @@ export default class WaterMarker {
     public addToScene(scene: THREE.Scene): void {
         this.scene = scene;
         scene.add(this.group);
-        console.log('🌊 WaterMarker 已添加到场景');
+        console.log("🌊 WaterMarker 已添加到场景");
     }
 
     /**
@@ -324,7 +313,7 @@ export default class WaterMarker {
         if (this.scene) {
             this.scene.remove(this.group);
             this.scene = null;
-            console.log('🗑️ WaterMarker 已从场景移除');
+            console.log("🗑️ WaterMarker 已从场景移除");
         }
     }
 
@@ -348,11 +337,11 @@ export default class WaterMarker {
      */
     public setWaterColor(color: number): void {
         this.options.waterColor = color;
-        
+
         if (this.waterMaterial) {
             this.waterMaterial.uniforms.waterColor.value = new THREE.Color(color);
         }
-        
+
         if (this.sideMaterial && this.sideMaterial instanceof THREE.MeshPhongMaterial) {
             this.sideMaterial.color = new THREE.Color(color);
         }
@@ -403,7 +392,7 @@ export default class WaterMarker {
      */
     public updateContour(newContour: THREE.Vector3[]): void {
         if (newContour.length < 3) {
-            console.warn('⚠️ 轮廓至少需要3个点');
+            console.warn("⚠️ 轮廓至少需要3个点");
             return;
         }
 
@@ -414,7 +403,7 @@ export default class WaterMarker {
 
         // 重新创建几何体
         this.createGeometry();
-        
+
         console.log(`🔄 轮廓已更新: ${newContour.length} 个点`);
     }
 
@@ -474,6 +463,6 @@ export default class WaterMarker {
             this.bottomMaterial.dispose();
         }
 
-        console.log('🗑️ WaterMarker 资源已释放');
+        console.log("🗑️ WaterMarker 资源已释放");
     }
 }
