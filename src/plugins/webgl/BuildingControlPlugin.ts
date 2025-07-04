@@ -7,6 +7,7 @@
 import { THREE, BasePlugin } from "../basePlugin"
 import * as TWEEN from "@tweenjs/tween.js"
 import eventBus from "../../eventBus/eventBus"
+import { debug } from "console"
 
 /**
  * 楼层状态枚举
@@ -1233,6 +1234,9 @@ export class BuildingControlPlugin extends BasePlugin {
         // 停止所有活动的动画
         this.stopAllAnimations()
 
+        // 恢复所有楼层透明度
+        this.restoreAllFloorOpacity()
+
         // 执行收起动画
         this.executeCollapseAnimation(() => {
             // 动画完成后的回调
@@ -1241,9 +1245,6 @@ export class BuildingControlPlugin extends BasePlugin {
 
             // // 恢复外立面显示
             // this.showFacades()
-
-            // 恢复所有楼层透明度
-            this.restoreAllFloorOpacity()
 
             this.events.onCollapseComplete?.()
             console.log(`✅ 所有楼层收起完成`)
@@ -1271,6 +1272,11 @@ export class BuildingControlPlugin extends BasePlugin {
 
         // 停止所有活动的动画
         this.stopAllAnimations()
+
+        // 如果配置了自动隐藏外立面，则隐藏外立面
+        if (this.config.autoHideFacade) {
+            this.hideFacades()
+        }
 
         // 更新状态
         this.currentState = FloorState.FOCUSED
@@ -1368,7 +1374,7 @@ export class BuildingControlPlugin extends BasePlugin {
      * 使用渐进式动画，楼层依次展开，创建视觉层次感
      */
     private executeExpandAnimation(onComplete?: () => void): void {
-        const floorNumbers = Array.from(this.floors.keys()).sort((a, b) => a - b)
+        const floorNumbers = Array.from(this.floors.keys()).sort((a, b) => b - a)
         const lowestFloor = Math.min(...floorNumbers)
         const that = this
 
@@ -1446,7 +1452,7 @@ export class BuildingControlPlugin extends BasePlugin {
      * 使用反向渐进式动画，楼层依次收起
      */
     private async executeCollapseAnimation(onComplete?: () => void) {
-        const floorNumbers = Array.from(this.floors.keys()).sort((a, b) => b - a) // 从高到低收起
+        const floorNumbers = Array.from(this.floors.keys()).sort((a, b) => a - b) // 从低到高收起
         const that = this
         if (floorNumbers.length === 0) {
             console.warn("⚠️ 没有楼层可以收起")
@@ -1499,6 +1505,13 @@ export class BuildingControlPlugin extends BasePlugin {
                                     equipment.position.y = equipment.userData.originalY + deltaY
                                 }
                             })
+
+                            // 恢复外立面位置
+                            if (floorNumber == 5) {
+                                if (that.facadeGroup.userData.originalY !== undefined) {
+                                    that.facadeGroup.position.y = that.facadeGroup.userData.originalY + deltaY
+                                }
+                            }
                         })
                         .onComplete(() => {
                             // 清理房间的临时数据
@@ -1522,6 +1535,7 @@ export class BuildingControlPlugin extends BasePlugin {
                         })
 
                     this.activeTweens.add(positionTween)
+                    // debugger;
                     positionTween.start()
                 }, delay)
 
@@ -1720,12 +1734,12 @@ export class BuildingControlPlugin extends BasePlugin {
      * 隐藏外立面
      */
     private hideFacades(): void {
-        this.facades.forEach((facade: THREE.Object3D) => {
-            if (facade.visible) {
-                facade.visible = false
-                facade.position.copy(facade.userData.buildingInfo.originalPosition)
-            }
-        })
+        // this.facades.forEach((facade: THREE.Object3D) => {
+        //     if (facade.visible) {
+        //         facade.visible = false
+        //         facade.position.copy(facade.userData.buildingInfo.originalPosition)
+        //     }
+        // })
         this.facadeGroup.visible = false
     }
 
@@ -1733,9 +1747,9 @@ export class BuildingControlPlugin extends BasePlugin {
      * 显示外立面
      */
     private showFacades(): void {
-        this.facades.forEach(facade => {
-            facade.visible = true
-        })
+        // this.facades.forEach(facade => {
+        //     facade.visible = true
+        // })
         this.facadeGroup.visible = true
     }
 
