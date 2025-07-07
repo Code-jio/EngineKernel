@@ -71,6 +71,11 @@ export interface FloorControlConfig {
     cameraDistanceMultiplier: number // 相机距离倍数（基于楼层大小）
     cameraMinHeight: number // 相机最小观察距离
     restoreCameraOnUnfocus: boolean // 取消聚焦时是否恢复相机位置
+    // 设备显示控制配置
+    enableEquipmentDisplayControl: boolean // 是否启用设备显示控制
+    showEquipmentOnlyInFocusedFloor: boolean // 仅在聚焦楼层显示设备
+    showAllEquipmentWhenNotFocused: boolean // 未聚焦时显示所有设备
+    hideAllEquipmentByDefault: boolean // 默认隐藏所有设备
 }
 
 /**
@@ -146,6 +151,11 @@ export class BuildingControlPlugin extends BasePlugin {
         cameraDistanceMultiplier: 1.5,
         cameraMinHeight: 15,
         restoreCameraOnUnfocus: true,
+        // 设备显示控制默认配置
+        enableEquipmentDisplayControl: true, // 默认启用设备显示控制
+        showEquipmentOnlyInFocusedFloor: true, // 仅在聚焦楼层显示设备
+        showAllEquipmentWhenNotFocused: false, // 未聚焦时不显示所有设备
+        hideAllEquipmentByDefault: true, // 默认隐藏所有设备
     }
 
     private events: FloorControlEvents = {}
@@ -302,11 +312,20 @@ export class BuildingControlPlugin extends BasePlugin {
             // 解析并链接建筑结构（非侵入式）
             const linkSuccess = this.linkParsedStructure()
             if (linkSuccess) {
+                // 新增：根据配置设置设备初始显示状态
+                this.initializeEquipmentDisplayState()
+
                 console.log("🏗️ 建筑控制插件初始化完成")
 
                 // 输出建筑概览
                 const overview = this.getBuildingOverview()
                 console.log("📊 建筑概览:", overview)
+
+                // 输出设备显示状态概览
+                if (this.config.enableEquipmentDisplayControl) {
+                    const equipmentOverview = this.getEquipmentDisplayOverview()
+                    console.log("🔧 设备显示状态概览:", equipmentOverview)
+                }
             } else {
                 console.warn("⚠️ 建筑结构链接失败，部分功能可能不可用")
             }
@@ -1285,6 +1304,9 @@ export class BuildingControlPlugin extends BasePlugin {
         // 设置楼层透明度
         this.setFloorsOpacityForFocus(floorNumber)
 
+        // 新增：根据配置管理设备显示状态
+        this.manageEquipmentDisplayForFocus(floorNumber)
+
         // 如果启用了相机动画，则移动相机到聚焦楼层
         if (this.config.enableCameraAnimation) {
             this.animateCameraToFloor(floorNumber, () => {
@@ -1331,6 +1353,9 @@ export class BuildingControlPlugin extends BasePlugin {
         // 更新状态
         this.currentState = FloorState.EXPANDED
         this.focusedFloor = null
+
+        // 新增：根据配置管理设备显示状态（取消聚焦）
+        this.manageEquipmentDisplayForFocus(null)
 
         // 如果启用了相机恢复，则恢复相机位置
         if (this.config.restoreCameraOnUnfocus && this.originalCameraPosition) {
@@ -1618,6 +1643,134 @@ export class BuildingControlPlugin extends BasePlugin {
         //     }
         // })
         equipment.visible = opacity ? true : false
+    }
+
+    /**
+     * 设置设备显示状态（新增：设备显示控制）
+     * @param equipment 设备对象
+     * @param visible 是否显示
+     */
+    private setEquipmentVisibility(equipment: THREE.Object3D | THREE.Scene | THREE.Group, visible: boolean): void {
+        if (!this.config.enableEquipmentDisplayControl) {
+            return // 如果未启用设备显示控制，则不进行任何操作
+        }
+        
+        equipment.visible = visible
+        
+        if (this.debugMode) {
+            console.log(`🔧 设备显示状态: ${this.getModelName(equipment)} → ${visible ? '显示' : '隐藏'}`)
+        }
+    }
+
+    /**
+     * 设置楼层所有设备的显示状态
+     * @param floorNumber 楼层号
+     * @param visible 是否显示
+     */
+    private setFloorEquipmentVisibility(floorNumber: number, visible: boolean): void {
+        if (!this.config.enableEquipmentDisplayControl) {
+            return
+        }
+
+        const floor = this.floors.get(floorNumber)
+        if (!floor) {
+            return
+        }
+
+        floor.associatedEquipment.forEach(equipmentInfo => {
+            this.setEquipmentVisibility(equipmentInfo.equipment, visible)
+        })
+
+        if (this.debugMode) {
+            console.log(`🏢 楼层 ${floorNumber}F 设备显示状态: ${visible ? '显示' : '隐藏'} (${floor.associatedEquipment.length}个设备)`)
+        }
+    }
+
+    /**
+     * 设置所有设备的显示状态
+     * @param visible 是否显示
+     */
+    private setAllEquipmentVisibility(visible: boolean): void {
+        if (!this.config.enableEquipmentDisplayControl) {
+            return
+        }
+
+        this.allDevices.forEach(device => {
+            this.setEquipmentVisibility(device, visible)
+        })
+
+        if (this.debugMode) {
+            console.log(`🌍 所有设备显示状态: ${visible ? '显示' : '隐藏'} (${this.allDevices.length}个设备)`)
+        }
+    }
+
+    /**
+     * 根据楼层聚焦状态管理设备显示
+     * @param focusedFloorNumber 聚焦的楼层号，如果为null则表示未聚焦
+     */
+    private manageEquipmentDisplayForFocus(focusedFloorNumber: number | null): void {
+        if (!this.config.enableEquipmentDisplayControl) {
+            return
+        }
+
+        if (focusedFloorNumber !== null) {
+            // 有楼层聚焦
+            if (this.config.showEquipmentOnlyInFocusedFloor) {
+                // 仅显示聚焦楼层的设备
+                this.floors.forEach((floor, floorNumber) => {
+                    const shouldShow = floorNumber === focusedFloorNumber
+                    this.setFloorEquipmentVisibility(floorNumber, shouldShow)
+                })
+                console.log(`🎯 设备显示管理: 仅显示楼层 ${focusedFloorNumber}F 的设备`)
+            } else {
+                // 显示所有设备
+                this.setAllEquipmentVisibility(true)
+                console.log(`🎯 设备显示管理: 显示所有设备（聚焦楼层：${focusedFloorNumber}F）`)
+            }
+        } else {
+            // 无楼层聚焦
+            if (this.config.showAllEquipmentWhenNotFocused) {
+                // 显示所有设备
+                this.setAllEquipmentVisibility(true)
+                console.log(`🎯 设备显示管理: 显示所有设备（未聚焦状态）`)
+            } else {
+                // 隐藏所有设备
+                this.setAllEquipmentVisibility(false)
+                console.log(`🎯 设备显示管理: 隐藏所有设备（未聚焦状态）`)
+            }
+        }
+    }
+
+    /**
+     * 初始化设备显示状态
+     * 根据配置设置设备的初始显示状态
+     */
+    private initializeEquipmentDisplayState(): void {
+        if (!this.config.enableEquipmentDisplayControl) {
+            console.log("🔧 设备显示控制未启用，保持所有设备可见")
+            return
+        }
+
+        if (this.config.hideAllEquipmentByDefault) {
+            // 默认隐藏所有设备
+            this.setAllEquipmentVisibility(false)
+            console.log("🔧 初始化设备显示状态: 默认隐藏所有设备")
+        } else {
+            // 根据聚焦状态决定显示策略
+            if (this.focusedFloor !== null) {
+                // 有楼层聚焦，应用聚焦逻辑
+                this.manageEquipmentDisplayForFocus(this.focusedFloor)
+            } else {
+                // 无楼层聚焦，根据配置决定
+                if (this.config.showAllEquipmentWhenNotFocused) {
+                    this.setAllEquipmentVisibility(true)
+                    console.log("🔧 初始化设备显示状态: 显示所有设备（未聚焦状态）")
+                } else {
+                    this.setAllEquipmentVisibility(false)
+                    console.log("🔧 初始化设备显示状态: 隐藏所有设备（未聚焦状态）")
+                }
+            }
+        }
     }
 
     private setRoomOpacity(room: THREE.Object3D | THREE.Scene | THREE.Group, opacity: number): void {
@@ -2589,6 +2742,135 @@ export class BuildingControlPlugin extends BasePlugin {
     }
 
     /**
+     * 公共API：手动显示指定楼层的设备
+     * @param floorNumber 楼层号
+     */
+    public showFloorEquipment(floorNumber: number): void {
+        this.setFloorEquipmentVisibility(floorNumber, true)
+        console.log(`🔧 手动显示楼层 ${floorNumber}F 的设备`)
+    }
+
+    /**
+     * 公共API：手动隐藏指定楼层的设备
+     * @param floorNumber 楼层号
+     */
+    public hideFloorEquipment(floorNumber: number): void {
+        this.setFloorEquipmentVisibility(floorNumber, false)
+        console.log(`🔧 手动隐藏楼层 ${floorNumber}F 的设备`)
+    }
+
+    /**
+     * 公共API：手动显示所有设备
+     */
+    public showAllEquipment(): void {
+        this.setAllEquipmentVisibility(true)
+        console.log(`🔧 手动显示所有设备`)
+    }
+
+    /**
+     * 公共API：手动隐藏所有设备
+     */
+    public hideAllEquipment(): void {
+        this.setAllEquipmentVisibility(false)
+        console.log(`🔧 手动隐藏所有设备`)
+    }
+
+    /**
+     * 公共API：手动显示指定设备
+     * @param equipment 设备对象
+     */
+    public showEquipment(equipment: THREE.Object3D): void {
+        this.setEquipmentVisibility(equipment, true)
+        console.log(`🔧 手动显示设备: ${this.getModelName(equipment)}`)
+    }
+
+    /**
+     * 公共API：手动隐藏指定设备
+     * @param equipment 设备对象
+     */
+    public hideEquipment(equipment: THREE.Object3D): void {
+        this.setEquipmentVisibility(equipment, false)
+        console.log(`🔧 手动隐藏设备: ${this.getModelName(equipment)}`)
+    }
+
+    /**
+     * 公共API：切换设备显示控制开关
+     * @param enable 是否启用设备显示控制
+     */
+    public toggleEquipmentDisplayControl(enable: boolean): void {
+        this.config.enableEquipmentDisplayControl = enable
+        console.log(`🔧 设备显示控制开关: ${enable ? '启用' : '禁用'}`)
+        
+        if (enable) {
+            // 启用时，根据当前状态管理设备显示
+            this.manageEquipmentDisplayForFocus(this.focusedFloor)
+        } else {
+            // 禁用时，显示所有设备
+            this.setAllEquipmentVisibility(true)
+        }
+    }
+
+    /**
+     * 公共API：获取设备显示状态概览
+     * @returns 设备显示状态信息
+     */
+    public getEquipmentDisplayOverview(): {
+        isControlEnabled: boolean
+        totalEquipment: number
+        visibleEquipment: number
+        hiddenEquipment: number
+        equipmentByFloor: Array<{
+            floorNumber: number
+            totalEquipment: number
+            visibleEquipment: number
+            hiddenEquipment: number
+        }>
+        config: {
+            showEquipmentOnlyInFocusedFloor: boolean
+            showAllEquipmentWhenNotFocused: boolean
+            hideAllEquipmentByDefault: boolean
+        }
+    } {
+        let totalVisible = 0
+        let totalHidden = 0
+
+        const equipmentByFloor = Array.from(this.floors.entries()).map(([floorNumber, floor]) => {
+            let floorVisible = 0
+            let floorHidden = 0
+            
+            floor.associatedEquipment.forEach(equipmentInfo => {
+                if (equipmentInfo.equipment.visible) {
+                    floorVisible++
+                    totalVisible++
+                } else {
+                    floorHidden++
+                    totalHidden++
+                }
+            })
+
+            return {
+                floorNumber,
+                totalEquipment: floor.associatedEquipment.length,
+                visibleEquipment: floorVisible,
+                hiddenEquipment: floorHidden,
+            }
+        })
+
+        return {
+            isControlEnabled: this.config.enableEquipmentDisplayControl,
+            totalEquipment: this.allDevices.length,
+            visibleEquipment: totalVisible,
+            hiddenEquipment: totalHidden,
+            equipmentByFloor,
+            config: {
+                showEquipmentOnlyInFocusedFloor: this.config.showEquipmentOnlyInFocusedFloor,
+                showAllEquipmentWhenNotFocused: this.config.showAllEquipmentWhenNotFocused,
+                hideAllEquipmentByDefault: this.config.hideAllEquipmentByDefault,
+            },
+        }
+    }
+
+    /**
      * 清理所有材质副本（在插件销毁时调用）
      */
     public dispose(): void {
@@ -2606,6 +2888,9 @@ export class BuildingControlPlugin extends BasePlugin {
         this.allDevices.forEach(device => {
             this.restoreObjectOpacity(device, "equipment", device.uuid)
         })
+
+        // 显示所有设备（清理时恢复）
+        this.setAllEquipmentVisibility(true)
 
         // 清理任何遗留的材质映射
         this.materialsMap.forEach(clonedMaterial => {
