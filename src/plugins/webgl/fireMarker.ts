@@ -1,5 +1,5 @@
-import THREE from "utils/three-imports"
-import fire from "../../glsl/fire"
+import { THREE, BasePlugin } from "../basePlugin"
+import { fire } from "../../glsl/fire"
 
 // 火焰配置参数接口
 interface FireMarkerConfig {
@@ -49,7 +49,7 @@ const DEFAULT_CONFIG: FireMarkerConfig = {
 }
 
 // 3D火焰对象类
-export default class FireMarker {
+export class FireMarker {
     private config: FireMarkerConfig
     private geometry: THREE.PlaneGeometry
     private material: THREE.ShaderMaterial

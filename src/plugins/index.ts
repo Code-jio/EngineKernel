@@ -19,6 +19,9 @@ export { MousePickPlugin } from './webgl/mousePickPlugin';
 export { TextMarkerPlugin } from "./webgl/textMarker"
 export { BuildingControlPlugin } from './webgl/BuildingControlPlugin';
 
+export { WaterMarker } from './webgl/waterMarker';
+export { FireMarker } from './webgl/fireMarker';
+
 
 // export { BaseModel } from './webgl/baseModel';
     

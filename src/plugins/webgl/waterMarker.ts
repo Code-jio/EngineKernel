@@ -21,7 +21,7 @@ interface WaterMarkerOptions {
     waterNormalsTexture?: string; // 水面法线贴图路径
 }
 
-export default class WaterMarker {
+export class WaterMarker {
     private options: WaterMarkerOptions;
     private group: THREE.Group;
     private waterMesh: THREE.Mesh | null = null;

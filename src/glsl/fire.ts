@@ -38,4 +38,4 @@ const fire = {
     `
 }
 
-export default fire
+export { fire };
