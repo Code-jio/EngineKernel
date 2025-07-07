@@ -1784,8 +1784,8 @@ export class BuildingControlPlugin extends BasePlugin {
         const floorCenter = floorBoundingBox.getCenter(new THREE.Vector3())
         const floorSize = floorBoundingBox.getSize(new THREE.Vector3())
 
-        const distance = Math.max(floorSize.x, floorSize.z) * this.config.cameraDistanceMultiplier
-        const height = Math.max(this.config.cameraMinHeight, floorCenter.y + distance * 0.5)
+        const distance = Math.max(floorSize.x, floorSize.z) * this.config.cameraDistanceMultiplier * 0.5
+        const height = Math.max(this.config.cameraMinHeight, floorCenter.y + distance * 1.5)
 
         const targetCameraPosition = new THREE.Vector3(floorCenter.x + distance, height, floorCenter.z + distance)
 

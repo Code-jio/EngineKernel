@@ -65,6 +65,7 @@ export class BaseControls {
         }
 
         this.control = new OrbitControls(this.camera, this.controlLayer)
+        this.control.autoRotateSpeed = 1
 
         // 设置默认限制
         this.setupDefaultLimits()
