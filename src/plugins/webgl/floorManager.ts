@@ -194,6 +194,8 @@ export class FloorManager {
         water.rotation.x = -Math.PI / 2
         water.name = "waterFloor"
 
+        water.renderOrder = 1
+
         // 保存水面的 uniforms 用于动画更新
         this.waterUniforms = water.material.uniforms
 

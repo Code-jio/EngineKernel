@@ -1,4 +1,4 @@
-import FireMarker from "../src/plugins/webgl/fireMarker";
+import { FireMarker } from "../src/plugins/webgl/fireMarker";
 import THREE from "../src/utils/three-imports";
 
 /**
@@ -105,10 +105,10 @@ export function dynamicFireControlExample(scene: THREE.Scene, camera: THREE.Came
         position: [0, 0.5, 0],
         size: 2.5,
         intensity: 0.5,
-        onUpdate: (deltaTime) => {
+        onUpdate: (deltaTime: number) => {
             // 可以在这里添加自定义更新逻辑
         },
-        onVisibilityChange: (visible) => {
+        onVisibilityChange: (visible: boolean) => {
             console.log(`火焰可见性变化: ${visible}`);
         }
     });

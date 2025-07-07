@@ -25,6 +25,18 @@ interface FireMarkerConfig {
     flickerIntensity: number // 闪烁强度
     waveAmplitude: number // 波动幅度
 
+    // 新增优化属性
+    turbulenceScale: number // 湍流强度
+    windDirection: [number, number] // 风向
+    windStrength: number // 风力强度
+    fireHeight: number // 火焰高度比例
+    coreIntensity: number // 核心亮度
+    edgeSoftness: number // 边缘柔和度
+    temperatureVariation: number // 温度变化
+    sparkleIntensity: number // 火星效果强度
+
+    debugMode?: boolean // 是否启用调试模式
+
     // 回调函数
     onUpdate?: (deltaTime: number) => void // 更新回调
     onVisibilityChange?: (visible: boolean) => void // 可见性变化回调
@@ -40,12 +52,22 @@ const DEFAULT_CONFIG: FireMarkerConfig = {
     animationSpeed: 1.0,
     baseColor: 0xff4400,
     tipColor: 0xffff00,
-    opacity: 0.8,
-    renderOrder: 1000,
+    opacity: 1.0,
+    renderOrder: 100,
     depthWrite: false,
     depthTest: true,
     flickerIntensity: 0.1,
     waveAmplitude: 0.1,
+    // 新增默认值
+    turbulenceScale: 1.0,
+    windDirection: [0.1, 0.0],
+    windStrength: 0.2,
+    fireHeight: 1.5,
+    coreIntensity: 1.2,
+    edgeSoftness: 0.8,
+    temperatureVariation: 0.3,
+    sparkleIntensity: 0.2,
+    debugMode: false,
 }
 
 // 3D火焰对象类
@@ -85,7 +107,14 @@ export class FireMarker {
         // 应用初始配置
         this.applyConfig()
 
-        console.log("🔥 FireMarker created:", this.config)
+        if (this.config.debugMode) {
+            console.log("🔥 FireMarker created with config:", this.config)
+            console.log("🔥 Geometry:", this.geometry)
+            console.log("🔥 Material:", this.material)
+            console.log("🔥 Mesh:", this.mesh)
+        } else {
+            console.log("🔥 FireMarker created at position:", this.config.position)
+        }
     }
 
     /**
@@ -95,9 +124,9 @@ export class FireMarker {
         // 创建合适尺寸的平面几何体
         const geometry = new THREE.PlaneGeometry(
             this.config.size,
-            this.config.size * 1.5, // 火焰通常更高
-            4, // width segments
-            8, // height segments - 更多段数以获得更好的变形效果
+            this.config.size * this.config.fireHeight,
+            6, // 增加width segments以获得更好的变形效果
+            12, // 增加height segments以获得更好的变形效果
         )
 
         // 优化几何体
@@ -120,52 +149,117 @@ export class FireMarker {
             opacity: { value: this.config.opacity },
             flickerIntensity: { value: this.config.flickerIntensity },
             waveAmplitude: { value: this.config.waveAmplitude },
+            // 新增uniforms
+            turbulenceScale: { value: this.config.turbulenceScale },
+            windDirection: { value: new THREE.Vector2(this.config.windDirection[0], this.config.windDirection[1]) },
+            windStrength: { value: this.config.windStrength },
+            coreIntensity: { value: this.config.coreIntensity },
+            edgeSoftness: { value: this.config.edgeSoftness },
+            temperatureVariation: { value: this.config.temperatureVariation },
+            sparkleIntensity: { value: this.config.sparkleIntensity },
         }
 
         // 创建Shader材质
         const material = new THREE.ShaderMaterial({
             uniforms: uniforms,
-            vertexShader: this.getEnhancedVertexShader(),
-            fragmentShader: this.getEnhancedFragmentShader(),
+            vertexShader: this.getOptimizedVertexShader(),
+            fragmentShader: this.getOptimizedFragmentShader(),
             transparent: true,
-            alphaTest: 0.1,
+            alphaTest: 0.01,
             side: THREE.DoubleSide,
             depthWrite: this.config.depthWrite,
             depthTest: this.config.depthTest,
-            blending: THREE.AdditiveBlending, // 火焰使用加法混合效果更佳
+            blending: THREE.AdditiveBlending, // 使用加法混合模式获得更好的发光效果
         })
 
         return material
     }
 
     /**
-     * 获取增强的顶点着色器
+     * 获取优化的顶点着色器
      */
-    private getEnhancedVertexShader(): string {
+    private getOptimizedVertexShader(): string {
         return `
             uniform float time;
             uniform float intensity;
             uniform float flickerIntensity;
             uniform float waveAmplitude;
+            uniform float turbulenceScale;
+            uniform vec2 windDirection;
+            uniform float windStrength;
             
             varying vec2 vUv;
             varying float vFlicker;
+            varying float vNoise;
+            varying float vHeight;
+            
+            // 改进的噪声函数
+            float noise(vec2 p) {
+                return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
+            }
+            
+            float smoothNoise(vec2 p) {
+                vec2 f = fract(p);
+                vec2 u = f * f * (3.0 - 2.0 * f);
+                
+                float a = noise(floor(p));
+                float b = noise(floor(p) + vec2(1.0, 0.0));
+                float c = noise(floor(p) + vec2(0.0, 1.0));
+                float d = noise(floor(p) + vec2(1.0, 1.0));
+                
+                return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+            }
+            
+            float turbulence(vec2 p, float scale) {
+                float value = 0.0;
+                float amplitude = 1.0;
+                
+                for (int i = 0; i < 4; i++) {
+                    value += amplitude * smoothNoise(p * scale);
+                    p *= 2.0;
+                    amplitude *= 0.5;
+                    scale *= 0.5;
+                }
+                
+                return value;
+            }
             
             void main() {
                 vUv = uv;
+                vHeight = uv.y;
                 
                 vec3 pos = position;
                 
-                // 基础火焰向上膨胀效果
-                float heightFactor = uv.y * uv.y; // 越往上变形越明显
-                pos.y += heightFactor * 0.2 * sin(time * 2.0 + uv.x * 8.0) * intensity;
+                // 多层次噪声扰动
+                vec2 noiseCoord = uv * 3.0 + time * 0.1;
+                float turbulenceValue = turbulence(noiseCoord, turbulenceScale * 4.0);
+                vNoise = turbulenceValue;
                 
-                // 横向扰动
-                pos.x += waveAmplitude * sin(time * 3.0 + uv.y * 6.0) * heightFactor * intensity;
-                pos.z += waveAmplitude * cos(time * 2.5 + uv.y * 5.0) * heightFactor * intensity * 0.5;
+                // 基于高度的火焰形状控制
+                float heightFactor = pow(uv.y, 1.5);
+                float baseWidth = 1.0 - heightFactor * 0.6;
+                
+                // 主要火焰扰动
+                float mainWave = sin(time * 2.0 + uv.x * 8.0 + turbulenceValue * 3.0) * heightFactor;
+                float secondaryWave = sin(time * 3.5 + uv.y * 12.0 + turbulenceValue * 2.0) * heightFactor * 0.5;
+                
+                // 火焰向上膨胀
+                pos.y += (mainWave + secondaryWave) * waveAmplitude * intensity * baseWidth;
+                
+                // 横向扰动（受风向影响）
+                vec2 windEffect = windDirection * windStrength * heightFactor;
+                pos.x += (windEffect.x + mainWave * 0.3) * intensity * baseWidth;
+                pos.z += (windEffect.y + secondaryWave * 0.2) * intensity * baseWidth;
+                
+                // 火焰顶部收缩效果
+                float tipShrink = smoothstep(0.7, 1.0, uv.y);
+                pos.x *= (1.0 - tipShrink * 0.3);
+                pos.z *= (1.0 - tipShrink * 0.3);
                 
                 // 闪烁效果
-                vFlicker = 1.0 + flickerIntensity * sin(time * 8.0 + uv.x * 20.0 + uv.y * 15.0);
+                float flicker1 = sin(time * 8.0 + uv.x * 20.0 + turbulenceValue * 10.0);
+                float flicker2 = sin(time * 12.0 + uv.y * 15.0 + turbulenceValue * 8.0);
+                vFlicker = 1.0 + flickerIntensity * (flicker1 + flicker2 * 0.5);
                 
                 vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
                 gl_Position = projectionMatrix * mvPosition;
@@ -174,42 +268,99 @@ export class FireMarker {
     }
 
     /**
-     * 获取增强的片元着色器
+     * 获取优化的片元着色器
      */
-    private getEnhancedFragmentShader(): string {
+    private getOptimizedFragmentShader(): string {
         return `
             uniform float time;
             uniform float intensity;
             uniform float opacity;
             uniform vec3 baseColor;
             uniform vec3 tipColor;
+            uniform float coreIntensity;
+            uniform float edgeSoftness;
+            uniform float temperatureVariation;
+            uniform float sparkleIntensity;
             
             varying vec2 vUv;
             varying float vFlicker;
+            varying float vNoise;
+            varying float vHeight;
+            
+            // 改进的噪声函数
+            float hash(float n) {
+                return fract(sin(n) * 43758.5453);
+            }
+            
+            float noise(vec2 p) {
+                vec2 f = fract(p);
+                vec2 u = f * f * (3.0 - 2.0 * f);
+                
+                float a = hash(dot(floor(p), vec2(1.0, 57.0)));
+                float b = hash(dot(floor(p) + vec2(1.0, 0.0), vec2(1.0, 57.0)));
+                float c = hash(dot(floor(p) + vec2(0.0, 1.0), vec2(1.0, 57.0)));
+                float d = hash(dot(floor(p) + vec2(1.0, 1.0), vec2(1.0, 57.0)));
+                
+                return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+            }
             
             void main() {
-                // 基于高度的颜色渐变
-                float heightGradient = smoothstep(0.0, 1.0, vUv.y);
-                vec3 flameColor = mix(baseColor, tipColor, heightGradient);
+                // 火焰形状控制
+                float centerDist = abs(vUv.x - 0.5) * 2.0;
+                float heightGradient = vHeight;
                 
-                // 噪声效果
-                float noise1 = fract(sin(time * 2.0 + vUv.x * 100.0) * 10000.0);
-                float noise2 = fract(sin(time * 3.0 + vUv.y * 80.0) * 8000.0);
-                float combinedNoise = mix(noise1, noise2, 0.5);
+                // 基础火焰形状 - 底部宽，顶部窄
+                float flameShape = (1.0 - centerDist) * (1.0 - pow(heightGradient, 1.2));
+                flameShape = smoothstep(0.0, edgeSoftness, flameShape);
+                
+                // 多层次噪声
+                vec2 noiseCoord1 = vUv * 8.0 + time * 0.3;
+                vec2 noiseCoord2 = vUv * 16.0 + time * 0.5;
+                vec2 noiseCoord3 = vUv * 32.0 + time * 0.8;
+                
+                float noise1 = noise(noiseCoord1);
+                float noise2 = noise(noiseCoord2) * 0.5;
+                float noise3 = noise(noiseCoord3) * 0.25;
+                
+                float combinedNoise = noise1 + noise2 + noise3;
                 combinedNoise = smoothstep(0.2, 0.8, combinedNoise);
                 
-                // 火焰形状 - 底部宽，顶部窄
-                float flameShape = 1.0 - vUv.y * vUv.y;
-                float horizontalFade = 1.0 - abs(vUv.x - 0.5) * 2.0;
-                float coreShape = flameShape * horizontalFade;
+                // 火焰核心
+                float coreSize = smoothstep(0.6, 0.2, centerDist) * smoothstep(0.8, 0.0, heightGradient);
+                float coreGlow = coreSize * coreIntensity;
                 
-                // 透明度计算
-                float alpha = coreShape * combinedNoise * intensity * opacity * vFlicker;
-                alpha = smoothstep(0.1, 0.9, alpha);
+                // 温度变化效果
+                float temperature = mix(0.6, 1.4, heightGradient + temperatureVariation * vNoise);
                 
-                // 边缘发光效果
-                float glow = pow(coreShape, 0.5) * 0.3;
-                flameColor += glow;
+                // 颜色计算
+                vec3 hotColor = mix(baseColor, tipColor, heightGradient);
+                vec3 coolColor = baseColor * 0.8;
+                vec3 flameColor = mix(coolColor, hotColor, temperature);
+                
+                // 火星效果
+                float sparkle = 0.0;
+                if (sparkleIntensity > 0.0) {
+                    float sparkleNoise = noise(vUv * 50.0 + time * 2.0);
+                    sparkle = step(0.98, sparkleNoise) * sparkleIntensity;
+                    flameColor += sparkle * vec3(1.0, 0.8, 0.4);
+                }
+                
+                // 边缘发光
+                float edgeGlow = pow(flameShape, 0.8) * 0.4;
+                flameColor += edgeGlow * tipColor;
+                
+                // 核心高亮
+                flameColor += coreGlow * vec3(1.0, 0.9, 0.6);
+                
+                // 最终透明度计算
+                float alpha = flameShape * combinedNoise * intensity * opacity * vFlicker;
+                alpha = smoothstep(0.05, 0.95, alpha);
+                
+                // 边缘柔化
+                alpha *= smoothstep(0.0, 0.1, flameShape);
+                
+                // 防止过度曝光
+                flameColor = clamp(flameColor, 0.0, 2.0);
                 
                 gl_FragColor = vec4(flameColor, alpha);
             }
@@ -267,6 +418,14 @@ export class FireMarker {
             this.material.uniforms.opacity.value = this.config.opacity
             this.material.uniforms.flickerIntensity.value = this.config.flickerIntensity
             this.material.uniforms.waveAmplitude.value = this.config.waveAmplitude
+            // 更新新增的uniforms
+            this.material.uniforms.turbulenceScale.value = this.config.turbulenceScale
+            this.material.uniforms.windDirection.value.set(this.config.windDirection[0], this.config.windDirection[1])
+            this.material.uniforms.windStrength.value = this.config.windStrength
+            this.material.uniforms.coreIntensity.value = this.config.coreIntensity
+            this.material.uniforms.edgeSoftness.value = this.config.edgeSoftness
+            this.material.uniforms.temperatureVariation.value = this.config.temperatureVariation
+            this.material.uniforms.sparkleIntensity.value = this.config.sparkleIntensity
         }
     }
 
@@ -369,13 +528,55 @@ export class FireMarker {
      */
     public setIntensity(intensity: number): void {
         this.config.intensity = Math.max(0, Math.min(1, intensity))
-        if (this.material.uniforms && this.material.uniforms.intensity) {
+        if (this.material.uniforms) {
             this.material.uniforms.intensity.value = this.config.intensity
         }
     }
 
     /**
-     * 启用/禁用Billboard效果
+     * 设置风向和风力
+     */
+    public setWind(direction: [number, number], strength: number): void {
+        this.config.windDirection = direction
+        this.config.windStrength = strength
+        if (this.material.uniforms) {
+            this.material.uniforms.windDirection.value.set(direction[0], direction[1])
+            this.material.uniforms.windStrength.value = strength
+        }
+    }
+
+    /**
+     * 设置火焰核心强度
+     */
+    public setCoreIntensity(intensity: number): void {
+        this.config.coreIntensity = intensity
+        if (this.material.uniforms) {
+            this.material.uniforms.coreIntensity.value = intensity
+        }
+    }
+
+    /**
+     * 设置湍流强度
+     */
+    public setTurbulence(scale: number): void {
+        this.config.turbulenceScale = scale
+        if (this.material.uniforms) {
+            this.material.uniforms.turbulenceScale.value = scale
+        }
+    }
+
+    /**
+     * 设置火星效果
+     */
+    public setSparkle(intensity: number): void {
+        this.config.sparkleIntensity = intensity
+        if (this.material.uniforms) {
+            this.material.uniforms.sparkleIntensity.value = intensity
+        }
+    }
+
+    /**
+     * 设置Billboard
      */
     public setBillboard(enabled: boolean): void {
         this.billboardEnabled = enabled
@@ -383,12 +584,11 @@ export class FireMarker {
     }
 
     /**
-     * 开始动画
+     * 启动动画
      */
     public startAnimation(): void {
         this.isAnimating = true
         this.startTime = performance.now()
-        this.lastUpdateTime = this.startTime
     }
 
     /**
@@ -421,26 +621,21 @@ export class FireMarker {
     }
 
     /**
-     * 销毁资源
+     * 销毁火焰对象
      */
     public dispose(): void {
-        // 从场景移除
-        this.removeFromScene()
-
-        // 释放几何体
+        if (this.scene) {
+            this.removeFromScene()
+        }
+        
         if (this.geometry) {
             this.geometry.dispose()
         }
-
-        // 释放材质
+        
         if (this.material) {
             this.material.dispose()
         }
-
-        // 清空引用
-        this.scene = null
-        this.camera = null
-
+        
         console.log("🔥 FireMarker disposed")
     }
 }

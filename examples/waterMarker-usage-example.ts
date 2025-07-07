@@ -4,7 +4,7 @@
  */
 
 import { THREE } from "../src/plugins/basePlugin";
-import WaterMarker from "../src/plugins/webgl/waterMarker";
+import { WaterMarker } from "../src/plugins/webgl/waterMarker";
 
 // 示例1: 创建一个矩形池塘
 export function createRectanglePond(): WaterMarker {
