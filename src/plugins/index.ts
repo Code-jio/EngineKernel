@@ -25,7 +25,7 @@ export { WaterMarker } from './webgl/waterMarker';
 export { FireMarker } from './webgl/fireMarker';
 
 export { EffectComposer, RenderPass, UnrealBloomPass, ShaderPass, FXAAShader, OutputPass } from '../utils/three-imports';
-export { CSS2DRenderer, CSS2DObject } from '../utils/three-imports';
+export { CSS2DRenderer, CSS2DObject, CSS3DRenderer, CSS3DObject } from '../utils/three-imports';
 
 // export { BaseModel } from './webgl/baseModel';
     
