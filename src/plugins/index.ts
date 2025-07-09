@@ -1,4 +1,6 @@
 export { BasePlugin, THREE } from './basePlugin';
+export { OrbitControls } from '../utils/three-imports';
+
 export { BaseScene } from './webgl/baseScene';
 export { AnimationControls } from './webgl/animationControls';
 export { CameraPlugin } from './webgl/cameraPlugin';
@@ -22,6 +24,8 @@ export { BuildingControlPlugin } from './webgl/BuildingControlPlugin';
 export { WaterMarker } from './webgl/waterMarker';
 export { FireMarker } from './webgl/fireMarker';
 
+export { EffectComposer, RenderPass, UnrealBloomPass, ShaderPass, FXAAShader, OutputPass } from '../utils/three-imports';
+export { CSS2DRenderer, CSS2DObject } from '../utils/three-imports';
 
 // export { BaseModel } from './webgl/baseModel';
     
