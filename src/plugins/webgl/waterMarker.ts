@@ -4,11 +4,12 @@
 // 上顶面的材质替换为水体材质，水体材质为透明，反射为水体颜色，折射为水体颜色
 
 import { THREE } from "../basePlugin";
+import { Water } from "../../utils/three-imports"
 
 // 水体配置接口
 interface WaterMarkerOptions {
     height: number; // 水体高度
-    contour: THREE.Vector3[]; // 轮廓坐标数组
+    contour: THREE.Vector3[]; // 轮廓坐标数组（描述底面轮廓，x,z定义水平形状，y为底面高度）
     position?: THREE.Vector3; // 水体位置
     waterColor?: number; // 水体颜色
     transparency?: number; // 透明度 (0-1)
@@ -25,11 +26,8 @@ export class WaterMarker {
     private options: WaterMarkerOptions;
     private group: THREE.Group;
     private waterMesh: THREE.Mesh | null = null;
-    private sideMeshes: THREE.Mesh[] = [];
-    private bottomMesh: THREE.Mesh | null = null;
     private waterMaterial: THREE.ShaderMaterial | null = null;
-    private sideMaterial: THREE.Material | null = null;
-    private bottomMaterial: THREE.Material | null = null;
+    private sideMaterial: THREE.MeshPhongMaterial | null = null;
     private animationTime: number = 0;
     private renderer: THREE.WebGLRenderer | null = null;
     private scene: THREE.Scene | null = null;
@@ -54,7 +52,7 @@ export class WaterMarker {
         this.group.position.copy(this.options.position!);
 
         this.validateOptions();
-        this.init();
+        this.init(this.options);
     }
 
     /**
@@ -75,202 +73,130 @@ export class WaterMarker {
     /**
      * 初始化水体
      */
-    private init(): void {
-        this.createMaterials();
-        this.createGeometry();
-        console.log("✅ WaterMarker 初始化完成");
+    public init(options: WaterMarkerOptions): void {
+        this.options = options;
+        const materials = this.createMaterials();
+        this.waterMesh = new THREE.Mesh(this.createGeometry(), materials);
+        this.group.add(this.waterMesh);
+        console.log(this)
     }
 
     /**
      * 创建材质
      */
-    private createMaterials(): void {
-        // 创建水面材质（顶面）
-        this.createWaterMaterial();
-
-        // 创建侧面材质（半透明）
-        this.sideMaterial = new THREE.MeshPhongMaterial({
+    private createMaterials(): THREE.Material[] {
+        // 创建水面材质（用于顶面）
+        const waterMaterial = this.createWaterMaterial();
+        
+        // 创建侧面和底面的简单半透明材质
+        const sideMaterial = new THREE.MeshPhongMaterial({
             color: this.options.waterColor,
             transparent: true,
-            opacity: this.options.transparency! * 0.3,
+            opacity: this.options.transparency! * 0.4,
             side: THREE.DoubleSide,
         });
-
-        // 创建底面材质（更深的水色）
-        this.bottomMaterial = new THREE.MeshPhongMaterial({
-            color: this.darkenColor(this.options.waterColor!, 0.3),
-            transparent: true,
-            opacity: this.options.transparency! * 0.8,
-            side: THREE.FrontSide,
-        });
+        
+        // 保存材质引用
+        this.waterMaterial = waterMaterial;
+        this.sideMaterial = sideMaterial;
+        
+        // ExtrudeGeometry的材质顺序：[侧面材质, 顶面材质, 底面材质]
+        return [waterMaterial, sideMaterial, sideMaterial, sideMaterial];
     }
 
     /**
-     * 创建水面材质
+     * 创建水面材质（仅用于顶面）
      */
-    private createWaterMaterial(): void {
-        // 水面着色器材质
-        const waterVertexShader = `
-            uniform float time;
-            uniform float waveScale;
-            
-            varying vec3 vWorldPosition;
-            varying vec3 vNormal;
-            varying vec2 vUv;
+    private createWaterMaterial(): THREE.ShaderMaterial {
+        let waterConfig = {
+            textureWidth: 512,
+            textureHeight: 512,
+            alpha: 1.0,
+            time: 0,
+            waterColor: 0x4a90e2,
+            distortionScale: 2.0,
+            waterNormalsUrl: "./textures/waternormals.jpg",
+            animationSpeed: 0.3,
+            waveScale: 0.5
+        };
+        const finalWaterColor = waterConfig.waterColor
 
-            void main() {
-                vUv = uv;
-                vNormal = normalize(normalMatrix * normal);
-                
-                vec4 worldPosition = modelMatrix * vec4(position, 1.0);
-                vWorldPosition = worldPosition.xyz;
-                
-                // 添加波浪效果
-                float wave = sin(worldPosition.x * waveScale + time) * 
-                           cos(worldPosition.z * waveScale + time) * 0.1;
-                worldPosition.y += wave;
-                
-                gl_Position = projectionMatrix * viewMatrix * worldPosition;
-            }
-        `;
+        // 处理其他可选属性的默认值
+        const finalTextureWidth = waterConfig.textureWidth || 512
+        const finalTextureHeight = waterConfig.textureHeight || 512
+        const finalAlpha = waterConfig.alpha !== undefined ? waterConfig.alpha : 0
+        const finalDistortionScale = waterConfig.distortionScale !== undefined ? waterConfig.distortionScale : 3.7
+        
+        
+        // 创建水面几何体
+        const waterGeometry = new THREE.PlaneGeometry(100, 100)
 
-        const waterFragmentShader = `
-            uniform float time;
-            uniform vec3 waterColor;
-            uniform float transparency;
-            uniform float reflectivity;
-            uniform float distortionScale;
-            
-            varying vec3 vWorldPosition;
-            varying vec3 vNormal;
-            varying vec2 vUv;
+        // 创建水面
+        const water = new Water(waterGeometry, {
+            textureWidth: finalTextureWidth,
+            textureHeight: finalTextureHeight,
+            waterNormals: new THREE.TextureLoader().load(
+                waterConfig.waterNormalsUrl || "./textures/waternormals.jpg",
+                function (texture) {
+                    texture.wrapS = texture.wrapT = THREE.RepeatWrapping
+                },
+            ),
+            sunDirection: new THREE.Vector3(),
+            waterColor: finalWaterColor,
+            distortionScale: finalDistortionScale,
+        })
 
-            void main() {
-                // 基础水色
-                vec3 color = waterColor;
-                
-                // 添加波纹扭曲
-                vec2 distortion = vec2(
-                    sin(vUv.x * distortionScale + time) * 0.1,
-                    cos(vUv.y * distortionScale + time) * 0.1
-                );
-                
-                // 模拟反射效果
-                float fresnel = pow(1.0 - dot(vNormal, vec3(0.0, 1.0, 0.0)), 2.0);
-                color = mix(color, vec3(1.0), fresnel * reflectivity);
-                
-                // 动态透明度
-                float alpha = transparency * (1.0 - fresnel * 0.3);
-                
-                gl_FragColor = vec4(color, alpha);
-            }
-        `;
-
-        this.waterMaterial = new THREE.ShaderMaterial({
-            uniforms: {
-                time: { value: 0.0 },
-                waterColor: { value: new THREE.Color(this.options.waterColor!) },
-                transparency: { value: this.options.transparency! },
-                reflectivity: { value: this.options.reflectivity! },
-                waveScale: { value: this.options.waveScale! },
-                distortionScale: { value: this.options.distortionScale! },
-            },
-            vertexShader: waterVertexShader,
-            fragmentShader: waterFragmentShader,
-            transparent: true,
-            side: THREE.DoubleSide,
-        });
+        return water.material
     }
 
     /**
-     * 创建几何体
+     * 创建几何体、以ExtrudeGeometry创建
      */
-    private createGeometry(): void {
-        const contour = this.options.contour;
-        const height = this.options.height;
-
-        // 确保材质已创建
-        if (!this.waterMaterial || !this.sideMaterial || !this.bottomMaterial) {
-            throw new Error("材质未正确初始化");
-        }
-
-        // 创建顶面和底面几何体
-        const topGeometry = this.createPolygonGeometry(contour, height / 2);
-        const bottomGeometry = this.createPolygonGeometry(contour, -height / 2);
-
-        // 创建水面网格（顶面）
-        this.waterMesh = new THREE.Mesh(topGeometry, this.waterMaterial);
-        this.waterMesh.name = "WaterSurface";
-        this.group.add(this.waterMesh);
-
-        // 创建底面网格
-        this.bottomMesh = new THREE.Mesh(bottomGeometry, this.bottomMaterial);
-        this.bottomMesh.name = "WaterBottom";
-        this.group.add(this.bottomMesh);
-
-        // 创建侧面网格
-        this.createSideWalls(contour, height);
-    }
-
-    /**
-     * 根据轮廓创建多边形几何体
-     */
-    private createPolygonGeometry(contour: THREE.Vector3[], y: number): THREE.BufferGeometry {
-        // 将三维轮廓投影到XZ平面
+    private createGeometry(): THREE.ExtrudeGeometry {
+        // 1. 计算轮廓的基准高度（底面）
+        const baseY = Math.min(...this.options.contour.map(p => p.y));
+        
+        // 2. 根据轮廓数组创建形状shape (在XY平面上)
         const shape = new THREE.Shape();
-
-        if (contour.length > 0) {
-            shape.moveTo(contour[0].x, contour[0].z);
-            for (let i = 1; i < contour.length; i++) {
-                shape.lineTo(contour[i].x, contour[i].z);
-            }
-            shape.lineTo(contour[0].x, contour[0].z); // 闭合
+        
+        // 设置起始点 - 使用x,z坐标映射到XY平面
+        const firstPoint = this.options.contour[0];
+        shape.moveTo(firstPoint.x, firstPoint.z);
+        
+        // 添加其他轮廓点
+        for (let i = 1; i < this.options.contour.length; i++) {
+            const point = this.options.contour[i];
+            shape.lineTo(point.x, point.z);
         }
-
-        const geometry = new THREE.ShapeGeometry(shape);
-
-        // 设置所有顶点的Y坐标
-        const positions = geometry.attributes.position.array as Float32Array;
-        for (let i = 1; i < positions.length; i += 3) {
-            positions[i] = y;
-        }
-
-        geometry.attributes.position.needsUpdate = true;
-        geometry.computeVertexNormals();
-
-        return geometry;
-    }
-
-    /**
-     * 创建侧面墙体
-     */
-    private createSideWalls(contour: THREE.Vector3[], height: number): void {
-        // 确保侧面材质已创建
-        if (!this.sideMaterial) {
-            throw new Error("侧面材质未正确初始化");
-        }
-
-        for (let i = 0; i < contour.length; i++) {
-            const current = contour[i];
-            const next = contour[(i + 1) % contour.length];
-
-            // 创建侧面四边形
-            const sideGeometry = new THREE.PlaneGeometry(current.distanceTo(next), height);
-
-            // 计算侧面的位置和旋转
-            const midPoint = new THREE.Vector3().addVectors(current, next).multiplyScalar(0.5);
-
-            const direction = new THREE.Vector3().subVectors(next, current).normalize();
-
-            const sideMesh = new THREE.Mesh(sideGeometry, this.sideMaterial);
-            sideMesh.position.copy(midPoint);
-            sideMesh.lookAt(midPoint.x + direction.x, midPoint.y, midPoint.z + direction.z);
-            sideMesh.rotateY(Math.PI / 2);
-            sideMesh.name = `WaterSide_${i}`;
-
-            this.sideMeshes.push(sideMesh);
-            this.group.add(sideMesh);
-        }
+        
+        // 闭合路径
+        shape.closePath();
+        
+        // 3. 拉伸设置 - 沿Z轴拉伸
+        const extrudeSettings = {
+            depth: this.options.height,
+            bevelEnabled: false,
+            bevelSize: 0,
+            bevelThickness: 0,
+            bevelSegments: 0,
+            steps: 1,
+            curveSegments: 12
+        };
+        
+        // 4. 使用ExtrudeGeometry创建几何体
+        const extrudeGeometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+        
+        // 5. 旋转几何体使其正确定向
+        // ExtrudeGeometry默认在XY平面创建形状并沿Z轴拉伸
+        // 我们需要旋转使其在XZ平面上，沿Y轴向上拉伸
+        extrudeGeometry.rotateX(-Math.PI / 2);
+        
+        // 6. 调整位置使底面位于基准高度
+        extrudeGeometry.translate(0, baseY, 0);
+        
+        console.log(`🔧 水体几何体创建完成: 轮廓点数=${this.options.contour.length}, 高度=${this.options.height}, 基准高度=${baseY}`);
+        
+        return extrudeGeometry;
     }
 
     /**
@@ -341,9 +267,8 @@ export class WaterMarker {
         if (this.waterMaterial) {
             this.waterMaterial.uniforms.waterColor.value = new THREE.Color(color);
         }
-
-        if (this.sideMaterial && this.sideMaterial instanceof THREE.MeshPhongMaterial) {
-            this.sideMaterial.color = new THREE.Color(color);
+        if (this.sideMaterial) {
+            this.sideMaterial.color.setHex(color);
         }
     }
 
@@ -357,13 +282,8 @@ export class WaterMarker {
         if (this.waterMaterial) {
             this.waterMaterial.uniforms.transparency.value = transparency;
         }
-
-        if (this.sideMaterial && this.sideMaterial instanceof THREE.MeshPhongMaterial) {
-            this.sideMaterial.opacity = transparency * 0.3;
-        }
-
-        if (this.bottomMaterial && this.bottomMaterial instanceof THREE.MeshPhongMaterial) {
-            this.bottomMaterial.opacity = transparency * 0.8;
+        if (this.sideMaterial) {
+            this.sideMaterial.opacity = transparency * 0.4;
         }
     }
 
@@ -398,13 +318,23 @@ export class WaterMarker {
 
         this.options.contour = newContour;
 
-        // 清除现有几何体
-        this.clearGeometry();
-
-        // 重新创建几何体
-        this.createGeometry();
-
-        console.log(`🔄 轮廓已更新: ${newContour.length} 个点`);
+        // 重新创建几何体（会自动处理坐标系统和旋转）
+        const extrudeGeometry = this.createGeometry();
+        
+        if (this.waterMesh) {
+            // 清理旧的几何体
+            this.waterMesh.geometry.dispose();
+            // 更新几何体
+            this.waterMesh.geometry = extrudeGeometry;
+        } else {
+            // 如果没有现有的mesh，创建新的
+            const materials = this.createMaterials();
+            this.waterMesh = new THREE.Mesh(extrudeGeometry, materials);
+            this.group.add(this.waterMesh);
+        }
+        
+        const baseY = Math.min(...newContour.map(p => p.y));
+        console.log(`🔄 轮廓已更新: ${newContour.length} 个点, 基准高度=${baseY}`);
     }
 
     /**
@@ -417,18 +347,6 @@ export class WaterMarker {
             this.waterMesh.geometry.dispose();
             this.waterMesh = null;
         }
-
-        if (this.bottomMesh) {
-            this.group.remove(this.bottomMesh);
-            this.bottomMesh.geometry.dispose();
-            this.bottomMesh = null;
-        }
-
-        this.sideMeshes.forEach(mesh => {
-            this.group.remove(mesh);
-            mesh.geometry.dispose();
-        });
-        this.sideMeshes = [];
     }
 
     /**
@@ -458,9 +376,6 @@ export class WaterMarker {
         }
         if (this.sideMaterial) {
             this.sideMaterial.dispose();
-        }
-        if (this.bottomMaterial) {
-            this.bottomMaterial.dispose();
         }
 
         console.log("🗑️ WaterMarker 资源已释放");

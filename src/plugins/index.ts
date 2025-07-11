@@ -22,6 +22,7 @@ export { TextMarkerPlugin } from "./webgl/textMarker"
 export { BuildingControlPlugin } from './webgl/BuildingControlPlugin';
 
 export { WaterMarker } from './webgl/waterMarker';
+export { WaterMarkerPlugin } from './webgl/WaterMakerPlugin';
 export { FireMarker } from './webgl/fireMarker';
 
 export { EffectComposer, RenderPass, UnrealBloomPass, ShaderPass, FXAAShader, OutputPass } from '../utils/three-imports';

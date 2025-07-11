@@ -3,41 +3,55 @@
  * 展示如何创建和使用指定轮廓的水体渲染
  */
 
-import { THREE } from "../src/plugins/basePlugin";
-import { WaterMarker } from "../src/plugins/webgl/waterMarker";
+import { WaterMarker } from '../src/plugins/webgl/waterMarker';
+import { THREE } from '../src/plugins/basePlugin';
 
-// 示例1: 创建一个矩形池塘
-export function createRectanglePond(): WaterMarker {
-    // 定义矩形轮廓
+// 创建基本的THREE.js场景
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer();
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+// 添加光源
+const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+scene.add(ambientLight);
+
+const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+directionalLight.position.set(50, 50, 50);
+scene.add(directionalLight);
+
+// 示例1：创建矩形水池
+function createRectanglePool() {
     const rectangleContour = [
-        new THREE.Vector3(-5, 0, -3),
-        new THREE.Vector3(5, 0, -3),
-        new THREE.Vector3(5, 0, 3),
-        new THREE.Vector3(-5, 0, 3)
+        new THREE.Vector3(-8, 0, -8),
+        new THREE.Vector3(8, 0, -8),
+        new THREE.Vector3(8, 0, 8),
+        new THREE.Vector3(-8, 0, 8)
     ];
 
-    const rectanglePond = new WaterMarker({
-        height: 2,
+    const rectanglePool = new WaterMarker({
+        height: 4,
         contour: rectangleContour,
         position: new THREE.Vector3(0, 0, 0),
-        waterColor: 0x0088cc,
+        waterColor: 0x4a90e2,
         transparency: 0.8,
         reflectivity: 0.9,
-        waveScale: 2.0,
+        flowSpeed: 0.4,
+        waveScale: 1.2,
         distortionScale: 4.0,
         enableAnimation: true
     });
 
-    console.log('✅ 矩形池塘创建完成');
-    return rectanglePond;
+    rectanglePool.addToScene(scene);
+    return rectanglePool;
 }
 
-// 示例2: 创建一个圆形湖泊
-export function createCircularLake(): WaterMarker {
-    // 定义圆形轮廓（使用多边形近似）
+// 示例2：创建圆形水池
+function createCircularPool() {
     const circularContour: THREE.Vector3[] = [];
-    const radius = 8;
-    const segments = 16;
+    const radius = 6;
+    const segments = 12;
     
     for (let i = 0; i < segments; i++) {
         const angle = (i / segments) * Math.PI * 2;
@@ -48,242 +62,168 @@ export function createCircularLake(): WaterMarker {
         ));
     }
 
-    const circularLake = new WaterMarker({
+    const circularPool = new WaterMarker({
         height: 3,
         contour: circularContour,
         position: new THREE.Vector3(20, 0, 0),
-        waterColor: 0x1166aa,
+        waterColor: 0x00aaff,
         transparency: 0.7,
         reflectivity: 0.8,
         flowSpeed: 0.3,
-        waveScale: 1.5,
+        waveScale: 0.8,
+        distortionScale: 3.0,
         enableAnimation: true
     });
 
-    console.log('✅ 圆形湖泊创建完成');
-    return circularLake;
+    circularPool.addToScene(scene);
+    return circularPool;
 }
 
-// 示例3: 创建一个复杂形状的河流
-export function createRiverSection(): WaterMarker {
-    // 定义弯曲河流轮廓
-    const riverContour = [
-        new THREE.Vector3(-15, 0, -2),
-        new THREE.Vector3(-10, 0, -3),
-        new THREE.Vector3(-5, 0, -2),
-        new THREE.Vector3(0, 0, -1),
-        new THREE.Vector3(5, 0, 1),
-        new THREE.Vector3(10, 0, 3),
-        new THREE.Vector3(15, 0, 2),
-        new THREE.Vector3(15, 0, 5),
-        new THREE.Vector3(10, 0, 6),
-        new THREE.Vector3(5, 0, 4),
-        new THREE.Vector3(0, 0, 2),
-        new THREE.Vector3(-5, 0, 1),
-        new THREE.Vector3(-10, 0, 0),
-        new THREE.Vector3(-15, 0, 1)
+// 示例3：创建六边形水池
+function createHexagonPool() {
+    const hexagonContour = [
+        new THREE.Vector3(5, 0, 0),
+        new THREE.Vector3(2.5, 0, 4.3),
+        new THREE.Vector3(-2.5, 0, 4.3),
+        new THREE.Vector3(-5, 0, 0),
+        new THREE.Vector3(-2.5, 0, -4.3),
+        new THREE.Vector3(2.5, 0, -4.3)
     ];
 
-    const riverSection = new WaterMarker({
-        height: 1.5,
-        contour: riverContour,
+    const hexagonPool = new WaterMarker({
+        height: 5,
+        contour: hexagonContour,
         position: new THREE.Vector3(-20, 0, 0),
-        waterColor: 0x4a7c8a,
-        transparency: 0.6,
+        waterColor: 0x20b2aa,
+        transparency: 0.75,
         reflectivity: 0.7,
-        flowSpeed: 0.8,
-        waveScale: 3.0,
+        flowSpeed: 0.5,
+        waveScale: 1.5,
         distortionScale: 5.0,
         enableAnimation: true
     });
 
-    console.log('✅ 河流段创建完成');
-    return riverSection;
+    hexagonPool.addToScene(scene);
+    return hexagonPool;
 }
 
-// 示例4: 创建建筑物周围的装饰水池
-export function createDecorativePool(): WaterMarker {
-    // 定义L形装饰水池轮廓
-    const decorativeContour = [
-        new THREE.Vector3(-4, 0, -4),
-        new THREE.Vector3(4, 0, -4),
-        new THREE.Vector3(4, 0, -1),
-        new THREE.Vector3(1, 0, -1),
-        new THREE.Vector3(1, 0, 4),
-        new THREE.Vector3(-4, 0, 4)
-    ];
+// 创建水池实例
+const rectanglePool = createRectanglePool();
+const circularPool = createCircularPool();
+const hexagonPool = createHexagonPool();
 
-    const decorativePool = new WaterMarker({
-        height: 0.8,
-        contour: decorativeContour,
-        position: new THREE.Vector3(30, 0, 0),
-        waterColor: 0x0099dd,
-        transparency: 0.9,
-        reflectivity: 1.0,
-        flowSpeed: 0.2,
-        waveScale: 0.8,
-        distortionScale: 2.0,
-        enableAnimation: true
-    });
+// 设置相机位置，从高处俯视以便看到水面效果
+camera.position.set(0, 25, 35);
+camera.lookAt(0, 0, 0);
 
-    console.log('✅ 装饰水池创建完成');
-    return decorativePool;
-}
+// 动态效果演示
+function demonstrateEffects() {
+    setTimeout(() => {
+        rectanglePool.setWaterColor(0x00ff88);
+        console.log("🎨 矩形水池颜色已更改 - 注意顶面和侧面都会改变");
+    }, 3000);
 
-// 示例5: 动态水体管理示例
-export class WaterBodyManager {
-    private waterBodies: WaterMarker[] = [];
-    private scene: THREE.Scene;
-
-    constructor(scene: THREE.Scene) {
-        this.scene = scene;
-    }
-
-    /**
-     * 添加所有示例水体到场景
-     */
-    public createAllExamples(): void {
-        console.log('🌊 开始创建所有水体示例...');
-
-        // 创建各种水体
-        const pond = createRectanglePond();
-        const lake = createCircularLake();
-        const river = createRiverSection();
-        const pool = createDecorativePool();
-
-        // 添加到管理器
-        this.addWaterBody(pond);
-        this.addWaterBody(lake);
-        this.addWaterBody(river);
-        this.addWaterBody(pool);
-
-        console.log(`✅ 所有水体创建完成，共 ${this.waterBodies.length} 个水体`);
-    }
-
-    /**
-     * 添加水体到场景和管理器
-     */
-    public addWaterBody(waterBody: WaterMarker): void {
-        waterBody.addToScene(this.scene);
-        this.waterBodies.push(waterBody);
-        console.log(`💧 水体已添加，当前总数: ${this.waterBodies.length}`);
-    }
-
-    /**
-     * 移除指定水体
-     */
-    public removeWaterBody(index: number): void {
-        if (index >= 0 && index < this.waterBodies.length) {
-            const waterBody = this.waterBodies[index];
-            waterBody.removeFromScene();
-            waterBody.dispose();
-            this.waterBodies.splice(index, 1);
-            console.log(`🗑️ 水体已移除，剩余: ${this.waterBodies.length} 个`);
-        }
-    }
-
-    /**
-     * 更新所有水体动画
-     */
-    public update(deltaTime: number): void {
-        this.waterBodies.forEach(waterBody => {
-            waterBody.update(deltaTime);
-        });
-    }
-
-    /**
-     * 设置所有水体的动画状态
-     */
-    public setAllAnimationEnabled(enabled: boolean): void {
-        this.waterBodies.forEach(waterBody => {
-            waterBody.setAnimationEnabled(enabled);
-        });
-        console.log(`🎬 所有水体动画已${enabled ? '启用' : '禁用'}`);
-    }
-
-    /**
-     * 改变所有水体颜色
-     */
-    public changeAllWaterColor(color: number): void {
-        this.waterBodies.forEach(waterBody => {
-            waterBody.setWaterColor(color);
-        });
-        console.log(`🎨 所有水体颜色已更改为: #${color.toString(16)}`);
-    }
-
-    /**
-     * 调整所有水体透明度
-     */
-    public setAllTransparency(transparency: number): void {
-        this.waterBodies.forEach(waterBody => {
-            waterBody.setTransparency(transparency);
-        });
-        console.log(`💎 所有水体透明度已设置为: ${transparency}`);
-    }
-
-    /**
-     * 获取水体统计信息
-     */
-    public getStatistics(): any {
-        return {
-            count: this.waterBodies.length,
-            waterBodies: this.waterBodies.map((wb, index) => ({
-                index,
-                options: wb.getOptions(),
-                position: wb.getPosition()
-            }))
-        };
-    }
-
-    /**
-     * 销毁所有水体
-     */
-    public dispose(): void {
-        this.waterBodies.forEach(waterBody => {
-            waterBody.removeFromScene();
-            waterBody.dispose();
-        });
-        this.waterBodies = [];
-        console.log('🗑️ 所有水体已销毁');
-    }
-}
-
-// 示例6: 在BaseScene中使用WaterMarker
-export function exampleUsageInBaseScene(scene: any): WaterBodyManager {
-    console.log('🚀 BaseScene 中的 WaterMarker 使用示例');
-
-    // 创建水体管理器
-    const waterManager = new WaterBodyManager(scene.sceneInstance);
-
-    // 创建所有示例水体
-    waterManager.createAllExamples();
-
-    // 设置定时器来演示动态效果
-    let colorIndex = 0;
-    const colors = [0x0088cc, 0x4a7c8a, 0x1166aa, 0x0099dd, 0x3388bb];
-    
-    setInterval(() => {
-        waterManager.changeAllWaterColor(colors[colorIndex % colors.length]);
-        colorIndex++;
+    setTimeout(() => {
+        circularPool.setTransparency(0.9);
+        console.log("💧 圆形水池透明度已更改 - 侧面变得更透明");
     }, 5000);
 
-    // 在场景更新循环中更新水体动画
-    const originalUpdate = scene.update;
-    scene.update = function() {
-        originalUpdate.call(this);
-        waterManager.update(performance.now());
-    };
-
-    // 返回管理器供外部使用
-    return waterManager;
+    setTimeout(() => {
+        hexagonPool.setWaveParameters(2.5, 7.0);
+        console.log("🌊 六边形水池波浪参数已更改 - 只有顶面有波浪");
+    }, 7000);
 }
 
-// 导出使用示例函数
-export default {
-    createRectanglePond,
-    createCircularLake,
-    createRiverSection,
-    createDecorativePool,
-    WaterBodyManager,
-    exampleUsageInBaseScene
-}; 
+// 轮廓动态更新演示
+function demonstrateContourUpdate() {
+    setTimeout(() => {
+        // 将矩形池子变成更大的矩形
+        const newContour = [
+            new THREE.Vector3(-12, 0, -12),
+            new THREE.Vector3(12, 0, -12),
+            new THREE.Vector3(12, 0, 12),
+            new THREE.Vector3(-12, 0, 12)
+        ];
+        
+        rectanglePool.updateContour(newContour);
+        console.log("🔄 矩形水池轮廓已更新为更大的矩形");
+    }, 10000);
+}
+
+// 渲染循环
+function animate() {
+    requestAnimationFrame(animate);
+
+    const deltaTime = 0.016; // 约60fps
+
+    // 更新水池动画（只有顶面有波浪动画）
+    rectanglePool.update(deltaTime);
+    circularPool.update(deltaTime);
+    hexagonPool.update(deltaTime);
+
+    renderer.render(scene, camera);
+}
+
+// 启动示例
+console.log("🚀 多材质 WaterMarker 示例开始运行");
+console.log("📋 新特性:");
+console.log("  - 顶面：完整的水面效果（波浪、反射、扭曲）");
+console.log("  - 侧面：简单的半透明水蓝色");
+console.log("  - 底面：简单的半透明水蓝色");
+console.log("  - 多种形状：矩形、圆形、六边形");
+
+// 启动动画和演示
+animate();
+demonstrateEffects();
+demonstrateContourUpdate();
+
+// 交互控制
+document.addEventListener('keydown', (event) => {
+    switch(event.key) {
+        case '1':
+            rectanglePool.setAnimationEnabled(!rectanglePool.getOptions().enableAnimation);
+            console.log("🔄 矩形水池动画切换");
+            break;
+        case '2':
+            circularPool.setAnimationEnabled(!circularPool.getOptions().enableAnimation);
+            console.log("🔄 圆形水池动画切换");
+            break;
+        case '3':
+            hexagonPool.setAnimationEnabled(!hexagonPool.getOptions().enableAnimation);
+            console.log("🔄 六边形水池动画切换");
+            break;
+        case 'c':
+            // 随机改变所有水池颜色
+            const colors = [0x4a90e2, 0x00aaff, 0x20b2aa, 0x1e90ff, 0x00bfff];
+            const randomColor = colors[Math.floor(Math.random() * colors.length)];
+            rectanglePool.setWaterColor(randomColor);
+            circularPool.setWaterColor(randomColor);
+            hexagonPool.setWaterColor(randomColor);
+            console.log(`🎨 所有水池颜色已更改为: #${randomColor.toString(16)}`);
+            break;
+        case 't':
+            // 切换透明度
+            const newTransparency = Math.random() * 0.5 + 0.5; // 0.5-1.0
+            rectanglePool.setTransparency(newTransparency);
+            circularPool.setTransparency(newTransparency);
+            hexagonPool.setTransparency(newTransparency);
+            console.log(`💎 所有水池透明度已设置为: ${newTransparency.toFixed(2)}`);
+            break;
+    }
+});
+
+console.log("⌨️  键盘控制:");
+console.log("  - 按 1/2/3 切换对应水池的动画");
+console.log("  - 按 C 随机改变所有水池颜色");
+console.log("  - 按 T 随机改变所有水池透明度");
+
+// 清理函数
+function cleanup() {
+    rectanglePool.dispose();
+    circularPool.dispose();
+    hexagonPool.dispose();
+    console.log("🧹 所有资源已清理");
+}
+
+// 页面卸载时清理资源
+window.addEventListener('beforeunload', cleanup); 
