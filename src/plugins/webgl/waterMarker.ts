@@ -10,7 +10,7 @@ import { Water } from "../../utils/three-imports"
 interface WaterMarkerOptions {
     height: number; // 水体高度
     contour: THREE.Vector3[]; // 轮廓坐标数组（描述底面轮廓，x,z定义水平形状，y为底面高度）
-    position?: THREE.Vector3; // 水体位置
+    position?: THREE.Vector3 | null; // 水体位置
     waterColor?: number; // 水体颜色
     transparency?: number; // 透明度 (0-1)
     reflectivity?: number; // 反射强度 (0-1)
@@ -29,14 +29,12 @@ export class WaterMarker {
     private waterMaterial: THREE.ShaderMaterial | null = null;
     private sideMaterial: THREE.MeshPhongMaterial | null = null;
     private animationTime: number = 0;
-    private renderer: THREE.WebGLRenderer | null = null;
     private scene: THREE.Scene | null = null;
-    private camera: THREE.Camera | null = null;
 
     constructor(options: WaterMarkerOptions) {
         // 设置默认值
         this.options = {
-            position: new THREE.Vector3(0, 0, 0),
+            position: null,
             waterColor: 0x4a90e2,
             transparency: 0.7,
             reflectivity: 0.8,
@@ -49,7 +47,6 @@ export class WaterMarker {
         };
 
         this.group = new THREE.Group();
-        this.group.position.copy(this.options.position!);
 
         this.validateOptions();
         this.init(this.options);
@@ -78,7 +75,6 @@ export class WaterMarker {
         const materials = this.createMaterials();
         this.waterMesh = new THREE.Mesh(this.createGeometry(), materials);
         this.group.add(this.waterMesh);
-        console.log(this)
     }
 
     /**
@@ -92,9 +88,11 @@ export class WaterMarker {
         const sideMaterial = new THREE.MeshPhongMaterial({
             color: this.options.waterColor,
             transparent: true,
-            opacity: this.options.transparency! * 0.4,
+            opacity: this.options.transparency,
             side: THREE.DoubleSide,
         });
+        sideMaterial.alphaToCoverage = true
+        sideMaterial.alphaTest = 0.2
         
         // 保存材质引用
         this.waterMaterial = waterMaterial;
@@ -153,26 +151,30 @@ export class WaterMarker {
      * 创建几何体、以ExtrudeGeometry创建
      */
     private createGeometry(): THREE.ExtrudeGeometry {
-        // 1. 计算轮廓的基准高度（底面）
-        const baseY = Math.min(...this.options.contour.map(p => p.y));
+        // 修复：使用轮廓中心点作为参考，而不是最小Y值
+        const contourYValues = this.options.contour.map(p => p.y);
+        const avgY = contourYValues.reduce((sum, y) => sum + y, 0) / contourYValues.length;
         
-        // 2. 根据轮廓数组创建形状shape (在XY平面上)
+        // 计算轮廓的中心点（用于相对坐标转换）
+        const centerX = this.options.contour.reduce((sum, p) => sum + p.x, 0) / this.options.contour.length;
+        const centerZ = this.options.contour.reduce((sum, p) => sum + p.z, 0) / this.options.contour.length;
+        
         const shape = new THREE.Shape();
         
-        // 设置起始点 - 使用x,z坐标映射到XY平面
+        // 修复：转换为相对于中心点的本地坐标
         const firstPoint = this.options.contour[0];
-        shape.moveTo(firstPoint.x, firstPoint.z);
+        shape.moveTo(firstPoint.x - centerX, firstPoint.z - centerZ);
         
-        // 添加其他轮廓点
+        // 添加其他轮廓点（相对坐标）
         for (let i = 1; i < this.options.contour.length; i++) {
             const point = this.options.contour[i];
-            shape.lineTo(point.x, point.z);
+            shape.lineTo(point.x - centerX, point.z - centerZ);
         }
         
         // 闭合路径
         shape.closePath();
         
-        // 3. 拉伸设置 - 沿Z轴拉伸
+        // 拉伸设置 - 沿Z轴拉伸
         const extrudeSettings = {
             depth: this.options.height,
             bevelEnabled: false,
@@ -183,18 +185,19 @@ export class WaterMarker {
             curveSegments: 12
         };
         
-        // 4. 使用ExtrudeGeometry创建几何体
+        // 使用ExtrudeGeometry创建几何体
         const extrudeGeometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
         
-        // 5. 旋转几何体使其正确定向
-        // ExtrudeGeometry默认在XY平面创建形状并沿Z轴拉伸
-        // 我们需要旋转使其在XZ平面上，沿Y轴向上拉伸
+        // 修复：几何体变换顺序
+        // 1. 先旋转使其在XZ平面上，沿Y轴向上拉伸
         extrudeGeometry.rotateX(-Math.PI / 2);
         
-        // 6. 调整位置使底面位于基准高度
-        extrudeGeometry.translate(0, baseY, 0);
+        // 2. 将几何体移动到正确的世界位置
+        // 使用平均Y值作为基准高度，而不是最小值
+        extrudeGeometry.translate(centerX, avgY, centerZ);
         
-        console.log(`🔧 水体几何体创建完成: 轮廓点数=${this.options.contour.length}, 高度=${this.options.height}, 基准高度=${baseY}`);
+        console.log(`🔧 水体几何体创建完成: 轮廓点数=${this.options.contour.length}, 高度=${this.options.height}`);
+        console.log(`📍 中心点: (${centerX.toFixed(2)}, ${avgY.toFixed(2)}, ${centerZ.toFixed(2)})`);
         
         return extrudeGeometry;
     }
@@ -224,15 +227,6 @@ export class WaterMarker {
     }
 
     /**
-     * 添加到场景
-     */
-    public addToScene(scene: THREE.Scene): void {
-        this.scene = scene;
-        scene.add(this.group);
-        console.log("🌊 WaterMarker 已添加到场景");
-    }
-
-    /**
      * 从场景移除
      */
     public removeFromScene(): void {
@@ -249,6 +243,7 @@ export class WaterMarker {
     public setPosition(position: THREE.Vector3): void {
         this.group.position.copy(position);
         this.options.position = position.clone();
+        this.group.updateMatrixWorld()
     }
 
     /**
@@ -333,8 +328,14 @@ export class WaterMarker {
             this.group.add(this.waterMesh);
         }
         
-        const baseY = Math.min(...newContour.map(p => p.y));
-        console.log(`🔄 轮廓已更新: ${newContour.length} 个点, 基准高度=${baseY}`);
+        // 计算新轮廓的中心点信息（与createGeometry保持一致）
+        const contourYValues = newContour.map(p => p.y);
+        const avgY = contourYValues.reduce((sum, y) => sum + y, 0) / contourYValues.length;
+        const centerX = newContour.reduce((sum, p) => sum + p.x, 0) / newContour.length;
+        const centerZ = newContour.reduce((sum, p) => sum + p.z, 0) / newContour.length;
+        
+        console.log(`🔄 轮廓已更新: ${newContour.length} 个点`);
+        console.log(`📍 新中心点: (${centerX.toFixed(2)}, ${avgY.toFixed(2)}, ${centerZ.toFixed(2)})`);
     }
 
     /**

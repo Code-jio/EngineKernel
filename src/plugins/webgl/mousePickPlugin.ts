@@ -63,7 +63,6 @@ interface PickConfig {
     tolerance: number // 拾取容差（像素）
     maxDistance: number // 最大拾取距离
     sortByDistance: boolean // 是否按距离排序
-    includeInvisible: boolean // 是否包含不可见物体
     recursive: boolean // 是否递归检测子物体
     enableDebug: boolean // 是否开启调试模式
     showHighlight: boolean // 是否显示高亮
@@ -97,7 +96,6 @@ export class MousePickPlugin extends BasePlugin {
         tolerance: 0.001, // 拾取容差（像素）
         maxDistance: Infinity, // 最大拾取距离
         sortByDistance: true, // 是否按距离排序
-        includeInvisible: false, // 是否包含不可见物体
         recursive: false, // 是否递归检测子物体
         enableDebug: false, // 是否开启调试模式
         showHighlight: true, // 是否显示高亮
@@ -434,9 +432,9 @@ export class MousePickPlugin extends BasePlugin {
                     worldMatrix: result.worldMatrix,
                     boundingBox: result.boundingBox
                         ? {
-                              min: result.boundingBox.min,
-                              max: result.boundingBox.max,
-                          }
+                            min: result.boundingBox.min,
+                            max: result.boundingBox.max,
+                        }
                         : undefined,
                     objectList:
                         result.objectList?.map(obj => ({
@@ -502,20 +500,41 @@ export class MousePickPlugin extends BasePlugin {
     }
 
     /**
+     * 检查物体及其整个父级链是否可见
+     * @param object 要检查的物体
+     * @returns 如果物体及其所有父级都可见则返回true
+     */
+    private isObjectFullyVisible(object: THREE.Object3D): boolean {
+        let current = object;
+        while (current) {
+            if (!current.visible) {
+                return false;
+            }
+            current = current.parent!;
+        }
+        return true;
+    }
+
+    /**
      * 获取可拾取的物体列表
      */
     private getPickableObjects(): THREE.Object3D[] {
-        if (!this.scene) return []
+        if (!this.scene) return [];
+        const objects: THREE.Object3D[] = [];
 
-        const objects: THREE.Object3D[] = []
         this.scene.traverse(child => {
-            // 跳过不可见物体（除非配置允许）
-            if (!child.visible && !this.config.includeInvisible) return
+            // 跳过不可见物体（检查整个父级链）
+            if (!this.isObjectFullyVisible(child)) return
 
-            // 跳过没有几何体的物体
-            if (!(child as any).geometry && !(child as any).isMesh) return
-
-            objects.push(child)
+            // 判断是否是可拾取类型
+            if (
+                child instanceof THREE.Mesh ||
+                child instanceof THREE.Line ||
+                child instanceof THREE.Points ||
+                child instanceof THREE.Sprite
+            ) {
+                objects.push(child);
+            }
         })
 
         return objects
@@ -575,6 +594,15 @@ export class MousePickPlugin extends BasePlugin {
             results = results.filter(result => result.distance <= this.config.maxDistance)
         }
 
+        // 可见性过滤（检查整个父级链）
+        for (let i = 0; i < results.length; i++) {
+            if (!this.isObjectFullyVisible(results[i].object)) {
+              results.splice(i, 1);
+              i--;
+            }
+        }
+
+
         // 排序
         if (this.config.sortByDistance) {
             results.sort((a, b) => a.distance - b.distance)
@@ -590,6 +618,15 @@ export class MousePickPlugin extends BasePlugin {
      * 处理拾取结果
      */
     private handlePickResults(results: PickResult[], event: MouseEvent): void {
+
+        // 可见性过滤（检查整个父级链）
+        for (let i = 0; i < results.length; i++) {
+            if (!this.isObjectFullyVisible(results[i].object)) {
+                results.splice(i, 1);
+                i--;
+            }
+        }
+
         const closestResult = results[0]
 
         // 只在非Ctrl键状态下处理拾取，Ctrl键用于框选模式
@@ -679,9 +716,9 @@ export class MousePickPlugin extends BasePlugin {
                 worldMatrix: result.worldMatrix,
                 boundingBox: result.boundingBox
                     ? {
-                          min: result.boundingBox.min,
-                          max: result.boundingBox.max,
-                      }
+                        min: result.boundingBox.min,
+                        max: result.boundingBox.max,
+                    }
                     : undefined,
             })),
             selectedObjectId: closestResult.object.id,
@@ -854,19 +891,19 @@ export class MousePickPlugin extends BasePlugin {
             this.emitPickEvent("hover-changed", {
                 previousObject: this.hoveredObject
                     ? {
-                          id: this.hoveredObject.id,
-                          name: this.hoveredObject.name,
-                          type: this.hoveredObject.type,
-                      }
+                        id: this.hoveredObject.id,
+                        name: this.hoveredObject.name,
+                        type: this.hoveredObject.type,
+                    }
                     : null,
                 currentObject: newHoveredObject
                     ? {
-                          id: newHoveredObject.id,
-                          name: newHoveredObject.name,
-                          type: newHoveredObject.type,
-                          position: intersects[0].point,
-                          distance: intersects[0].distance,
-                      }
+                        id: newHoveredObject.id,
+                        name: newHoveredObject.name,
+                        type: newHoveredObject.type,
+                        position: intersects[0].point,
+                        distance: intersects[0].distance,
+                    }
                     : null,
                 timestamp: Date.now(),
             })
@@ -946,6 +983,11 @@ export class MousePickPlugin extends BasePlugin {
             return true
         }
 
+        // 排除未显示物体
+        if (object.visible === false) {
+            return true
+        }
+
         return false
     }
 
@@ -979,8 +1021,8 @@ export class MousePickPlugin extends BasePlugin {
      * 高亮指定对象（边框泛光效果）
      */
     private highlightObjectWithOutline(object: THREE.Object3D): void {
-        // 如果高亮开关关闭，直接返回
-        if (!this.config.showHighlight) {
+        // 如果高亮开关关闭或物体不完全可见，直接返回
+        if (!this.config.showHighlight || !this.isObjectFullyVisible(object)) {
             return
         }
 
@@ -1148,7 +1190,7 @@ export class MousePickPlugin extends BasePlugin {
             // 移除调试射线
             this.scene.remove(this.debugRayLine)
             this.debugRayLine.geometry.dispose()
-            ;(this.debugRayLine.material as THREE.Material).dispose()
+                ; (this.debugRayLine.material as THREE.Material).dispose()
             this.debugRayLine = null
         }
     }

@@ -703,8 +703,6 @@ export class BuildingControlPlugin extends BasePlugin {
             associatedEquipment: [],
         })
 
-        // 提取并保存房间地板轮廓
-        this.extractAndSaveRoomBounding(roomObject, roomInfo.roomCode)
     }
 
     /**
@@ -1026,6 +1024,73 @@ export class BuildingControlPlugin extends BasePlugin {
     }
 
     /**
+     * 提取mesh底面轮廓顶点（用于水体标注）
+     * @param mesh 要提取轮廓的mesh对象
+     * @returns 底面轮廓顶点数组（世界坐标）
+     */
+    private extractBottomFaceVertices(mesh: THREE.Mesh): THREE.Vector3[] {
+        const geometry = mesh.geometry
+        if (!geometry.attributes.position) {
+            console.warn("⚠️ Mesh没有position属性，无法提取底面轮廓")
+            return []
+        }
+
+        const verticesArray = geometry.attributes.position.array
+        const vertices: THREE.Vector3[] = []
+
+        // 获取所有顶点的Y值，找到最小值（底面）
+        let minY = Infinity
+        for (let i = 0; i < verticesArray.length; i += 3) {
+            const y = verticesArray[i + 1]
+            if (y < minY) {
+                minY = y
+            }
+        }
+
+        // 筛选Y值最小的顶点（底面顶点）
+        const bottomVertices: THREE.Vector3[] = []
+        const tolerance = 0.01 // 容差值，处理浮点数精度问题
+
+        for (let i = 0; i < verticesArray.length; i += 3) {
+            const x = verticesArray[i]
+            const y = verticesArray[i + 1]
+            const z = verticesArray[i + 2]
+
+            if (Math.abs(y - minY) < tolerance) {
+                const vertex = new THREE.Vector3(x, y, z)
+                // 转换到世界坐标
+                vertex.applyMatrix4(mesh.matrixWorld)
+
+                // 检查是否已存在相同的顶点（去重）
+                const isDuplicate = bottomVertices.some(existing => vertex.distanceTo(existing) < tolerance)
+
+                if (!isDuplicate) {
+                    bottomVertices.push(vertex)
+                }
+            }
+        }
+
+        if (bottomVertices.length < 3) {
+            console.warn("⚠️ 底面顶点数量不足，无法构成有效轮廓")
+            return []
+        }
+
+        // 计算顶点的中心点
+        const center = new THREE.Vector3()
+        bottomVertices.forEach(v => center.add(v))
+        center.divideScalar(bottomVertices.length)
+
+        // 按照逆时针方向排序顶点（从上方看）
+        bottomVertices.sort((a, b) => {
+            const angleA = Math.atan2(a.z - center.z, a.x - center.x)
+            const angleB = Math.atan2(b.z - center.z, b.x - center.x)
+            return angleA - angleB
+        })
+
+        return bottomVertices
+    }
+
+    /**
      * 为房间对象提取并保存轮廓信息
      * @param roomObject 房间3D对象
      * @param roomCode 房间代码
@@ -1061,37 +1126,60 @@ export class BuildingControlPlugin extends BasePlugin {
         }
 
         try {
-            // 提取顶面轮廓
-            const boundingVertices = this.extractTopFaceVertices(floorMesh)
+            // 提取顶面轮廓（用于常规用途）
+            const topBoundingVertices = this.extractTopFaceVertices(floorMesh)
+            
+            // 提取底面轮廓（用于水体标注）
+            const bottomBoundingVertices = this.extractBottomFaceVertices(floorMesh)
 
-            if (boundingVertices.length > 0) {
+            if (topBoundingVertices.length > 0 || bottomBoundingVertices.length > 0) {
                 // 将轮廓信息保存到房间的userData中
                 if (!roomObject.userData) {
                     roomObject.userData = {}
                 }
 
-                roomObject.userData.bounding = {
-                    vertices: boundingVertices.map(v => ({ x: v.x, y: v.y, z: v.z })),
-                    vertexCount: boundingVertices.length,
-                    center: {
-                        x: boundingVertices.reduce((sum, v) => sum + v.x, 0) / boundingVertices.length,
-                        y: boundingVertices.reduce((sum, v) => sum + v.y, 0) / boundingVertices.length,
-                        z: boundingVertices.reduce((sum, v) => sum + v.z, 0) / boundingVertices.length,
-                    },
-                    extractedAt: Date.now(),
-                    meshName: floorMesh.name || "unnamed_floor_mesh",
+                // 保存顶面轮廓信息
+                if (topBoundingVertices.length > 0) {
+                    roomObject.userData.bounding = {
+                        vertices: topBoundingVertices.map(v => ({ x: v.x, y: v.y, z: v.z })),
+                        vertexCount: topBoundingVertices.length,
+                        center: {
+                            x: topBoundingVertices.reduce((sum, v) => sum + v.x, 0) / topBoundingVertices.length,
+                            y: topBoundingVertices.reduce((sum, v) => sum + v.y, 0) / topBoundingVertices.length,
+                            z: topBoundingVertices.reduce((sum, v) => sum + v.z, 0) / topBoundingVertices.length,
+                        },
+                        type: "top", // 标记为顶面轮廓
+                        extractedAt: Date.now(),
+                        meshName: floorMesh.name || "unnamed_floor_mesh",
+                    }
                 }
 
-                // console.log(`✅ 房间 ${roomCode} 轮廓提取完成，顶点数: ${boundingVertices.length}`)
+                // 保存底面轮廓信息（用于水体标注）
+                if (bottomBoundingVertices.length > 0) {
+                    roomObject.userData.waterBounding = {
+                        vertices: bottomBoundingVertices.map(v => ({ x: v.x, y: v.y, z: v.z })),
+                        vertexCount: bottomBoundingVertices.length,
+                        center: {
+                            x: bottomBoundingVertices.reduce((sum, v) => sum + v.x, 0) / bottomBoundingVertices.length,
+                            y: bottomBoundingVertices.reduce((sum, v) => sum + v.y, 0) / bottomBoundingVertices.length,
+                            z: bottomBoundingVertices.reduce((sum, v) => sum + v.z, 0) / bottomBoundingVertices.length,
+                        },
+                        type: "bottom", // 标记为底面轮廓
+                        extractedAt: Date.now(),
+                        meshName: floorMesh.name || "unnamed_floor_mesh",
+                    }
+                }
 
                 if (this.debugMode) {
-                    // console.log(`🔍 房间 ${roomCode} 轮廓详情:`, roomObject.userData.bounding)
+                    console.log(`✅ 房间 ${roomCode} 轮廓提取完成`)
+                    console.log(`   - 顶面轮廓: ${topBoundingVertices.length} 个顶点`)
+                    console.log(`   - 底面轮廓: ${bottomBoundingVertices.length} 个顶点`)
                 }
             } else {
-                // console.warn(`⚠️ 房间 ${roomCode} 轮廓提取失败：没有有效的顶面顶点`)
+                console.warn(`⚠️ 房间 ${roomCode} 轮廓提取失败：没有有效的顶点`)
             }
         } catch (error) {
-            // console.error(`❌ 房间 ${roomCode} 轮廓提取出错:`, error)
+            console.error(`❌ 房间 ${roomCode} 轮廓提取出错:`, error)
         }
     }
 
@@ -1256,6 +1344,8 @@ export class BuildingControlPlugin extends BasePlugin {
         // 恢复所有楼层透明度
         this.restoreAllFloorOpacity()
 
+        this.setAllEquipmentVisibility(false)
+
         // 执行收起动画
         this.executeCollapseAnimation(() => {
             // 动画完成后的回调
@@ -1264,7 +1354,7 @@ export class BuildingControlPlugin extends BasePlugin {
 
             // // 恢复外立面显示
             // this.showFacades()
-
+            // TODO: 疑问：这里并没有恢复外立面显示，但是在功能实际执行时还是发生了外立面的显示恢复
             this.events.onCollapseComplete?.()
             console.log(`✅ 所有楼层收起完成`)
         })
@@ -1620,7 +1710,10 @@ export class BuildingControlPlugin extends BasePlugin {
      * 设置楼层透明度
      */
     private setFloorOpacity(floor: FloorItem, opacity: number): void {
-        floor.group.visible = opacity ? true : false
+        // floor.group.visible = opacity ? true : false
+        floor.group.traverse((item)=>{
+            item.visible = opacity ? true : false
+        })
 
         // floor.group.traverse((child) => {
         //     if (child instanceof THREE.Mesh && child.material) {
@@ -1642,7 +1735,11 @@ export class BuildingControlPlugin extends BasePlugin {
         //         this.applyOpacityWithMaterialCloning(child, opacity, 'equipment', equipment.uuid)
         //     }
         // })
-        equipment.visible = opacity ? true : false
+        // equipment.visible = opacity ? true : false
+
+        equipment.traverse((item)=>{
+            item.visible = opacity ? true : false
+        })
     }
 
     /**
@@ -1779,7 +1876,11 @@ export class BuildingControlPlugin extends BasePlugin {
         //         this.applyOpacityWithMaterialCloning(child, opacity, 'room', room.name || room.uuid)
         //     }
         // })
-        room.visible = opacity ? true : false
+        // room.visible = opacity ? true : false
+
+        room.traverse((item)=>{
+            item.visible = opacity ? true : false
+        })
     }
 
     /**
@@ -1893,7 +1994,11 @@ export class BuildingControlPlugin extends BasePlugin {
         //         facade.position.copy(facade.userData.buildingInfo.originalPosition)
         //     }
         // })
-        this.facadeGroup.visible = false
+        // this.facadeGroup.visible = false
+
+        this.facadeGroup.traverse((item)=>{
+            item.visible = false
+        })
     }
 
     /**
@@ -1903,7 +2008,10 @@ export class BuildingControlPlugin extends BasePlugin {
         // this.facades.forEach(facade => {
         //     facade.visible = true
         // })
-        this.facadeGroup.visible = true
+        // this.facadeGroup.visible = true
+        this.facadeGroup.traverse((item)=>{
+            item.visible = true
+        })
     }
 
     /**
@@ -2607,6 +2715,7 @@ export class BuildingControlPlugin extends BasePlugin {
         meshName: string
     } | null {
         const roomObject = this.getRoomObject(roomCode)
+        
         if (!roomObject || !roomObject.userData || !roomObject.userData.bounding) {
             return null
         }
@@ -2644,19 +2753,26 @@ export class BuildingControlPlugin extends BasePlugin {
      * @param roomCode 房间代码
      * @returns 是否提取成功
      */
-    public reextractRoomBounding(roomCode: string): boolean {
+    public reextractRoomBounding(roomCode: string): object {
         const roomObject = this.getRoomObject(roomCode)
         if (!roomObject) {
             console.warn(`⚠️ 房间 ${roomCode} 不存在`)
-            return false
+            return {
+                result:false
+            }
         }
 
         try {
             this.extractAndSaveRoomBounding(roomObject, roomCode)
-            return true
+            return {
+                userdata:roomObject.userData,
+                result:true
+            }
         } catch (error) {
             console.error(`❌ 重新提取房间 ${roomCode} 轮廓失败:`, error)
-            return false
+            return {
+                result:false
+            }
         }
     }
 
@@ -2903,7 +3019,55 @@ export class BuildingControlPlugin extends BasePlugin {
         // 停止所有动画
         this.stopAllAnimations()
 
-        console.log("🧹 建筑控制插件已清理")
+        console.log("�� 建筑控制插件已清理")
+    }
+
+    /**
+     * 获取房间水体轮廓信息（用于水体标注）
+     * @param roomCode 房间代码
+     * @returns 房间水体轮廓信息，如果不存在返回null
+     */
+    public getRoomWaterBounding(roomCode: string): {
+        vertices: Array<{ x: number; y: number; z: number }>
+        vertexCount: number
+        center: { x: number; y: number; z: number }
+        type: string
+        extractedAt: number
+        meshName: string
+    } | null {
+        const roomObject = this.getRoomObject(roomCode)
+        
+        if (!roomObject || !roomObject.userData || !roomObject.userData.waterBounding) {
+            return null
+        }
+        return roomObject.userData.waterBounding
+    }
+
+    /**
+     * 获取所有房间的水体轮廓信息
+     * @returns 房间水体轮廓信息的映射表
+     */
+    public getAllRoomWaterBoundings(): Map<
+        string,
+        {
+            vertices: Array<{ x: number; y: number; z: number }>
+            vertexCount: number
+            center: { x: number; y: number; z: number }
+            type: string
+            extractedAt: number
+            meshName: string
+        }
+    > {
+        const boundings = new Map()
+
+        this.rooms.forEach((room, roomCode) => {
+            const bounding = this.getRoomWaterBounding(roomCode)
+            if (bounding) {
+                boundings.set(roomCode, bounding)
+            }
+        })
+
+        return boundings
     }
 }
 
