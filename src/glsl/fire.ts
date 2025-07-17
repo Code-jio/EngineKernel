@@ -28,10 +28,10 @@ const fireMaterial = new THREE.ShaderMaterial({
     },
     
     vertexShader: `
-        // varying vec2 vUv;
+        varying vec2 vUv;
         
         void main() {
-            // vUv = uv;
+            vUv = uv;
             gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
         }
     `,
@@ -57,6 +57,7 @@ const fireMaterial = new THREE.ShaderMaterial({
         uniform float temperatureVariation;
         uniform float sparkleIntensity;
         
+        varying vec2 vUv;
         
         // ============================================================================
         // 噪声函数库
@@ -265,9 +266,9 @@ const fireMaterial = new THREE.ShaderMaterial({
             fireColor *= 1.5 * (1.0 + coreIntensity);
             vec3 fire = fireColor * vec3(f, fff, fff * fff);
             
-            // 烟雾效果
-            float smokeNoise = 0.5 + snoise(0.4 * position + timing * vec3(1.0, 1.0, 0.2)) / 2.0;
-            vec3 smoke = vec3(0.3 * pow(xfuel, 3.0) * pow(ypart, 2.0) * (smokeNoise + 0.4 * (1.0 - noise)));
+            // // 烟雾效果
+            // float smokeNoise = 0.5 + snoise(0.4 * position + timing * vec3(1.0, 1.0, 0.2)) / 2.0;
+            // vec3 smoke = vec3(0.3 * pow(xfuel, 3.0) * pow(ypart, 2.0) * (smokeNoise + 0.4 * (1.0 - noise)));
             
             // 火花效果（增强）
             float sparkGridSize = 30.0;
@@ -299,12 +300,16 @@ const fireMaterial = new THREE.ShaderMaterial({
             }
             
             // 最终颜色合成
-            vec3 finalColor = max(fire, sparks) + smoke;
+            // vec3 finalColor = max(fire, sparks) + smoke;
+            vec3 finalColor = max(fire, sparks);
             fragColor = vec4(finalColor, opacity);
         }
         
         void main() {
-            mainImage(gl_FragColor, gl_FragCoord.xy);
+            // 修正：使用vUv替代gl_FragCoord.xy
+            // vUv 的范围是 0.0 到 1.0，代表在几何体上的纹理坐标。
+            // 这样可以将火焰效果正确地“贴”在几何体上，而不是固定在屏幕上。
+            mainImage(gl_FragColor, vUv * iResolution.xy);
         }
     `,
     

@@ -84,7 +84,7 @@ export class FireMarker {
 
         // 创建网格
         this.mesh = this.createMesh()
-
+        this.mesh.renderOrder = 10
         // 应用初始配置
         this.applyConfig()
 
@@ -112,7 +112,8 @@ export class FireMarker {
         material.transparent = true
         material.blending = THREE.AdditiveBlending
         material.depthWrite = this.config.depthWrite
-        material.depthTest = this.config.depthTest
+        material.depthTest = false
+        material.side = THREE.DoubleSide
         
         if (this.config.debugMode) {
             console.log("🔥 Material uniforms:", Object.keys(material.uniforms))
@@ -147,7 +148,7 @@ export class FireMarker {
         const mesh = new THREE.Mesh(this.geometry, this.material)
 
         // 设置渲染顺序
-        mesh.renderOrder = this.config.renderOrder
+        mesh.renderOrder = 2
 
         // 设置名称和标识
         mesh.name = "FireMarker"
