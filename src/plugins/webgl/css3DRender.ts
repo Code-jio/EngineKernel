@@ -10,7 +10,13 @@ interface CSS3DConfig {
     rotation?: [number, number, number]
     scale?: number | [number, number, number] // 支持非等比缩放
     offset?: number
-
+    
+    // 增强的偏移控制
+    offsetConfig?: {
+        distance: number
+        direction: 'up' | 'down' | 'left' | 'right' | 'front' | 'back' | 'diagonal'
+    }
+    
     // 显示配置
     display?: boolean // css属性控制。
     opacity?: number
@@ -28,6 +34,7 @@ interface CSS3DConfig {
     gpuAcceleration?: boolean // 是否强制启用GPU加速
     pointerEventsControl?: "auto" | "none" | "smart" // 鼠标事件控制策略
     useTransitions?: boolean // 是否使用CSS过渡动画
+    billboarding?: boolean // 是否启用billboarding效果（永远朝向镜头）
 
     // 生命周期回调
     complete?: () => void
@@ -53,12 +60,20 @@ export class CSS3DRenderPlugin extends BasePlugin {
     private resizeHandler: (() => void) | null = null
     // 添加渲染模式配置
     private renderMode: "continuous" | "onDemand" = "continuous" // 连续渲染或按需渲染
+    private enableBillboarding: boolean = true // 是否启用billboarding效果（永远朝向镜头）
     // private lastRenderTime: number = 0
     // 存储update事件处理器引用，便于清理
     private updateHandler: (() => void) | null = null
 
     // 动画组
     private animations: TWEEN.Group = new TWEEN.Group()
+    
+    // 缓存对象，用于优化billboarding计算
+    private _cameraPosition?: THREE.Vector3
+    private _objectPosition?: THREE.Vector3
+    private _lookAtQuaternion?: THREE.Quaternion
+    private _tempMatrix?: THREE.Matrix4
+    private _tempUp?: THREE.Vector3
 
     constructor(meta: any) {
         super(meta)
@@ -92,7 +107,7 @@ export class CSS3DRenderPlugin extends BasePlugin {
      */
     private initialize() {
         this.startRenderLoop()
-        this.addTransitionStyles() //
+        // this.addTransitionStyles() //
 
         console.log("✅ CSS3D插件已通过eventBus集成到渲染循环")
         console.log(`🎬 当前渲染模式: ${this.renderMode}`)
@@ -137,6 +152,7 @@ export class CSS3DRenderPlugin extends BasePlugin {
             position: [0, 0, 0],
             rotation: [0, 0, 0],
             offset: 0,
+            offsetConfig: { distance: 0, direction: 'up' },
             scale: 0.05,
             display: true, // 默认可见
             opacity: 1,
@@ -145,6 +161,7 @@ export class CSS3DRenderPlugin extends BasePlugin {
             gpuAcceleration: true, // 默认启用GPU加速
             pointerEventsControl: "smart", // 智能鼠标事件控制
             useTransitions: true, // 默认使用CSS过渡
+            billboarding: true, // 默认启用billboarding效果
             complete: () => {},
             onUpdate: () => {},
             onDestroy: () => {},
@@ -179,20 +196,12 @@ export class CSS3DRenderPlugin extends BasePlugin {
             // GPU加速样式
             const baseTransform = "translate3d(0,0,0)"
 
-            // 构建初始变换（包含中心对齐）
-            const initialTransform = [
-                "translate(-50%, -50%)", // 中心对齐
-                baseTransform, // GPU加速
-            ].join(" ")
-
             // 构建完整样式
             const cssText = [
                 `opacity: ${mergedOptions.display ? mergedOptions.opacity : 0}`,
                 `z-index: ${mergedOptions.zIndex}`,
                 `visibility: ${mergedOptions.display ? "visible" : "hidden"}`,
                 `pointer-events: ${pointerEvents}`,
-                `transform: ${initialTransform}`,
-                "transform-origin: center center",
                 mergedOptions.gpuAcceleration ? "will-change: transform, opacity" : "",
             ]
                 .filter(Boolean)
@@ -219,9 +228,43 @@ export class CSS3DRenderPlugin extends BasePlugin {
             // 设置可见性
             object.visible = mergedOptions.display || false
 
-            // 应用offset（Y轴偏移）
-            const finalY = mergedOptions.position[1] + (mergedOptions.offset || 0)
-            object.position.set(mergedOptions.position[0], finalY, mergedOptions.position[2])
+            // 计算最终位置（支持传统offset和新offsetConfig）
+            let finalPosition = [...mergedOptions.position] as [number, number, number]
+            
+            // 优先使用offsetConfig
+            if (mergedOptions.offsetConfig && mergedOptions.offsetConfig.distance > 0) {
+                const { distance, direction } = mergedOptions.offsetConfig
+                switch (direction) {
+                    case 'up':
+                        finalPosition[1] += distance
+                        break
+                    case 'down':
+                        finalPosition[1] -= distance
+                        break
+                    case 'left':
+                        finalPosition[0] -= distance
+                        break
+                    case 'right':
+                        finalPosition[0] += distance
+                        break
+                    case 'front':
+                        finalPosition[2] += distance
+                        break
+                    case 'back':
+                        finalPosition[2] -= distance
+                        break
+                    case 'diagonal':
+                        finalPosition[0] += distance * 0.707
+                        finalPosition[1] += distance * 0.707
+                        finalPosition[2] += distance * 0.707
+                        break
+                }
+            } else {
+                // 兼容旧的offset参数
+                finalPosition[1] += mergedOptions.offset || 0
+            }
+
+            object.position.set(finalPosition[0], finalPosition[1], finalPosition[2])
 
             // 设置旋转
             if (mergedOptions.rotation) {
@@ -237,9 +280,11 @@ export class CSS3DRenderPlugin extends BasePlugin {
                 }
             }
 
-            // 设置用户数据
-            if (mergedOptions.userData) {
-                object.userData = mergedOptions.userData
+            // 设置用户数据，存储完整的初始化参数
+            object.userData = {
+                ...(mergedOptions.userData || {}),
+                _css3dConfig: { ...mergedOptions }, // 存储完整的初始化配置
+                billboarding: mergedOptions.billboarding
             }
 
             // 添加到场景
@@ -371,6 +416,9 @@ export class CSS3DRenderPlugin extends BasePlugin {
         // 更新动画
         this.animations.update()
 
+        // 让所有CSS3D对象永远朝向镜头
+        this.makeAllObjectsFaceCamera()
+
         // 根据渲染模式决定是否渲染
         const shouldRender = this.renderMode === "continuous" || (this.renderMode === "onDemand" && this.needsRender)
 
@@ -384,6 +432,82 @@ export class CSS3DRenderPlugin extends BasePlugin {
         } catch (error) {
             console.error("CSS3D渲染失败:", error)
         }
+    }
+
+    /**
+     * 让所有CSS3D对象永远朝向镜头
+     * @description 通过设置对象的rotation使其始终面向相机，优化性能减少延迟
+     */
+    private makeAllObjectsFaceCamera(): void {
+        if (!this.camera || !this.enableBillboarding) return
+
+        // 初始化缓存对象
+        if (!this._cameraPosition) {
+            this._cameraPosition = new THREE.Vector3()
+            this._objectPosition = new THREE.Vector3()
+            this._lookAtQuaternion = new THREE.Quaternion()
+            this._tempMatrix = new THREE.Matrix4()
+            this._tempUp = new THREE.Vector3(0, 1, 0)
+        }
+
+        // 获取相机的世界坐标
+        this.camera.getWorldPosition(this._cameraPosition)
+
+        // 遍历所有CSS3D对象
+        this.items.forEach(item => {
+            const object = item.object
+            
+            // 检查该对象是否启用了billboarding
+            if (object.userData.billboarding === false) return
+            
+           if (this.camera) {
+               object.lookAt(this.camera.position)
+               object.updateMatrixWorld()
+           }
+            
+        })
+        
+        // 确保在按需渲染模式下标记需要渲染
+        if (this.renderMode === "onDemand") {
+            this.markNeedsRender()
+        }
+    }
+
+    /**
+     * 设置billboarding效果开关
+     * @param enabled 是否启用billboarding效果
+     */
+    setBillboardingEnabled(enabled: boolean): void {
+        this.enableBillboarding = enabled
+        console.log(`🎯 CSS3D对象billboarding效果已${enabled ? '启用' : '禁用'}`)
+        
+        // 如果禁用，重置所有对象的旋转
+        if (!enabled) {
+            this.items.forEach(item => {
+                item.object.quaternion.set(0, 0, 0, 1)
+            })
+            this.markNeedsRender()
+        }
+    }
+
+    /**
+     * 获取billboarding效果状态
+     * @returns 是否启用billboarding效果
+     */
+    isBillboardingEnabled(): boolean {
+        return this.enableBillboarding
+    }
+
+    /**
+     * 获取CSS3D对象的原始配置数据
+     * @param id 对象ID
+     * @returns 原始配置数据，如果对象不存在则返回null
+     */
+    getObjectConfig(id: string): CSS3DConfig | null {
+        const item = this.items.get(id)
+        if (!item) return null
+        
+        return item.object.userData._css3dConfig || null
     }
 
     /**
@@ -1129,3 +1253,55 @@ export class CSS3DRenderPlugin extends BasePlugin {
         }
     }
 }
+
+/**
+ * 使用示例：
+ * 
+ * // 1. 基础使用（传统offset方式）
+ * const css3d1 = css3DRender.createCSS3DObject({
+ *     element: '<div>测试1</div>',
+ *     position: [0, 0, 0],
+ *     offset: 5  // 向上偏移5个单位
+ * })
+ * 
+ * // 2. 使用新的offsetConfig（推荐）
+ * const css3d2 = css3DRender.createCSS3DObject({
+ *     element: '<div>测试2</div>',
+ *     position: [0, 0, 0],
+ *     offsetConfig: {
+ *         distance: 8,
+ *         direction: 'up'
+ *     }
+ * })
+ * 
+ * // 3. 使用工具函数创建配置
+ * const css3d3 = css3DRender.createCSS3DObject({
+ *     element: '<div>测试3</div>',
+ *     position: [0, 0, 0],
+ *     offsetConfig: css3DRender.getOffsetConfig(10, 'right')
+ * })
+ * 
+ * // 4. 不同方向示例
+ * const directions = [
+ *     { dir: 'up', desc: '向上偏移' },
+ *     { dir: 'down', desc: '向下偏移' },
+ *     { dir: 'left', desc: '向左偏移' },
+ *     { dir: 'right', desc: '向右偏移' },
+ *     { dir: 'front', desc: '向前偏移' },
+ *     { dir: 'back', desc: '向后偏移' },
+ *     { dir: 'diagonal', desc: '对角线偏移' }
+ * ]
+ * 
+ * directions.forEach(({ dir, desc }) => {
+ *     const css3d = css3DRender.createCSS3DObject({
+ *         element: `<div>${desc}</div>`,
+ *         position: [0, 0, 0],
+ *         offsetConfig: css3DRender.getOffsetConfig(6, dir as any)
+ *     })
+ * })
+ * 
+ * // 5. 动态更新偏移
+ * css3DRender.updateObjectConfig('object-id', {
+ *     offsetConfig: css3DRender.getOffsetConfig(12, 'front')
+ * })
+ */
