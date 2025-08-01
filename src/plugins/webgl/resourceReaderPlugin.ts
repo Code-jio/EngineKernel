@@ -1,8 +1,7 @@
 // 增强后的资源读取插件
 import { THREE, BasePlugin } from "../basePlugin"
 import eventBus from "../../eventBus/eventBus"
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader"
-import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader"
+import { GLTFLoader, DRACOLoader, KTX2Loader, MeshoptDecoder } from "../../utils/three-imports"
 import {
     TaskScheduler,
     TaskPriority,
@@ -53,6 +52,10 @@ interface ResourceReaderConfig {
     maxConcurrentLoads?: number
     enableDraco?: boolean
     dracoPath?: string
+    enableKTX2?: boolean
+    ktx2Path?: string
+    enableMeshopt?: boolean
+    meshoptPath?: string
     supportedFormats?: string[]
     autoDispose?: boolean
 }
@@ -60,6 +63,8 @@ interface ResourceReaderConfig {
 export class ResourceReaderPlugin extends BasePlugin {
     public gltfLoader!: GLTFLoader
     private dracoLoader: DRACOLoader | null = null
+    private ktx2Loader: KTX2Loader | null = null
+    private meshoptDecoder: any = null
     private taskScheduler!: TaskScheduler<THREE.Group | THREE.Scene | THREE.Object3D>
     private resourceCache: Map<string, CacheItem> = new Map()
 
@@ -73,6 +78,7 @@ export class ResourceReaderPlugin extends BasePlugin {
     private maxCacheSize: number = 100 * 1024 * 1024 // 100MB
     private maxConcurrentLoads: number = 3
     private taskIdCounter: number = 0
+    private renderer: any = null;
 
     // 默认配置参数
     private static readonly DEFAULT_CONFIG: ResourceReaderConfig = {
@@ -80,8 +86,12 @@ export class ResourceReaderPlugin extends BasePlugin {
         maxCacheSize: 1000 * 1024 * 1024, // 1000MB缓存
         maxConcurrentLoads: 3, // 最大并发加载数
         enableDraco: true, // 启用DRACO解压
-        dracoPath: "/draco/gltf/", // DRACO解码器路径
-        supportedFormats: ["gltf", "glb"], // 支持的格式
+        dracoPath: "./draco/gltf/", // DRACO解码器路径
+        enableKTX2: true, // 启用KTX2纹理压缩
+        ktx2Path: "./ktx2/", // KTX2解码器路径 - 修复路径
+        enableMeshopt: true, // 启用网格量化
+        meshoptPath: "./meshopt/", // Meshopt解码器路径 - 修复路径
+        supportedFormats: ["gltf", "glb", "ktx2"], // 支持的格式
         autoDispose: true, // 自动释放过期资源
     }
 
@@ -95,7 +105,7 @@ export class ResourceReaderPlugin extends BasePlugin {
     }
 
     /**
-     * 创建禁用DRACO的ResourceReaderPlugin实例
+     * 创建禁用高级压缩的ResourceReaderPlugin实例
      * @param config 可选的配置参数
      * @returns ResourceReaderPlugin实例
      */
@@ -103,6 +113,8 @@ export class ResourceReaderPlugin extends BasePlugin {
         return new ResourceReaderPlugin({
             ...config,
             enableDraco: false,
+            enableKTX2: false,
+            enableMeshopt: false,
         })
     }
 
@@ -144,6 +156,10 @@ export class ResourceReaderPlugin extends BasePlugin {
             maxConcurrentLoads: this.maxConcurrentLoads,
             enableDraco: this.config.enableDraco,
             dracoPath: this.config.dracoPath,
+            enableKTX2: this.config.enableKTX2,
+            ktx2Path: this.config.ktx2Path,
+            enableMeshopt: this.config.enableMeshopt,
+            meshoptPath: this.config.meshoptPath,
             supportedFormats: this.config.supportedFormats,
             autoDispose: this.config.autoDispose,
         })
@@ -194,10 +210,23 @@ export class ResourceReaderPlugin extends BasePlugin {
         // 初始化GLTF加载器
         this.gltfLoader = new GLTFLoader()
 
-        // 直接初始化并设置DRACO解压器
+        // 初始化DRACO解压器
+        this.initializeDracoLoader(config)
+
+        // 初始化KTX2纹理加载器
+        this.initializeKTX2Loader(config)
+
+        // 初始化Meshopt量化解码器
+        this.initializeMeshoptDecoder(config)
+    }
+
+    /**
+     * 初始化DRACO解压器
+     */
+    private initializeDracoLoader(config: ResourceReaderConfig): void {
         const enableDraco = config.enableDraco !== false
         if (enableDraco) {
-            console.log("🔧 直接初始化DRACO解压器")
+            console.log("🔧 初始化DRACO解压器")
 
             try {
                 this.dracoLoader = new DRACOLoader()
@@ -205,22 +234,121 @@ export class ResourceReaderPlugin extends BasePlugin {
                 this.dracoLoader.setDecoderPath(dracoPath)
                 this.dracoLoader.setDecoderConfig({ type: "js" })
 
-                // 直接设置DRACO解压器到GLTF加载器
+                // 设置DRACO解压器到GLTF加载器
                 this.gltfLoader.setDRACOLoader(this.dracoLoader)
 
-                console.log("✅ DRACO解压器已设置到GLTFLoader，路径:", dracoPath)
-                console.log("✅ 所有GLTF/GLB文件将自动支持DRACO解压")
-
-                // 验证DRACO解码器是否可用
-                // this.verifyDracoDecoder(dracoPath)
+                console.log("✅ DRACO解压器已设置，路径:", dracoPath)
             } catch (error) {
                 console.warn("⚠️ DRACO解压器初始化失败:", error)
-                console.warn("⚠️ 将使用基础GLTF加载器，压缩模型可能无法加载")
                 this.dracoLoader = null
             }
         } else {
-            console.log("ℹ️ DRACO解压器已禁用，仅支持未压缩模型")
+            console.log("ℹ️ DRACO解压器已禁用")
             this.dracoLoader = null
+        }
+    }
+
+    /**
+     * 初始化KTX2纹理加载器
+     */
+    private initializeKTX2Loader(config: ResourceReaderConfig): void {
+        const enableKTX2 = config.enableKTX2 !== false
+        if (enableKTX2) {
+            console.log("🔧 初始化KTX2纹理加载器")
+            
+            try {
+                this.ktx2Loader = new KTX2Loader()
+                const ktx2Path = config.ktx2Path || "./ktx2/"
+                this.ktx2Loader.setTranscoderPath(ktx2Path)
+                
+                console.log("✅ KTX2纹理加载器已创建")
+                console.log("📁 KTX2解码器路径:", ktx2Path)
+                console.log("🎯 支持的纹理格式: BASIS Universal、ETC1S、UASTC等")
+                console.log("ℹ️ 注意: KTX2支持检测将在renderer初始化后进行")
+                
+            } catch (error) {
+                console.error("❌ KTX2纹理加载器初始化失败:", error)
+                this.ktx2Loader = null
+            }
+        } else {
+            console.log("ℹ️ KTX2纹理加载器已禁用")
+            this.ktx2Loader = null
+        }
+    }
+
+    /**
+     * 异步初始化KTX2Loader（需要renderer）
+     */
+    private async initializeKTX2LoaderAsync(): Promise<void> {
+        if (!this.ktx2Loader) {
+            console.log("⚠️ KTX2Loader未创建，跳过异步初始化")
+            return
+        }
+
+        try {
+            // 检查renderer是否是有效的Three.js WebGLRenderer
+            if (this.renderer) {
+                console.log("🔧 检测KTX2支持...")
+                this.ktx2Loader.detectSupport(this.renderer)
+                
+                // 等待一小段时间确保支持检测完成
+                await new Promise(resolve => setTimeout(resolve, 10))
+                
+                console.log("✅ KTX2支持检测完成")
+            } else {
+                console.warn("⚠️ Renderer未提供，无法检测KTX2支持")
+            }
+
+            // 设置KTX2加载器到GLTF加载器
+            this.gltfLoader.setKTX2Loader(this.ktx2Loader)
+            console.log("✅ KTX2加载器已设置到GLTFLoader")
+            
+        } catch (error) {
+            console.error("❌ KTX2异步初始化失败:", error)
+            // 即使失败也设置加载器，可能在某些情况下仍能工作
+            this.gltfLoader.setKTX2Loader(this.ktx2Loader)
+        }
+    }
+
+    /**
+     * 初始化Meshopt量化解码器
+     */
+    private initializeMeshoptDecoder(config: ResourceReaderConfig): void {
+        const enableMeshopt = config.enableMeshopt !== false
+        if (enableMeshopt) {
+            console.log("🔧 初始化Meshopt量化解码器")
+
+            try {
+                // Meshopt解码器需要异步初始化
+                this.initializeMeshoptDecoderAsync(config.meshoptPath || "/meshopt/")
+            } catch (error) {
+                console.warn("⚠️ Meshopt量化解码器初始化失败:", error)
+                console.warn("⚠️ 将无法解码量化的网格数据")
+                this.meshoptDecoder = null
+            }
+        } else {
+            console.log("ℹ️ Meshopt量化解码器已禁用")
+            this.meshoptDecoder = null
+        }
+    }
+
+    /**
+     * 异步初始化Meshopt解码器
+     */
+    private async initializeMeshoptDecoderAsync(meshoptPath: string): Promise<void> {
+        try {
+            // 等待Meshopt解码器准备就绪
+            await MeshoptDecoder.ready
+            this.meshoptDecoder = MeshoptDecoder
+
+            // 设置Meshopt解码器到GLTF加载器
+            this.gltfLoader.setMeshoptDecoder(MeshoptDecoder)
+
+            console.log("✅ Meshopt量化解码器已设置")
+            console.log("✅ 支持网格量化、压缩和优化")
+        } catch (error) {
+            console.warn("⚠️ Meshopt量化解码器异步初始化失败:", error)
+            this.meshoptDecoder = null
         }
     }
 
@@ -320,8 +448,11 @@ export class ResourceReaderPlugin extends BasePlugin {
     /**
      * 插件初始化
      */
-    async init(coreInterface: any): Promise<void> {
-        console.log("🚀 ResourceReaderPlugin初始化完成")
+    async init(renderer: any): Promise<void> {
+        console.log("🚀 ResourceReaderPlugin初始化开始")
+        this.renderer = renderer;
+        // 异步初始化KTX2Loader（需要renderer支持检测）
+        await this.initializeKTX2LoaderAsync()
 
         // 监听资源释放事件
         eventBus.on("resource:dispose", (url: string) => {
@@ -982,6 +1113,8 @@ export class ResourceReaderPlugin extends BasePlugin {
         itemCount: number
         // utilization: number
         dracoEnabled: boolean
+        ktx2Enabled: boolean
+        meshoptEnabled: boolean
     } {
         // const size = this.getCurrentCacheSize()
         const itemCount = this.resourceCache.size
@@ -993,6 +1126,8 @@ export class ResourceReaderPlugin extends BasePlugin {
             itemCount,
             //   utilization,
             dracoEnabled: !!this.dracoLoader,
+            ktx2Enabled: !!this.ktx2Loader,
+            meshoptEnabled: !!this.meshoptDecoder,
         }
     }
 
@@ -1002,12 +1137,20 @@ export class ResourceReaderPlugin extends BasePlugin {
     public getLoaderInfo(): {
         dracoEnabled: boolean
         dracoPath: string | undefined
+        ktx2Enabled: boolean
+        ktx2Path: string | undefined
+        meshoptEnabled: boolean
+        meshoptPath: string | undefined
         supportedFormats: string[]
     } {
         return {
             dracoEnabled: !!this.dracoLoader,
             dracoPath: this.config.dracoPath,
-            supportedFormats: this.config.supportedFormats || ["gltf", "glb"],
+            ktx2Enabled: !!this.ktx2Loader,
+            ktx2Path: this.config.ktx2Path,
+            meshoptEnabled: !!this.meshoptDecoder,
+            meshoptPath: this.config.meshoptPath,
+            supportedFormats: this.config.supportedFormats || ["gltf", "glb", "ktx2"],
         }
     }
 
@@ -1105,6 +1248,51 @@ export class ResourceReaderPlugin extends BasePlugin {
     }
 
     /**
+     * 调试KTX2配置和状态
+     */
+    public debugKTX2Status(): void {
+        console.log("🔍 KTX2调试信息:")
+        console.log("├── KTX2Loader状态:", this.ktx2Loader ? "已创建" : "未创建")
+        
+        if (this.ktx2Loader) {
+            console.log("├── 转码器路径:", this.config.ktx2Path)
+            console.log("├── Renderer状态:", this.renderer ? "已设置" : "未设置")
+            
+            // 检查GLTFLoader是否已设置KTX2Loader
+            const hasKTX2 = (this.gltfLoader as any).ktx2Loader !== undefined
+            console.log("├── GLTFLoader中的KTX2:", hasKTX2 ? "已设置" : "未设置")
+        }
+        
+        console.log("└── 配置启用状态:", this.config.enableKTX2)
+    }
+
+    /**
+     * 验证KTX2解码器文件
+     */
+    public async verifyKTX2Files(): Promise<void> {
+        const ktx2Path = this.config.ktx2Path || "./ktx2/"
+        const testFiles = [
+            "basis_transcoder.js",
+            "basis_transcoder.wasm"
+        ]
+        
+        console.log("🔍 验证KTX2解码器文件...")
+        
+        for (const file of testFiles) {
+            try {
+                const response = await fetch(`${ktx2Path}${file}`, { method: "HEAD" })
+                if (response.ok) {
+                    console.log(`✅ ${file}: 存在`)
+                } else {
+                    console.error(`❌ ${file}: 不存在 (${response.status})`)
+                }
+            } catch (error) {
+                console.error(`❌ ${file}: 无法访问`, error)
+            }
+        }
+    }
+
+    /**
      * 调试方法：测试异步加载流程
      */
     public async debugLoadFlow(url: string): Promise<void> {
@@ -1129,6 +1317,10 @@ export class ResourceReaderPlugin extends BasePlugin {
         // 检查加载器状态
         console.log("🔧 GLTFLoader状态:", this.gltfLoader ? "已初始化" : "未初始化")
         console.log("🔧 DRACOLoader状态:", this.dracoLoader ? "已初始化" : "未初始化")
+        console.log("🔧 KTX2Loader状态:", this.ktx2Loader ? "已初始化" : "未初始化")
+
+        // 调试KTX2状态
+        this.debugKTX2Status()
 
         console.log("➡️ 准备创建任务配置并调度...")
     }
@@ -1156,6 +1348,13 @@ export class ResourceReaderPlugin extends BasePlugin {
             this.dracoLoader.dispose()
         }
 
+        if (this.ktx2Loader) {
+            this.ktx2Loader.dispose()
+        }
+
+        // Meshopt解码器不需要显式销毁
+        this.meshoptDecoder = null
+
         console.log("🧹 ResourceReaderPlugin已销毁")
     }
 
@@ -1182,6 +1381,8 @@ export class ResourceReaderPlugin extends BasePlugin {
 
         return model
     }
+
+
 
     //
     private isBuildingModel(fileName: string): boolean {
