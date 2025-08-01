@@ -1,12 +1,10 @@
-// 统一的Three.js导入文件，避免多实例问题
-// 所有Three.js相关的导入都应该通过这个文件
-
 // 核心Three.js库
 import * as THREE from 'three';
 
 // 常用扩展模块
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader';
+import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader';
 import { EXRLoader } from 'three/examples/jsm/loaders/EXRLoader';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
@@ -16,6 +14,7 @@ import Stats from 'three/examples/jsm/libs/stats.module';
 import WebGPURenderer from 'three/examples/jsm/renderers/webgpu/WebGPURenderer';
 import { WebGLRenderer } from 'three';
 import { Water } from "three/examples/jsm/objects/Water"
+import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js'
 // 类型导入
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader';
 
@@ -33,6 +32,8 @@ export {
     THREE,
     GLTFLoader,
     DRACOLoader,
+    KTX2Loader,
+    MeshoptDecoder,
     RGBELoader,
     EXRLoader,
     OrbitControls,
