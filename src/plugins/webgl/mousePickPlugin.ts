@@ -394,7 +394,7 @@ export class MousePickPlugin extends BasePlugin {
     /**
      * 执行射线投射拾取
      */
-    private performRaycastPick(event: MouseEvent): void {
+    public performRaycastPick(event: MouseEvent): void {
         if (!this.camera || !this.scene) return
 
         // 设置射线
@@ -413,7 +413,6 @@ export class MousePickPlugin extends BasePlugin {
         const filteredResults = this.filterIntersections(intersects)
 
         if (filteredResults.length > 0 && this.debugEnabled) {
-            // 发送拾取事件 - 只包含3D场景信息
             this.emitPickEvent("object-picked", {
                 results: filteredResults.map(result => ({
                     objectId: result.object.id,
@@ -432,9 +431,9 @@ export class MousePickPlugin extends BasePlugin {
                     worldMatrix: result.worldMatrix,
                     boundingBox: result.boundingBox
                         ? {
-                            min: result.boundingBox.min,
-                            max: result.boundingBox.max,
-                        }
+                              min: result.boundingBox.min,
+                              max: result.boundingBox.max,
+                          }
                         : undefined,
                     objectList:
                         result.objectList?.map(obj => ({
@@ -447,11 +446,6 @@ export class MousePickPlugin extends BasePlugin {
                 selectedObjectName: this.getModelName(filteredResults[0].object),
                 pickMode: this.isCtrlPressed ? "box-select-mode" : this.config.mode,
                 timestamp: Date.now(),
-                objectList: filteredResults.map(result => ({
-                    id: result.object.id,
-                    name: this.getModelName(result.object),
-                    type: result.object.type,
-                })), // 在事件根级别添加对象列表
                 // 点击到的三维场景实际位置：三维场景坐标系
                 mousePosition: {
                     x: filteredResults[0].point.x,
@@ -470,7 +464,51 @@ export class MousePickPlugin extends BasePlugin {
             if (this.debugEnabled) {
                 console.log("🎯 点击了空白区域")
             } else {
-                console.log(filteredResults)
+                // console.log(filteredResults)
+                this.emitPickEvent("object-picked", {
+                    results: filteredResults.map(result => ({
+                        objectId: result.object.id,
+                        objectName: this.getModelName(result.object),
+                        objectType: result.objectType,
+                        object: result.object,
+                        worldPosition: result.point,
+                        localPosition: result.localPoint,
+                        distance: result.distance,
+                        normal: result.normal,
+                        uv: result.uv ? [result.uv.x, result.uv.y] : undefined,
+                        materialName: result.materialName,
+                        geometryType: result.geometryType,
+                        faceIndex: result.faceIndex,
+                        instanceId: result.instanceId,
+                        worldMatrix: result.worldMatrix,
+                        boundingBox: result.boundingBox
+                            ? {
+                                  min: result.boundingBox.min,
+                                  max: result.boundingBox.max,
+                              }
+                            : undefined,
+                        objectList:
+                            result.objectList?.map(obj => ({
+                                id: obj.id,
+                                name: this.getModelName(obj),
+                                type: obj.type,
+                            })) || [], // 添加对象列表信息
+                    })),
+                    selectedObjectId: filteredResults[0].object.id,
+                    selectedObjectName: this.getModelName(filteredResults[0].object),
+                    pickMode: this.isCtrlPressed ? "box-select-mode" : this.config.mode,
+                    timestamp: Date.now(),
+                    // 点击到的三维场景实际位置：三维场景坐标系
+                    mousePosition: {
+                        x: filteredResults[0].point.x,
+                        y: filteredResults[0].point.y,
+                        z: filteredResults[0].point.z,
+                    },
+                    screenPosition: {
+                        x: event.clientX,
+                        y: event.clientY,
+                    },
+                })
             }
             // 在非Ctrl状态下清空选择和高亮
             if (!this.isCtrlPressed) {
@@ -505,22 +543,22 @@ export class MousePickPlugin extends BasePlugin {
      * @returns 如果物体及其所有父级都可见则返回true
      */
     private isObjectFullyVisible(object: THREE.Object3D): boolean {
-        let current = object;
+        let current = object
         while (current) {
             if (!current.visible) {
-                return false;
+                return false
             }
-            current = current.parent!;
+            current = current.parent!
         }
-        return true;
+        return true
     }
 
     /**
      * 获取可拾取的物体列表
      */
     private getPickableObjects(): THREE.Object3D[] {
-        if (!this.scene) return [];
-        const objects: THREE.Object3D[] = [];
+        if (!this.scene) return []
+        const objects: THREE.Object3D[] = []
 
         this.scene.traverse(child => {
             // 跳过不可见物体（检查整个父级链）
@@ -533,7 +571,7 @@ export class MousePickPlugin extends BasePlugin {
                 child instanceof THREE.Points ||
                 child instanceof THREE.Sprite
             ) {
-                objects.push(child);
+                objects.push(child)
             }
         })
 
@@ -597,11 +635,10 @@ export class MousePickPlugin extends BasePlugin {
         // 可见性过滤（检查整个父级链）
         for (let i = 0; i < results.length; i++) {
             if (!this.isObjectFullyVisible(results[i].object)) {
-              results.splice(i, 1);
-              i--;
+                results.splice(i, 1)
+                i--
             }
         }
-
 
         // 排序
         if (this.config.sortByDistance) {
@@ -618,12 +655,11 @@ export class MousePickPlugin extends BasePlugin {
      * 处理拾取结果
      */
     private handlePickResults(results: PickResult[], event: MouseEvent): void {
-
         // 可见性过滤（检查整个父级链）
         for (let i = 0; i < results.length; i++) {
             if (!this.isObjectFullyVisible(results[i].object)) {
-                results.splice(i, 1);
-                i--;
+                results.splice(i, 1)
+                i--
             }
         }
 
@@ -694,7 +730,40 @@ export class MousePickPlugin extends BasePlugin {
         }
         // 如果Ctrl键按下，这里不处理选择，因为Ctrl键用于框选模式
 
-        console.log("🎯 拾取成功!", {
+        // console.log("🎯 拾取成功!", {
+        //     objectName: this.getModelName(closestResult.object),
+        //     objectType: closestResult.objectType,
+        //     worldPosition: closestResult.point,
+        //     distance: closestResult.distance.toFixed(2),
+        //     results: results.map(result => ({
+        //         objectId: result.object.id,
+        //         objectName: this.getModelName(result.object),
+        //         objectType: result.objectType,
+        //         object: result.object,
+        //         worldPosition: result.point,
+        //         localPosition: result.localPoint,
+        //         distance: result.distance,
+        //         normal: result.normal,
+        //         uv: result.uv ? [result.uv.x, result.uv.y] : undefined,
+        //         materialName: result.materialName,
+        //         geometryType: result.geometryType,
+        //         faceIndex: result.faceIndex,
+        //         instanceId: result.instanceId,
+        //         worldMatrix: result.worldMatrix,
+        //         boundingBox: result.boundingBox
+        //             ? {
+        //                 min: result.boundingBox.min,
+        //                 max: result.boundingBox.max,
+        //             }
+        //             : undefined,
+        //     })),
+        //     selectedObjectId: closestResult.object.id,
+        //     selectedObjectName: this.getModelName(closestResult.object),
+        //     pickMode: this.config.mode,
+        //     timestamp: Date.now(),
+        // })
+
+        this.emitPickEvent("object-selected", {
             objectName: this.getModelName(closestResult.object),
             objectType: closestResult.objectType,
             worldPosition: closestResult.point,
@@ -716,9 +785,9 @@ export class MousePickPlugin extends BasePlugin {
                 worldMatrix: result.worldMatrix,
                 boundingBox: result.boundingBox
                     ? {
-                        min: result.boundingBox.min,
-                        max: result.boundingBox.max,
-                    }
+                          min: result.boundingBox.min,
+                          max: result.boundingBox.max,
+                      }
                     : undefined,
             })),
             selectedObjectId: closestResult.object.id,
@@ -891,19 +960,19 @@ export class MousePickPlugin extends BasePlugin {
             this.emitPickEvent("hover-changed", {
                 previousObject: this.hoveredObject
                     ? {
-                        id: this.hoveredObject.id,
-                        name: this.hoveredObject.name,
-                        type: this.hoveredObject.type,
-                    }
+                          id: this.hoveredObject.id,
+                          name: this.hoveredObject.name,
+                          type: this.hoveredObject.type,
+                      }
                     : null,
                 currentObject: newHoveredObject
                     ? {
-                        id: newHoveredObject.id,
-                        name: newHoveredObject.name,
-                        type: newHoveredObject.type,
-                        position: intersects[0].point,
-                        distance: intersects[0].distance,
-                    }
+                          id: newHoveredObject.id,
+                          name: newHoveredObject.name,
+                          type: newHoveredObject.type,
+                          position: intersects[0].point,
+                          distance: intersects[0].distance,
+                      }
                     : null,
                 timestamp: Date.now(),
             })
@@ -923,7 +992,7 @@ export class MousePickPlugin extends BasePlugin {
     /**
      * 添加到选中列表
      */
-    private addToSelection(object: THREE.Object3D): void {
+    public addToSelection(object: THREE.Object3D): void {
         this.selectedObjects.add(object)
         this.emitPickEvent("object-selected", { object })
     }
@@ -931,7 +1000,7 @@ export class MousePickPlugin extends BasePlugin {
     /**
      * 从选中列表移除
      */
-    private removeFromSelection(object: THREE.Object3D): void {
+    public removeFromSelection(object: THREE.Object3D): void {
         this.selectedObjects.delete(object)
         this.emitPickEvent("object-deselected", { object })
     }
@@ -939,7 +1008,7 @@ export class MousePickPlugin extends BasePlugin {
     /**
      * 清空选择
      */
-    private clearSelection(): void {
+    public clearSelection(): void {
         const previousSelected = Array.from(this.selectedObjects)
         this.selectedObjects.clear()
 
@@ -1079,7 +1148,7 @@ export class MousePickPlugin extends BasePlugin {
     /**
      * 发送拾取事件
      */
-    private emitPickEvent(eventName: string, data: any): void {
+    public emitPickEvent(eventName: string, data: any): void {
         eventBus.emit(`mouse-pick:${eventName}`, data)
     }
 
@@ -1190,7 +1259,7 @@ export class MousePickPlugin extends BasePlugin {
             // 移除调试射线
             this.scene.remove(this.debugRayLine)
             this.debugRayLine.geometry.dispose()
-                ; (this.debugRayLine.material as THREE.Material).dispose()
+            ;(this.debugRayLine.material as THREE.Material).dispose()
             this.debugRayLine = null
         }
     }
