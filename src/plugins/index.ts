@@ -18,9 +18,9 @@ export { SceneManager } from './webgl/scene-manager';
 export { LayerManager } from './webgl/layerManager';
 export { ModelMarker } from './webgl/3DModelMarker';
 export { MousePickPlugin } from './webgl/mousePickPlugin';
-export { TextMarkerPlugin } from "./webgl/textMarker"
-export { ParticleEmitter } from "./webgl/ParticleEmitter"
- 
+export { TextMarkerPlugin } from "./webgl/TextMarkerPlugin";
+export { ParticleEmitter } from "./webgl/ParticleEmitter" 
+
 export { BuildingControlPlugin } from './webgl/BuildingControlPlugin';
 
 export { WaterMarker } from './webgl/waterMarker';

@@ -453,7 +453,7 @@ export class BuildingControlPlugin extends BasePlugin {
 
                 // 解析楼层对象
                 const floorInfo = this.parseFloorFromName(modelName)
-                if (floorInfo.isFloor) {
+                if (floorInfo.isFloor && child instanceof THREE.Group) {
                     this.processFloorObject(child, floorInfo.floorNumber, result)
                     return
                 }
@@ -596,7 +596,7 @@ export class BuildingControlPlugin extends BasePlugin {
      * 处理楼层对象
      */
     private processFloorObject(
-        floorObject: THREE.Object3D,
+        floorObject: THREE.Group,
         floorNumber: number,
         result: ReturnType<typeof this.parseBuildingModel>,
     ): void {
@@ -638,7 +638,13 @@ export class BuildingControlPlugin extends BasePlugin {
             })
             console.log(`🏢 发现楼层: ${floorNumber}F - ${this.getModelName(floorObject)}`)
         } else {
-            result.errors.push(`发现重复的楼层: ${floorNumber}F`)
+            // result.errors.push(`发现重复的楼层: ${floorNumber}F`)
+            // 如果有楼层重复，要么联系建模进行处理，要么就是虚拟楼层，虚拟楼层直接在这里覆盖就行
+            let floor = result.floors.get(floorNumber)
+            if (floor?.floorObject === null) {
+                // 覆盖虚拟楼层
+                floor.floorObject = floorObject
+            }
         }
     }
 
@@ -1342,9 +1348,10 @@ export class BuildingControlPlugin extends BasePlugin {
         this.stopAllAnimations()
 
         // 恢复所有楼层透明度
-        this.restoreAllFloorOpacity()
+        this.restoreAllFloorOpacity() // 其他楼层全部显示
 
-        this.setAllEquipmentVisibility(false)
+        // this.setAllEquipmentVisibility(false) // 隐藏设备
+        this.setAllEquipmentInitializeState()
 
         // 执行收起动画
         this.executeCollapseAnimation(() => {
@@ -1802,6 +1809,39 @@ export class BuildingControlPlugin extends BasePlugin {
     }
 
     /**
+     * 设置所有设备的初始状态：顶楼设备常驻显示，其他设备隐藏
+     * @param visible 是否显示
+     */
+    private setAllEquipmentInitializeState(): void {
+        // 检查是否有楼层数据
+        if (!this.floors.size) {
+            console.warn("⚠️ 无法设置设备初始状态：没有楼层信息")
+            return
+        }
+
+        // 获取最大楼层号
+        const maxFloor = Math.max(...Array.from(this.floors.keys()))
+        
+        // 设置设备显示状态
+        this.allDevices.forEach(device => {
+            const info = device.userData.equipmentInfo
+            if (!info) return
+            
+            // 判断是否为顶楼设备
+            const isTopFloorDevice = info.floorNumber === maxFloor
+            
+            // 设置设备显示状态（直接操作visible属性）
+            device.visible = isTopFloorDevice
+            
+            // 调试模式下输出日志
+            if (this.debugMode) {
+                console.log(`🔧 设备 ${device.name} 初始状态: ${isTopFloorDevice ? '显示' : '隐藏'}`)
+            }
+        })
+    }
+
+
+    /**
      * 根据楼层聚焦状态管理设备显示
      * @param focusedFloorNumber 聚焦的楼层号，如果为null则表示未聚焦
      */
@@ -1832,7 +1872,8 @@ export class BuildingControlPlugin extends BasePlugin {
                 console.log(`🎯 设备显示管理: 显示所有设备（未聚焦状态）`)
             } else {
                 // 隐藏所有设备
-                this.setAllEquipmentVisibility(false)
+                // this.setAllEquipmentVisibility(false)
+                this.setAllEquipmentInitializeState()
                 console.log(`🎯 设备显示管理: 隐藏所有设备（未聚焦状态）`)
             }
         }
@@ -1850,7 +1891,8 @@ export class BuildingControlPlugin extends BasePlugin {
 
         if (this.config.hideAllEquipmentByDefault) {
             // 默认隐藏所有设备
-            this.setAllEquipmentVisibility(false)
+            // this.setAllEquipmentVisibility(false)
+            this.setAllEquipmentInitializeState()
             console.log("🔧 初始化设备显示状态: 默认隐藏所有设备")
         } else {
             // 根据聚焦状态决定显示策略
@@ -1863,7 +1905,8 @@ export class BuildingControlPlugin extends BasePlugin {
                     this.setAllEquipmentVisibility(true)
                     console.log("🔧 初始化设备显示状态: 显示所有设备（未聚焦状态）")
                 } else {
-                    this.setAllEquipmentVisibility(false)
+                    // this.setAllEquipmentVisibility(false)
+                    this.setAllEquipmentInitializeState()
                     console.log("🔧 初始化设备显示状态: 隐藏所有设备（未聚焦状态）")
                 }
             }
@@ -1934,7 +1977,10 @@ export class BuildingControlPlugin extends BasePlugin {
         //     }
         // })
 
-        target.visible = true
+        // target.visible = true
+        target.traverse((item)=>{
+            item.visible = true
+        })
     }
 
     /**
@@ -1996,7 +2042,7 @@ export class BuildingControlPlugin extends BasePlugin {
         // })
         // this.facadeGroup.visible = false
 
-        this.facadeGroup.traverse((item)=>{
+        this.facadeGroup.traverse((item) => {
             item.visible = false
         })
     }
@@ -2887,7 +2933,8 @@ export class BuildingControlPlugin extends BasePlugin {
      * 公共API：手动隐藏所有设备
      */
     public hideAllEquipment(): void {
-        this.setAllEquipmentVisibility(false)
+        // this.setAllEquipmentVisibility(false)
+        this.setAllEquipmentInitializeState()
         console.log(`🔧 手动隐藏所有设备`)
     }
 

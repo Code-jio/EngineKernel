@@ -39,7 +39,7 @@ export class Performance extends BasePlugin {
         this.dom.appendChild(this.stats.dom);
 
         // 注册渲染后更新事件
-        eventBus.on("afterRender", this.update.bind(this));
+        eventBus.on("update", this.update.bind(this));
     }
 
     initialize() {

@@ -1,5 +1,4 @@
 // 异步任务调度器模块
-import { THREE } from "../basePlugin"
 import eventBus from "../../eventBus/eventBus"
 
 /**

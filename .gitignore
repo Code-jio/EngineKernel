@@ -1,6 +1,7 @@
 # 依赖目录
 node_modules/
 jspm_packages/
+.pnpm-store/
 
 # 构建输出
 dist/

@@ -394,7 +394,7 @@ export class MousePickPlugin extends BasePlugin {
     /**
      * 执行射线投射拾取
      */
-    public performRaycastPick(event: MouseEvent): void {
+    private performRaycastPick(event: MouseEvent): void {
         if (!this.camera || !this.scene) return
 
         // 设置射线
@@ -413,6 +413,7 @@ export class MousePickPlugin extends BasePlugin {
         const filteredResults = this.filterIntersections(intersects)
 
         if (filteredResults.length > 0 && this.debugEnabled) {
+            // 发送拾取事件 - 只包含3D场景信息
             this.emitPickEvent("object-picked", {
                 results: filteredResults.map(result => ({
                     objectId: result.object.id,
@@ -446,6 +447,11 @@ export class MousePickPlugin extends BasePlugin {
                 selectedObjectName: this.getModelName(filteredResults[0].object),
                 pickMode: this.isCtrlPressed ? "box-select-mode" : this.config.mode,
                 timestamp: Date.now(),
+                objectList: filteredResults.map(result => ({
+                    id: result.object.id,
+                    name: this.getModelName(result.object),
+                    type: result.object.type,
+                })), // 在事件根级别添加对象列表
                 // 点击到的三维场景实际位置：三维场景坐标系
                 mousePosition: {
                     x: filteredResults[0].point.x,
@@ -464,51 +470,7 @@ export class MousePickPlugin extends BasePlugin {
             if (this.debugEnabled) {
                 console.log("🎯 点击了空白区域")
             } else {
-                // console.log(filteredResults)
-                this.emitPickEvent("object-picked", {
-                    results: filteredResults.map(result => ({
-                        objectId: result.object.id,
-                        objectName: this.getModelName(result.object),
-                        objectType: result.objectType,
-                        object: result.object,
-                        worldPosition: result.point,
-                        localPosition: result.localPoint,
-                        distance: result.distance,
-                        normal: result.normal,
-                        uv: result.uv ? [result.uv.x, result.uv.y] : undefined,
-                        materialName: result.materialName,
-                        geometryType: result.geometryType,
-                        faceIndex: result.faceIndex,
-                        instanceId: result.instanceId,
-                        worldMatrix: result.worldMatrix,
-                        boundingBox: result.boundingBox
-                            ? {
-                                  min: result.boundingBox.min,
-                                  max: result.boundingBox.max,
-                              }
-                            : undefined,
-                        objectList:
-                            result.objectList?.map(obj => ({
-                                id: obj.id,
-                                name: this.getModelName(obj),
-                                type: obj.type,
-                            })) || [], // 添加对象列表信息
-                    })),
-                    selectedObjectId: filteredResults[0].object.id,
-                    selectedObjectName: this.getModelName(filteredResults[0].object),
-                    pickMode: this.isCtrlPressed ? "box-select-mode" : this.config.mode,
-                    timestamp: Date.now(),
-                    // 点击到的三维场景实际位置：三维场景坐标系
-                    mousePosition: {
-                        x: filteredResults[0].point.x,
-                        y: filteredResults[0].point.y,
-                        z: filteredResults[0].point.z,
-                    },
-                    screenPosition: {
-                        x: event.clientX,
-                        y: event.clientY,
-                    },
-                })
+                console.log(filteredResults)
             }
             // 在非Ctrl状态下清空选择和高亮
             if (!this.isCtrlPressed) {
@@ -763,38 +725,38 @@ export class MousePickPlugin extends BasePlugin {
         //     timestamp: Date.now(),
         // })
 
-        this.emitPickEvent("object-selected", {
-            objectName: this.getModelName(closestResult.object),
-            objectType: closestResult.objectType,
-            worldPosition: closestResult.point,
-            distance: closestResult.distance.toFixed(2),
-            results: results.map(result => ({
-                objectId: result.object.id,
-                objectName: this.getModelName(result.object),
-                objectType: result.objectType,
-                object: result.object,
-                worldPosition: result.point,
-                localPosition: result.localPoint,
-                distance: result.distance,
-                normal: result.normal,
-                uv: result.uv ? [result.uv.x, result.uv.y] : undefined,
-                materialName: result.materialName,
-                geometryType: result.geometryType,
-                faceIndex: result.faceIndex,
-                instanceId: result.instanceId,
-                worldMatrix: result.worldMatrix,
-                boundingBox: result.boundingBox
-                    ? {
-                          min: result.boundingBox.min,
-                          max: result.boundingBox.max,
-                      }
-                    : undefined,
-            })),
-            selectedObjectId: closestResult.object.id,
-            selectedObjectName: this.getModelName(closestResult.object),
-            pickMode: this.config.mode,
-            timestamp: Date.now(),
-        })
+        // this.emitPickEvent("object-selected", {
+        //     objectName: this.getModelName(closestResult.object),
+        //     objectType: closestResult.objectType,
+        //     worldPosition: closestResult.point,
+        //     distance: closestResult.distance.toFixed(2),
+        //     results: results.map(result => ({
+        //         objectId: result.object.id,
+        //         objectName: this.getModelName(result.object),
+        //         objectType: result.objectType,
+        //         object: result.object,
+        //         worldPosition: result.point,
+        //         localPosition: result.localPoint,
+        //         distance: result.distance,
+        //         normal: result.normal,
+        //         uv: result.uv ? [result.uv.x, result.uv.y] : undefined,
+        //         materialName: result.materialName,
+        //         geometryType: result.geometryType,
+        //         faceIndex: result.faceIndex,
+        //         instanceId: result.instanceId,
+        //         worldMatrix: result.worldMatrix,
+        //         boundingBox: result.boundingBox
+        //             ? {
+        //                   min: result.boundingBox.min,
+        //                   max: result.boundingBox.max,
+        //               }
+        //             : undefined,
+        //     })),
+        //     selectedObjectId: closestResult.object.id,
+        //     selectedObjectName: this.getModelName(closestResult.object),
+        //     pickMode: this.config.mode,
+        //     timestamp: Date.now(),
+        // })
     }
 
     /**
