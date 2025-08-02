@@ -9,13 +9,12 @@ interface CSS3DConfig {
     position: [number, number, number]
     rotation?: [number, number, number]
     scale?: number | [number, number, number] // 支持非等比缩放
-    offset?: number
     
-    // 增强的偏移控制
-    offsetConfig?: {
-        distance: number
-        direction: 'up' | 'down' | 'left' | 'right' | 'front' | 'back' | 'diagonal'
-    }
+    // 屏幕空间偏移 - 基于屏幕坐标的偏移（像素）
+    screenOffset?: [number, number]
+    
+    // 屏幕空间定位配置
+    screenSpace?: boolean // 是否使用屏幕空间定位，使用3D坐标自动转换为屏幕坐标
     
     // 显示配置
     display?: boolean // css属性控制。
@@ -54,7 +53,7 @@ export class CSS3DRenderPlugin extends BasePlugin {
     private items: Map<string, CSS3DItem> = new Map()
     private nextId: number = 1
     private mainScene: THREE.Scene | null = null
-    private camera: THREE.Camera | null = null
+    private camera: THREE.Camera
     private domElement: HTMLElement | null = null
     private needsRender: boolean = false
     private resizeHandler: (() => void) | null = null
@@ -68,12 +67,14 @@ export class CSS3DRenderPlugin extends BasePlugin {
     // 动画组
     private animations: TWEEN.Group = new TWEEN.Group()
     
-    // 缓存对象，用于优化billboarding计算
+    // 缓存对象，用于优化billboarding计算和屏幕空间坐标转换
     private _cameraPosition?: THREE.Vector3
     private _objectPosition?: THREE.Vector3
     private _lookAtQuaternion?: THREE.Quaternion
     private _tempMatrix?: THREE.Matrix4
     private _tempUp?: THREE.Vector3
+    private _vector3?: THREE.Vector3
+    private _screenVector?: THREE.Vector3
 
     constructor(meta: any) {
         super(meta)
@@ -151,12 +152,12 @@ export class CSS3DRenderPlugin extends BasePlugin {
             element: "<div>空对象</div>",
             position: [0, 0, 0],
             rotation: [0, 0, 0],
-            offset: 0,
-            offsetConfig: { distance: 0, direction: 'up' },
             scale: 0.05,
+            screenOffset: [0, 0], // 默认屏幕空间无偏移
+            screenSpace: true, // 默认使用屏幕空间定位
+            zIndex: 0,
             display: true, // 默认可见
             opacity: 1,
-            zIndex: 1,
             animatedToggle: false, // 默认不使用动画切换
             gpuAcceleration: true, // 默认启用GPU加速
             pointerEventsControl: "smart", // 智能鼠标事件控制
@@ -193,6 +194,22 @@ export class CSS3DRenderPlugin extends BasePlugin {
                 pointerEvents = mergedOptions.display ? "auto" : "none"
             }
 
+            // 屏幕空间定位样式 - 初始样式，位置将在updateScreenSpaceObjects中动态计算
+            let screenSpaceStyles = ""
+            if (mergedOptions.screenSpace) {
+                screenSpaceStyles = `
+                    position: fixed;
+                    left: 0px;
+                    top: 0px;
+                    transform-origin: center center;
+                    pointer-events: ${pointerEvents};
+                    z-index: ${mergedOptions.zIndex || 1};
+                    opacity: ${mergedOptions.opacity || 1};
+                    ${mergedOptions.gpuAcceleration ? 'transform: translate3d(0, 0, 0);' : ''}
+                    ${mergedOptions.useTransitions ? 'transition: transform 0.3s ease, opacity 0.3s ease;' : ''}
+                `
+            }
+
             // GPU加速样式
             const baseTransform = "translate3d(0,0,0)"
 
@@ -202,6 +219,7 @@ export class CSS3DRenderPlugin extends BasePlugin {
                 `z-index: ${mergedOptions.zIndex}`,
                 `visibility: ${mergedOptions.display ? "visible" : "hidden"}`,
                 `pointer-events: ${pointerEvents}`,
+                screenSpaceStyles,
                 mergedOptions.gpuAcceleration ? "will-change: transform, opacity" : "",
             ]
                 .filter(Boolean)
@@ -222,72 +240,64 @@ export class CSS3DRenderPlugin extends BasePlugin {
                 element.style.display = mergedOptions.display ? "block" : "none"
             }
 
-            // 创建CSS3D对象
-            const object = new CSS3DObject(element)
-
-            // 设置可见性
-            object.visible = mergedOptions.display || false
-
-            // 计算最终位置（支持传统offset和新offsetConfig）
-            let finalPosition = [...mergedOptions.position] as [number, number, number]
+            // 创建CSS3D对象或屏幕空间元素
+            let object: CSS3DObject
             
-            // 优先使用offsetConfig
-            if (mergedOptions.offsetConfig && mergedOptions.offsetConfig.distance > 0) {
-                const { distance, direction } = mergedOptions.offsetConfig
-                switch (direction) {
-                    case 'up':
-                        finalPosition[1] += distance
-                        break
-                    case 'down':
-                        finalPosition[1] -= distance
-                        break
-                    case 'left':
-                        finalPosition[0] -= distance
-                        break
-                    case 'right':
-                        finalPosition[0] += distance
-                        break
-                    case 'front':
-                        finalPosition[2] += distance
-                        break
-                    case 'back':
-                        finalPosition[2] -= distance
-                        break
-                    case 'diagonal':
-                        finalPosition[0] += distance * 0.707
-                        finalPosition[1] += distance * 0.707
-                        finalPosition[2] += distance * 0.707
-                        break
-                }
+            if (mergedOptions.screenSpace) {
+                // 屏幕空间定位 - 直接使用DOM元素，不创建CSS3DObject
+                object = {
+                    element: element,
+                    visible: mergedOptions.display || false,
+                    position: new THREE.Vector3(mergedOptions.position[0], mergedOptions.position[1], mergedOptions.position[2]),
+                    rotation: new THREE.Euler(0, 0, 0),
+                    scale: new THREE.Vector3(1, 1, 1),
+                    userData: {
+                        ...(mergedOptions.userData || {}),
+                        _css3dConfig: { ...mergedOptions },
+                        screenSpace: true,
+                        billboarding: false // 屏幕空间元素不需要billboarding
+                    }
+                } as any // 类型断言以兼容
+                
+                // 设置屏幕空间特定属性
+                element.dataset.screenSpace = 'true'
+                
             } else {
-                // 兼容旧的offset参数
-                finalPosition[1] += mergedOptions.offset || 0
-            }
+                // 3D空间定位 - 创建CSS3DObject
+                object = new CSS3DObject(element)
+                object.visible = mergedOptions.display || false
 
-            object.position.set(finalPosition[0], finalPosition[1], finalPosition[2])
+                // 直接使用传入的3D坐标，不再进行偏移计算
+                object.position.set(
+                    mergedOptions.position[0], 
+                    mergedOptions.position[1], 
+                    mergedOptions.position[2]
+                )
 
-            // 设置旋转
-            if (mergedOptions.rotation) {
-                object.rotation.set(mergedOptions.rotation[0], mergedOptions.rotation[1], mergedOptions.rotation[2])
-            }
+                // 设置旋转
+                if (mergedOptions.rotation) {
+                    object.rotation.set(mergedOptions.rotation[0], mergedOptions.rotation[1], mergedOptions.rotation[2])
+                }
 
-            // 设置缩放
-            if (mergedOptions.scale) {
-                if (typeof mergedOptions.scale === "number") {
-                    object.scale.setScalar(mergedOptions.scale)
-                } else {
-                    object.scale.set(mergedOptions.scale[0], mergedOptions.scale[1], mergedOptions.scale[2])
+                // 设置缩放
+                if (mergedOptions.scale) {
+                    if (typeof mergedOptions.scale === "number") {
+                        object.scale.setScalar(mergedOptions.scale)
+                    } else {
+                        object.scale.set(mergedOptions.scale[0], mergedOptions.scale[1], mergedOptions.scale[2])
+                    }
+                }
+
+                // 设置用户数据
+                object.userData = {
+                    ...(mergedOptions.userData || {}),
+                    _css3dConfig: { ...mergedOptions },
+                    screenSpace: false,
+                    billboarding: mergedOptions.billboarding
                 }
             }
 
-            // 设置用户数据，存储完整的初始化参数
-            object.userData = {
-                ...(mergedOptions.userData || {}),
-                _css3dConfig: { ...mergedOptions }, // 存储完整的初始化配置
-                billboarding: mergedOptions.billboarding
-            }
-
-            // 添加到场景
+            // 添加到场景或管理
             const objectId = this.addObject(object, mergedOptions.id)
 
             // 请求渲染
@@ -333,14 +343,17 @@ export class CSS3DRenderPlugin extends BasePlugin {
 
     /**
      * 添加CSS3D对象到场景
-     * @param object CSS3D对象
+     * @param object CSS3D对象或屏幕空间对象
      * @param id 对象ID
      */
     addObject(object: CSS3DObject, id?: string): string {
         const objectId = id || `css3d_${this.nextId++}`
 
-        // 添加到主场景
-        if (this.mainScene) {
+        // 检查是否为屏幕空间对象
+        const isScreenSpace = object.userData?.screenSpace === true
+
+        // 只有非屏幕空间对象才添加到THREE.Scene
+        if (!isScreenSpace && this.mainScene) {
             this.mainScene.add(object)
         }
 
@@ -348,7 +361,7 @@ export class CSS3DRenderPlugin extends BasePlugin {
         this.items.set(objectId, {
             id: objectId,
             object: object,
-            element: object.element,
+            element: object.element || (object as any).element,
         })
 
         return objectId
@@ -363,8 +376,10 @@ export class CSS3DRenderPlugin extends BasePlugin {
         if (!item) return false
 
         try {
-            // 从场景中移除
-            if (this.mainScene) {
+            const isScreenSpace = item.object.userData?.screenSpace === true
+
+            // 只有非屏幕空间对象才从场景中移除
+            if (!isScreenSpace && this.mainScene) {
                 this.mainScene.remove(item.object)
             }
 
@@ -392,7 +407,10 @@ export class CSS3DRenderPlugin extends BasePlugin {
     clearAll(): void {
         try {
             this.items.forEach(item => {
-                if (this.mainScene) {
+                const isScreenSpace = item.object.userData?.screenSpace === true
+                
+                // 只有非屏幕空间对象才从场景中移除
+                if (!isScreenSpace && this.mainScene) {
                     this.mainScene.remove(item.object)
                 }
                 if (item.element && item.element.parentNode) {
@@ -410,27 +428,28 @@ export class CSS3DRenderPlugin extends BasePlugin {
      * 优化的更新方法 - 支持连续渲染和按需渲染
      */
     update(): void {
-        if (!this.css3Drenderer || !this.mainScene || !this.camera) {
-            return
-        }
         // 更新动画
         this.animations.update()
 
-        // 让所有CSS3D对象永远朝向镜头
-        this.makeAllObjectsFaceCamera()
+        // 更新屏幕空间对象的位置
+        this.updateScreenSpaceObjects()
 
-        // 根据渲染模式决定是否渲染
-        const shouldRender = this.renderMode === "continuous" || (this.renderMode === "onDemand" && this.needsRender)
+        // 只有非屏幕空间对象才需要3D渲染
+        if (this.css3Drenderer && this.mainScene && this.camera) {
+            // 让所有CSS3D对象永远朝向镜头
+            this.makeAllObjectsFaceCamera()
 
-        if (!shouldRender) {
-            return
-        }
+            // 根据渲染模式决定是否渲染
+            const shouldRender = this.renderMode === "continuous" || (this.renderMode === "onDemand" && this.needsRender)
 
-        try {
-            this.css3Drenderer.render(this.mainScene, this.camera)
-            this.needsRender = false
-        } catch (error) {
-            console.error("CSS3D渲染失败:", error)
+            if (shouldRender) {
+                try {
+                    this.css3Drenderer.render(this.mainScene, this.camera)
+                    this.needsRender = false
+                } catch (error) {
+                    console.error("CSS3D渲染失败:", error)
+                }
+            }
         }
     }
 
@@ -457,8 +476,8 @@ export class CSS3DRenderPlugin extends BasePlugin {
         this.items.forEach(item => {
             const object = item.object
             
-            // 检查该对象是否启用了billboarding
-            if (object.userData.billboarding === false) return
+            // 跳过屏幕空间对象和禁用billboarding的对象
+            if (object.userData.screenSpace === true || object.userData.billboarding === false) return
             
            if (this.camera) {
                object.lookAt(this.camera.position)
@@ -484,7 +503,9 @@ export class CSS3DRenderPlugin extends BasePlugin {
         // 如果禁用，重置所有对象的旋转
         if (!enabled) {
             this.items.forEach(item => {
-                item.object.quaternion.set(0, 0, 0, 1)
+                if (item.object.userData.screenSpace !== true) {
+                    item.object.quaternion.set(0, 0, 0, 1)
+                }
             })
             this.markNeedsRender()
         }
@@ -499,6 +520,40 @@ export class CSS3DRenderPlugin extends BasePlugin {
     }
 
     /**
+     * 更新屏幕空间对象的位置
+     * @description 根据3D坐标自动转换为2D屏幕坐标更新屏幕空间DOM元素的位置
+     */
+    private updateScreenSpaceObjects(): void {
+        if (!this.camera) return
+
+        this.items.forEach(item => {
+            const object = item.object
+            const element = item.element
+            
+            if (object.userData.screenSpace !== true || !element) return
+
+            const config = object.userData._css3dConfig
+            if (!config || !config.screenSpace) return
+
+            // 使用3D坐标转换为2D屏幕坐标
+            const worldPosition = [object.position.x, object.position.y, object.position.z]
+            const screenPosition = this.worldToScreen(worldPosition)
+            
+            // 计算居中的偏移量（元素中心对齐）
+            const rect = element.getBoundingClientRect()
+            const anchorOffsetX = -rect.width / 2
+            const anchorOffsetY = -rect.height / 2
+
+            // 应用屏幕空间偏移
+            const screenOffsetX = config.screenOffset?.[0] || 0
+            const screenOffsetY = config.screenOffset?.[1] || 0
+
+            // 应用最终位置（屏幕坐标 + 居中偏移 + 屏幕空间偏移）
+            element.style.transform = `translate3d(${screenPosition[0] + anchorOffsetX + screenOffsetX}px, ${screenPosition[1] + anchorOffsetY + screenOffsetY}px, 0)`
+        })
+    }
+
+    /**
      * 获取CSS3D对象的原始配置数据
      * @param id 对象ID
      * @returns 原始配置数据，如果对象不存在则返回null
@@ -508,6 +563,40 @@ export class CSS3DRenderPlugin extends BasePlugin {
         if (!item) return null
         
         return item.object.userData._css3dConfig || null
+    }
+
+    /**
+     * 设置屏幕空间对象的位置
+     * @param id 对象ID
+     * @param worldPosition 3D世界坐标
+     */
+    setScreenPosition(id: string, worldPosition: [number, number, number]): boolean {
+        const item = this.items.get(id)
+        if (!item) return false
+
+        const object = item.object
+        if (object.userData.screenSpace !== true) return false
+
+        // 更新对象的3D位置
+        object.position.set(worldPosition[0], worldPosition[1], worldPosition[2])
+        
+        // 立即更新屏幕位置
+        this.updateScreenSpaceObjects()
+        this.markNeedsRender()
+
+        return true
+    }
+
+    /**
+     * 检查对象是否为屏幕空间对象
+     * @param id 对象ID
+     * @returns 是否为屏幕空间对象
+     */
+    isScreenSpaceObject(id: string): boolean {
+        const item = this.items.get(id)
+        if (!item) return false
+        
+        return item.object.userData.screenSpace === true
     }
 
     /**
@@ -584,7 +673,6 @@ export class CSS3DRenderPlugin extends BasePlugin {
             // 清空引用
             this.css3Drenderer = null
             this.mainScene = null
-            this.camera = null
             this.domElement = null
 
             console.log("🗑️ CSS3D插件已完全销毁")
@@ -1251,6 +1339,18 @@ export class CSS3DRenderPlugin extends BasePlugin {
         } catch (error) {
             console.error("同步matrix3d失败:", error)
         }
+    }
+    /**
+     * 3D世界坐标到2D屏幕空间的转换
+     * @param worldPosition 3D世界坐标
+     * @returns 2D屏幕坐标
+     */
+    worldToScreen(worldPosition: number[]): number[] {
+        const vector = new THREE.Vector3(...worldPosition)
+        vector.project(this.camera)
+        const x = (vector.x + 1) * 0.5 * window.innerWidth
+        const y = (1 - vector.y) * 0.5 * window.innerHeight
+        return [x, y]
     }
 }
 
