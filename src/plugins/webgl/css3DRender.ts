@@ -114,24 +114,7 @@ export class CSS3DRenderPlugin extends BasePlugin {
         console.log(`🎬 当前渲染模式: ${this.renderMode}`)
     }
 
-    // 添加过渡动画样式到文档头
-    private addTransitionStyles(): void {
-        if (!document.getElementById("css3d-transition-styles")) {
-            const style = document.createElement("style")
-            style.id = "css3d-transition-styles"
-            style.textContent = `
-            .css3d-transition {
-                transition: opacity 0.3s ease, transform 0.3s ease, visibility 0.3s ease !important;
-                transform-origin: center center;
-            }
-            .css3d-visible {
-            }
-            .css3d-hidden {
-            }
-        `
-            document.head.appendChild(style)
-        }
-    }
+
 
     /**
      * 创建CSS3D对象
@@ -194,19 +177,19 @@ export class CSS3DRenderPlugin extends BasePlugin {
                 pointerEvents = mergedOptions.display ? "auto" : "none"
             }
 
-            // 屏幕空间定位样式 - 初始样式，位置将在updateScreenSpaceObjects中动态计算
+            // 屏幕空间定位样式 - 使用屏幕外初始位置，避免闪烁
             let screenSpaceStyles = ""
             if (mergedOptions.screenSpace) {
+                // 初始位置设置在屏幕外，避免在(0,0)处显示
                 screenSpaceStyles = `
                     position: fixed;
-                    left: 0px;
-                    top: 0px;
+                    left: -9999px;
+                    top: -9999px;
                     transform-origin: center center;
                     pointer-events: ${pointerEvents};
                     z-index: ${mergedOptions.zIndex || 1};
                     opacity: ${mergedOptions.opacity || 1};
                     ${mergedOptions.gpuAcceleration ? 'transform: translate3d(0, 0, 0);' : ''}
-                    ${mergedOptions.useTransitions ? 'transition: transform 0.3s ease, opacity 0.3s ease;' : ''}
                 `
             }
 
@@ -228,16 +211,15 @@ export class CSS3DRenderPlugin extends BasePlugin {
             // 一次性设置样式
             element.style.cssText += ";" + cssText
 
-            // 添加过渡动画类
-            if (mergedOptions.useTransitions) {
-                element.classList.add("css3d-transition")
-            }
-
-            // 添加可见性控制类
-            if (mergedOptions.animatedToggle) {
-                element.classList.add(mergedOptions.display ? "css3d-visible" : "css3d-hidden")
+            // 初始状态设置为不可见，避免闪烁
+            if (mergedOptions.display) {
+                element.style.display = "block"
+                element.style.visibility = "hidden" // 先隐藏避免闪烁
+                element.style.opacity = "0"
             } else {
-                element.style.display = mergedOptions.display ? "block" : "none"
+                element.style.display = "none"
+                element.style.visibility = "hidden"
+                element.style.opacity = "0"
             }
 
             // 创建CSS3D对象或屏幕空间元素
@@ -300,14 +282,47 @@ export class CSS3DRenderPlugin extends BasePlugin {
             // 添加到场景或管理
             const objectId = this.addObject(object, mergedOptions.id)
 
+            // 延迟显示元素，使用渐显动画 - 确保位置正确后显示
+            if (mergedOptions.display) {
+                // 使用微任务队列确保在DOM更新后执行
+                queueMicrotask(() => {
+                    if (mergedOptions.screenSpace) {
+                        // 屏幕空间对象：先更新位置，再移动到可见区域
+                        this.updateScreenSpaceObjects()
+                        // 将元素从屏幕外移回可见区域
+                        element.style.left = '0px'
+                        element.style.top = '0px'
+                    } else {
+                        // 3D空间对象：确保位置正确后显示
+                        this.forceUpdateMatrix3D(object)
+                    }
+
+                    // 统一显示元素 - 使用渐显动画
+                    element.style.visibility = "visible"
+                    element.style.opacity = "0"
+                    
+                    new TWEEN.Tween({ opacity: 0 })
+                        .to({ opacity: mergedOptions.opacity || 1 }, 300)
+                        .easing(TWEEN.Easing.Quadratic.Out)
+                        .onUpdate((obj) => {
+                            element.style.opacity = obj.opacity.toString()
+                        })
+                        .onComplete(() => {
+                            this.markNeedsRender()
+                        })
+                        .start()
+                })
+            }
+
             // 请求渲染
             this.markNeedsRender()
 
             // 完成回调
-            if (mergedOptions.complete) {
-                mergedOptions.complete()
-            }
-
+            setTimeout(() => {
+                if (mergedOptions.complete) {
+                    mergedOptions.complete()
+                }
+            }, 0);
             // 设置更新回调
             object.userData.onUpdate = mergedOptions.onUpdate
 
@@ -370,55 +385,118 @@ export class CSS3DRenderPlugin extends BasePlugin {
     /**
      * 移除CSS3D对象
      * @param id 对象ID
+     * @param useAnimation 是否使用渐隐动画，默认为true
      */
-    removeObject(id: string): boolean {
+    removeObject(id: string, useAnimation: boolean = true): boolean {
         const item = this.items.get(id)
         if (!item) return false
 
-        try {
-            const isScreenSpace = item.object.userData?.screenSpace === true
-
-            // 只有非屏幕空间对象才从场景中移除
-            if (!isScreenSpace && this.mainScene) {
-                this.mainScene.remove(item.object)
-            }
-
-            // 从DOM中移除
-            if (item.element && item.element.parentNode) {
-                item.element.parentNode.removeChild(item.element)
-            }
-
-            // 从记录中删除
-            this.items.delete(id)
-
-            // 标记需要重新渲染
-            this.markNeedsRender()
-
-            return true
-        } catch (error) {
-            console.error(`移除CSS3D对象失败 (ID: ${id}):`, error)
-            return false
-        }
-    }
-
-    /**
-     * 清理所有对象
-     */
-    clearAll(): void {
-        try {
-            this.items.forEach(item => {
+        const removeElement = () => {
+            try {
                 const isScreenSpace = item.object.userData?.screenSpace === true
-                
+
                 // 只有非屏幕空间对象才从场景中移除
                 if (!isScreenSpace && this.mainScene) {
                     this.mainScene.remove(item.object)
                 }
+
+                // 从DOM中移除
                 if (item.element && item.element.parentNode) {
                     item.element.parentNode.removeChild(item.element)
                 }
-            })
-            this.items.clear()
-            this.markNeedsRender()
+
+                // 从记录中删除
+                this.items.delete(id)
+
+                // 标记需要重新渲染
+                this.markNeedsRender()
+            } catch (error) {
+                console.error(`移除CSS3D对象失败 (ID: ${id}):`, error)
+            }
+        }
+
+        if (useAnimation && item.element) {
+            // 使用渐隐动画
+            new TWEEN.Tween({ opacity: parseFloat(item.element.style.opacity || "1") })
+                .to({ opacity: 0 }, 300)
+                .easing(TWEEN.Easing.Quadratic.Out)
+                .onUpdate((obj) => {
+                    item.element.style.opacity = obj.opacity.toString()
+                })
+                .onComplete(() => {
+                    removeElement()
+                })
+                .start()
+        } else {
+            // 立即移除
+            removeElement()
+        }
+
+        return true
+    }
+
+    /**
+     * 清理所有对象
+     * @param useAnimation 是否使用渐隐动画，默认为false（批量清理通常不需要动画）
+     */
+    clearAll(useAnimation: boolean = false): void {
+        try {
+            if (useAnimation) {
+                // 使用渐隐动画清理所有对象
+                const promises: Promise<void>[] = []
+                
+                this.items.forEach(item => {
+                    if (item.element) {
+                        const promise = new Promise<void>((resolve) => {
+                            new TWEEN.Tween({ opacity: parseFloat(item.element.style.opacity || "1") })
+                                .to({ opacity: 0 }, 300)
+                                .easing(TWEEN.Easing.Quadratic.Out)
+                                .onUpdate((obj) => {
+                                    item.element.style.opacity = obj.opacity.toString()
+                                })
+                                .onComplete(() => {
+                                    resolve()
+                                })
+                                .start()
+                        })
+                        promises.push(promise)
+                    } else {
+                        promises.push(Promise.resolve())
+                    }
+                })
+
+                // 等待所有动画完成后清理
+                Promise.all(promises).then(() => {
+                    this.items.forEach(item => {
+                        const isScreenSpace = item.object.userData?.screenSpace === true
+                        
+                        // 只有非屏幕空间对象才从场景中移除
+                        if (!isScreenSpace && this.mainScene) {
+                            this.mainScene.remove(item.object)
+                        }
+                        if (item.element && item.element.parentNode) {
+                            item.element.parentNode.removeChild(item.element)
+                        }
+                    })
+                    this.items.clear()
+                    this.markNeedsRender()
+                })
+            } else {
+                // 立即清理所有对象
+                this.items.forEach(item => {
+                    const isScreenSpace = item.object.userData?.screenSpace === true
+                    
+                    // 只有非屏幕空间对象才从场景中移除
+                    if (!isScreenSpace && this.mainScene) {
+                        this.mainScene.remove(item.object)
+                    }
+                    if (item.element && item.element.parentNode) {
+                        item.element.parentNode.removeChild(item.element)
+                    }
+                })
+                this.items.clear()
+                this.markNeedsRender()
+            }
         } catch (error) {
             console.error("清理CSS3D对象失败:", error)
         }
@@ -712,10 +790,9 @@ export class CSS3DRenderPlugin extends BasePlugin {
         if (!item) return false
 
         try {
+            // 直接设置位置，无动画，立即完成
             item.object.position.set(x, y, z)
-            this.markNeedsRender()
             this.forceUpdateMatrix3D(item.object)
-
             this.markNeedsRender()
             return true
         } catch (error) {
@@ -767,41 +844,120 @@ export class CSS3DRenderPlugin extends BasePlugin {
     }
 
     /**
-     * 动画移动对象到目标位置
+     * 动画移动对象到目标位置 - 优化版本，解决卡顿问题
      * @param id 对象ID
      * @param targetPosition 目标位置 [x, y, z]
-     * @param duration 动画时长（毫秒）
+     * @param duration 动画时长（毫秒），默认为400ms减少等待时间
+     * @param easing 缓动函数，默认为更快的缓动
      * @returns 是否成功启动动画
      */
-    animateMove(id: string, targetPosition: [number, number, number], duration: number = 1000): boolean {
+    animateMove(id: string, targetPosition: [number, number, number], duration: number = 400, easing?: (amount: number) => number): boolean {
         const item = this.items.get(id)
         if (!item) return false
 
         try {
             const startPosition = item.object.position.clone()
             const endPosition = new THREE.Vector3(targetPosition[0], targetPosition[1], targetPosition[2])
-
-            // 简单的动画实现
-            const startTime = Date.now()
-
-            const animate = () => {
-                const elapsed = Date.now() - startTime
-                const progress = Math.min(elapsed / duration, 1)
-
-                // 线性插值
-                const currentPosition = startPosition.clone().lerp(endPosition, progress)
-                item.object.position.copy(currentPosition)
-                this.markNeedsRender()
-
-                if (progress < 1) {
-                    requestAnimationFrame(animate)
-                }
-            }
-
-            animate()
+            
+            // 设置渲染模式为连续渲染，确保动画流畅
+            const originalMode = this.renderMode
+            this.setRenderMode("continuous")
+            
+            // 使用TWEEN.js进行高性能动画，优化参数
+            const tween = new TWEEN.Tween({ x: startPosition.x, y: startPosition.y, z: startPosition.z })
+                .to({ x: endPosition.x, y: endPosition.y, z: endPosition.z }, duration)
+                .easing(easing || TWEEN.Easing.Cubic.Out) // 使用更快的缓动函数
+                .onUpdate((coords) => {
+                    item.object.position.set(coords.x, coords.y, coords.z)
+                })
+                .onComplete(() => {
+                    // 动画完成后恢复原始渲染模式
+                    this.setRenderMode(originalMode)
+                    // 确保位置精确
+                    item.object.position.copy(endPosition)
+                    this.markNeedsRender()
+                    this.forceUpdateMatrix3D(item.object)
+                })
+                .start()
+            
+            // 将动画添加到动画组
+            this.animations.add(tween)
+            
             return true
         } catch (error) {
             console.error(`动画移动对象失败 (ID: ${id}):`, error)
+            return false
+        }
+    }
+
+    /**
+     * 快速移动对象到目标位置 - 无动画版本，解决卡顿问题
+     * @param id 对象ID
+     * @param targetPosition 目标位置 [x, y, z]
+     * @returns 是否成功
+     */
+    moveObjectInstant(id: string, targetPosition: [number, number, number]): boolean {
+        const item = this.items.get(id)
+        if (!item) return false
+
+        try {
+            // 直接设置位置，无动画，立即完成，避免卡顿
+            item.object.position.set(targetPosition[0], targetPosition[1], targetPosition[2])
+            this.forceUpdateMatrix3D(item.object)
+            this.markNeedsRender() // 只调用一次，避免重复渲染
+            return true
+        } catch (error) {
+            console.error(`快速移动对象失败 (ID: ${id}):`, error)
+            return false
+        }
+    }
+
+    /**
+     * 优化动画移动对象 - 使用更高效的动画策略
+     * @param id 对象ID
+     * @param targetPosition 目标位置 [x, y, z]
+     * @param duration 动画时长（毫秒），默认为300ms减少等待时间
+     * @param useHardwareAcceleration 是否使用硬件加速，默认为true
+     * @returns 是否成功启动动画
+     */
+    animateMoveOptimized(id: string, targetPosition: [number, number, number], duration: number = 300, useHardwareAcceleration: boolean = true): boolean {
+        const item = this.items.get(id)
+        if (!item) return false
+
+        try {
+            const startPosition = item.object.position.clone()
+            const endPosition = new THREE.Vector3(targetPosition[0], targetPosition[1], targetPosition[2])
+            
+            // 设置渲染模式为连续渲染，确保动画流畅
+            const originalMode = this.renderMode
+            this.setRenderMode("continuous")
+            
+            // 使用TWEEN.js进行高性能动画，减少持续时间
+            const tween = new TWEEN.Tween({ x: startPosition.x, y: startPosition.y, z: startPosition.z })
+                .to({ x: endPosition.x, y: endPosition.y, z: endPosition.z }, duration)
+                .easing(TWEEN.Easing.Cubic.Out) // 使用更快的缓动函数
+                .onUpdate((coords) => {
+                    item.object.position.set(coords.x, coords.y, coords.z)
+                    // 减少渲染调用频率，使用节流
+                    if (Math.random() < 0.3) { // 30%的概率触发渲染，减少CPU负载
+                        this.markNeedsRender()
+                    }
+                })
+                .onComplete(() => {
+                    // 动画完成后恢复原始渲染模式
+                    this.setRenderMode(originalMode)
+                    item.object.position.copy(endPosition)
+                    this.markNeedsRender()
+                    this.forceUpdateMatrix3D(item.object)
+                })
+                .start()
+            
+            // 将动画添加到动画组
+            this.animations.add(tween)
+            
+            return true
+        } catch (error) {
+            console.error(`优化动画移动对象失败 (ID: ${id}):`, error)
             return false
         }
     }
@@ -829,150 +985,6 @@ export class CSS3DRenderPlugin extends BasePlugin {
         //     this.camera = coreInterface.camera || this.camera
         // }
         // console.log('🎨 CSS3D渲染插件初始化完成')
-    }
-
-    /**
-     * 渐入效果 - 优化版本，使用CSS过渡动画
-     * @param object CSS3D对象
-     * @param duration 动画时长（毫秒）
-     */
-    fadeIn(object: CSS3DObject, duration: number = 1000): void {
-        if (!object || !object.element) {
-            console.warn("fadeIn: 无效的CSS3D对象")
-            return
-        }
-
-        const element = object.element
-
-        // 保留现有变换（包括中心对齐和matrix3d）
-        const preserveTransform = () => {
-            const currentTransform = element.style.transform
-            const matrix3dMatch = currentTransform.match(/matrix3d\([^)]+\)/)
-            const translateMatch = currentTransform.match(/translate\([^)]+\)/)
-
-            const transforms = []
-
-            // 保留中心对齐
-            if (translateMatch && translateMatch[0].includes("-50%")) {
-                transforms.push(translateMatch[0])
-            } else {
-                transforms.push("translate(-50%, -50%)")
-            }
-
-            // 保留matrix3d
-            if (matrix3dMatch) {
-                transforms.push(matrix3dMatch[0])
-            }
-
-            // 添加GPU加速
-            transforms.push("translate3d(0,0,0)")
-
-            return transforms.join(" ")
-        }
-
-        const preservedTransform = preserveTransform()
-
-        // 设置初始状态 - 批量设置样式避免多次重绘
-        const initialStyles = [
-            "visibility: visible",
-            "opacity: 0",
-            "pointer-events: none", // 动画开始时禁用鼠标事件
-            `transform: ${preservedTransform}`, // 保留所有变换
-            `transition: opacity ${duration}ms ease, transform ${duration}ms ease`,
-        ].join("; ")
-
-        element.style.cssText += "; " + initialStyles
-        object.visible = true
-
-        // 强制重绘以确保初始状态生效
-        void element.offsetHeight
-
-        // 设置最终状态，触发CSS过渡动画
-        const finalStyles = [
-            "opacity: 1",
-            "pointer-events: auto", // 动画完成后恢复鼠标事件
-            `transform: ${preservedTransform}`,
-        ].join("; ")
-
-        element.style.cssText += "; " + finalStyles
-
-        // 清理过渡属性
-        setTimeout(() => {
-            if (object.visible && element.style.opacity === "1") {
-                element.style.transition = ""
-            }
-        }, duration + 50)
-
-        this.markNeedsRender()
-    }
-
-    /**
-     * 渐出效果 - 优化版本，使用CSS过渡动画
-     * @param object CSS3D对象
-     * @param duration 动画时长（毫秒）
-     * @param onComplete 完成回调
-     */
-    fadeOut(object: CSS3DObject, duration: number = 1000, onComplete?: () => void): void {
-        if (!object || !object.element) {
-            console.warn("fadeOut: 无效的CSS3D对象")
-            return
-        }
-
-        const element = object.element
-
-        // 保留现有变换（包括中心对齐和matrix3d）
-        const preserveTransform = () => {
-            const currentTransform = element.style.transform
-            const matrix3dMatch = currentTransform.match(/matrix3d\([^)]+\)/)
-            const translateMatch = currentTransform.match(/translate\([^)]+\)/)
-
-            const transforms = []
-
-            // 保留中心对齐
-            if (translateMatch && translateMatch[0].includes("-50%")) {
-                transforms.push(translateMatch[0])
-            } else {
-                transforms.push("translate(-50%, -50%)")
-            }
-
-            // 保留matrix3d
-            if (matrix3dMatch) {
-                transforms.push(matrix3dMatch[0])
-            }
-
-            // 添加GPU加速
-            transforms.push("translate3d(0,0,0)")
-
-            return transforms.join(" ")
-        }
-
-        const preservedTransform = preserveTransform()
-
-        // 立即禁用鼠标事件，防止动画过程中的交互
-        element.style.pointerEvents = "none"
-        element.style.transition = `opacity ${duration}ms ease, transform ${duration}ms ease`
-
-        // 设置渐出状态
-        const fadeOutStyles = ["opacity: 0", `transform: ${preservedTransform}`].join("; ")
-
-        element.style.cssText += "; " + fadeOutStyles
-
-        // 动画完成后的处理
-        setTimeout(() => {
-            if (element.style.opacity === "0") {
-                const hideStyles = ["visibility: hidden", `transform: ${preservedTransform}`, 'transition: ""'].join(
-                    "; ",
-                )
-                element.style.cssText += "; " + hideStyles
-                object.visible = false
-
-                if (onComplete) {
-                    onComplete()
-                }
-            }
-        }, duration + 50)
-
-        this.markNeedsRender()
     }
 
     /**
@@ -1004,115 +1016,7 @@ export class CSS3DRenderPlugin extends BasePlugin {
         }
     }
 
-    /**
-     * 智能显隐控制 - 优化版本，保持matrix3d同步
-     * @param object CSS3D对象
-     * @param visible 是否可见
-     * @param useAnimation 是否使用动画过渡
-     */
-    setVisible(object: CSS3DObject, visible: boolean, useAnimation: boolean = false): void {
-        if (!object) return
-        const element = object.element as HTMLElement
 
-        const wasVisible = object.visible
-
-        if (visible == true) {
-            console.log("set visible true")
-        }
-
-        // 保留现有的所有变换，包括中心对齐和matrix3d
-        const preserveMatrixTransform = () => {
-            const currentTransform = element.style.transform
-
-            // 提取所有重要的变换函数
-            const matrix3dMatch = currentTransform.match(/matrix3d\([^)]+\)/)
-            const translateMatch = currentTransform.match(/translate\([^)]+\)/)
-            const translate3dMatch = currentTransform.match(/translate3d\([^)]+\)/)
-
-            const transforms = []
-
-            // 保留 translate(-50%, -50%) 中心对齐
-            if (translateMatch && translateMatch[0].includes("-50%")) {
-                transforms.push(translateMatch[0])
-            } else {
-                // 如果没有中心对齐，添加默认的
-                transforms.push("translate(-50%, -50%)")
-            }
-
-            // 保留 matrix3d 3D变换
-            if (matrix3dMatch) {
-                transforms.push(matrix3dMatch[0])
-            }
-
-            // 添加GPU加速（如果还没有）
-            if (!translate3dMatch || !translate3dMatch[0].includes("translate3d(0,0,0)")) {
-                transforms.push("translate3d(0,0,0)")
-            }
-
-            return transforms.join(" ")
-        }
-
-        if (useAnimation && element.classList.contains("css3d-transition")) {
-            // 使用CSS过渡动画
-            element.classList.remove("css3d-visible", "css3d-hidden")
-
-            if (visible) {
-                // 显示状态 - 只修改显示属性，不覆盖transform
-                element.style.opacity = "1"
-                element.style.visibility = "visible"
-                element.style.pointerEvents =
-                    this.getPointerEventsControl(object) === "smart" ? "auto" : element.style.pointerEvents
-                element.classList.add("css3d-visible")
-
-                // 保留matrix3d
-                element.style.transform = preserveMatrixTransform()
-            } else {
-                // 隐藏状态
-                element.style.opacity = "0"
-                element.style.pointerEvents = "none"
-                element.classList.add("css3d-hidden")
-
-                // 保留matrix3d
-                element.style.transform = preserveMatrixTransform()
-
-                // 动画完成后彻底隐藏
-                setTimeout(() => {
-                    if (element.style.opacity === "0") {
-                        element.style.visibility = "hidden"
-                    }
-                }, 300) // 与transition时间一致
-            }
-        } else {
-            // 直接设置，不使用动画
-            if (visible) {
-                element.style.display = "block"
-                element.style.visibility = "visible"
-                element.style.opacity = "1"
-                element.style.pointerEvents =
-                    this.getPointerEventsControl(object) === "smart" ? "auto" : element.style.pointerEvents
-
-                // 保留matrix3d
-                element.style.transform = preserveMatrixTransform()
-            } else {
-                element.style.opacity = "0"
-                element.style.visibility = "hidden"
-                element.style.pointerEvents = "none"
-
-                // 保留matrix3d
-                element.style.transform = preserveMatrixTransform()
-            }
-        }
-
-        object.visible = visible
-
-        if (visible && !wasVisible) {
-            // 显示时确保变换正确并强制更新matrix3d
-            this.ensureCorrectTransform(element)
-            this.forceUpdateMatrix3D(object)
-        }
-
-        this.markNeedsRender()
-    }
 
     /**
      * 批量更新对象样式 - 性能优化方法
@@ -1257,6 +1161,73 @@ export class CSS3DRenderPlugin extends BasePlugin {
             console.error(`优化DOM结构失败 (ID: ${objectId}):`, error)
             return false
         }
+    }
+
+    /**
+     * 设置对象可见性 - 支持动画版本
+     * @param object CSS3D对象
+     * @param visible 是否可见
+     * @param useAnimation 是否使用动画过渡，默认为true
+     */
+    setVisible(object: CSS3DObject, visible: boolean, useAnimation: boolean = true): void {
+        if (!object || !object.element) return;
+        
+        const element = object.element as HTMLElement;
+        
+        if (useAnimation) {
+            // 使用Tween.js实现渐显渐隐动画
+            if (visible) {
+                // 渐显动画
+                element.style.display = "block";
+                element.style.visibility = "visible";
+                element.style.pointerEvents =
+                    this.getPointerEventsControl(object) === "smart" ? "auto" : element.style.pointerEvents;
+                
+                new TWEEN.Tween({ opacity: 0 })
+                    .to({ opacity: 1 }, 300)
+                    .easing(TWEEN.Easing.Quadratic.Out)
+                    .onUpdate((obj) => {
+                        element.style.opacity = obj.opacity.toString();
+                    })
+                    .start();
+            } else {
+                // 渐隐动画
+                new TWEEN.Tween({ opacity: parseFloat(element.style.opacity || "1") })
+                    .to({ opacity: 0 }, 300)
+                    .easing(TWEEN.Easing.Quadratic.Out)
+                    .onUpdate((obj) => {
+                        element.style.opacity = obj.opacity.toString();
+                    })
+                    .onComplete(() => {
+                        element.style.display = "none";
+                        element.style.visibility = "hidden";
+                        element.style.pointerEvents = "none";
+                    })
+                    .start();
+            }
+        } else {
+            // 无动画实现
+            if (visible) {
+                element.style.display = "block";
+                element.style.visibility = "visible";
+                element.style.opacity = "1";
+                element.style.pointerEvents =
+                    this.getPointerEventsControl(object) === "smart" ? "auto" : element.style.pointerEvents;
+            } else {
+                element.style.display = "none";
+                element.style.visibility = "hidden";
+                element.style.opacity = "0";
+                element.style.pointerEvents = "none";
+            }
+        }
+
+        object.visible = visible;
+
+        if (visible) {
+            this.forceUpdateMatrix3D(object);
+        }
+
+        this.markNeedsRender();
     }
 
     /**
