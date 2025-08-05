@@ -1413,6 +1413,7 @@ export class BuildingControlPlugin extends BasePlugin {
 
         // 触发聚焦事件
         this.events.onFloorFocus?.(floorNumber)
+        eventBus.emit("Highlight-Delete")
         console.log(`✅ 楼层 ${floorNumber}F 聚焦完成`)
     }
 
@@ -1463,6 +1464,8 @@ export class BuildingControlPlugin extends BasePlugin {
 
         // 触发取消聚焦事件
         this.events.onFloorUnfocus?.()
+
+        eventBus.emit("Highlight-Delete")
         console.log(`✅ 楼层聚焦已取消`)
     }
 
@@ -1671,6 +1674,8 @@ export class BuildingControlPlugin extends BasePlugin {
         // 等待所有动画完成
         await Promise.all(animationPromises).then(() => {
             onComplete?.()
+
+            eventBus.emit("Highlight-Delete")
         })
     }
 

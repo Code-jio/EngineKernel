@@ -196,6 +196,10 @@ export class MousePickPlugin extends BasePlugin {
             opacity: 0.8,
         })
 
+        eventBus.on("Highlight-Delete",()=>{
+            this.clearHighlight()
+        })
+
         console.log("✅ MousePickPlugin 初始化完成")
     }
 
@@ -475,7 +479,7 @@ export class MousePickPlugin extends BasePlugin {
             // 在非Ctrl状态下清空选择和高亮
             if (!this.isCtrlPressed) {
                 this.clearSelection()
-                this.clearOutlineHighlight()
+                eventBus.emit("Highlight-Delete")
             }
         }
 
@@ -671,18 +675,14 @@ export class MousePickPlugin extends BasePlugin {
                         timestamp: Date.now(),
                     })
                     this.clearSelection()
-                    this.clearOutlineHighlight()
+                    eventBus.emit("Highlight-Delete")
                 } else {
-                    if (this.isPickedBuilding(results)) {
-                        this.emitPickEvent("getBuilding", {
-                            object: closestResult.object,
-                            timestamp: Date.now(),
-                        })
-                    }
 
-                    // 单击事件：正常选中和高亮
+                    if (this.isPickedDevice(results)) {
+                        // 单击事件：正常选中和高亮
+                        this.highlightObjectWithOutline(closestResult.object)
+                    }
                     this.selectSingleObject(closestResult.object)
-                    this.highlightObjectWithOutline(closestResult.object)
                 }
 
                 // 更新双击检测状态
@@ -1064,7 +1064,7 @@ export class MousePickPlugin extends BasePlugin {
         }
 
         // 清除之前的高亮
-        this.clearOutlineHighlight()
+        eventBus.emit("Highlight-Delete")
 
         // 创建新的边框高亮
         const outline = this.createOutlineForObject(object)
@@ -1090,7 +1090,7 @@ export class MousePickPlugin extends BasePlugin {
     /**
      * 清除边框高亮
      */
-    private clearOutlineHighlight(): void {
+    public clearOutlineHighlight(): void {
         if (this.highlightOutline && this.scene) {
             // 从场景移除
             this.scene.remove(this.highlightOutline)
@@ -1192,7 +1192,7 @@ export class MousePickPlugin extends BasePlugin {
 
         // 如果关闭高亮，清除当前的高亮效果
         if (!enable) {
-            this.clearOutlineHighlight()
+            eventBus.emit("Highlight-Delete")
         }
 
         console.log(`🔆 轮廓高亮已${enable ? "启用" : "禁用"}`)
@@ -1275,7 +1275,7 @@ export class MousePickPlugin extends BasePlugin {
         this.enableDebug(false)
 
         // 清理高亮状态
-        this.clearOutlineHighlight()
+        eventBus.emit("Highlight-Delete")
 
         // 清理建筑状态
         if (this.buildingMode) {
@@ -1777,15 +1777,17 @@ export class MousePickPlugin extends BasePlugin {
         return true
     }
 
-    // isPickedBuilding
-    private isPickedBuilding(results: PickResult[]): boolean {
-        // 如果拾取结果里面包含建筑则认定为拾取到建筑
+    // isPickedDevice
+    private isPickedDevice(results: PickResult[]): boolean {
+        // 检查对象名称是否符合 "MAIN_BUILDING_nF_K505_设备名" 的命名方式
+        // 其中 n 为数字，K（或其它大写字母）后面接三位数字，最后为设备名
+        const devicePattern = /^MAIN_BUILDING_\d+F_[A-Z]\d{3}_.+$/;
         for (const result of results) {
-            if (result.object.name.toLocaleLowerCase().includes("building")) {
-                return true
+            if (devicePattern.test(result.object.name)) {
+                return true;
             }
         }
-        return false
+        return false;
     }
 
     /**

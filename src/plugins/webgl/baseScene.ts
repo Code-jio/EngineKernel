@@ -4119,23 +4119,15 @@ export class BaseScene extends BasePlugin {
         return false
     }
 
-    public getModelPositionByBoundingBox(mesh: THREE.Group): THREE.Vector3 {
-        // mesh 是一个 THREE.Mesh 对象
-    
-        const position = mesh.position;
-    
-        // 判断 position 是否接近 (0, 0, 0)
-        const isAtOrigin = position.distanceTo(new THREE.Vector3(0, 0, 0)) < 1e-6;
-    
-        if (isAtOrigin) {
-            // 创建包围盒并计算几何中心
-            const bbox = new THREE.Box3().setFromObject(mesh);
-            const center = new THREE.Vector3();
-            bbox.getCenter(center);  // 获取包围盒中心（世界坐标）
-            return center.clone();   // 返回中心点
-        } else {
-            // 原点不在 (0,0,0)，直接返回原点位置（世界坐标）
-            return position.clone();
-        }
+    /**
+     * 通过包围盒计算物体世界坐标
+     * @param mesh 
+     * @returns 
+     */
+    public getWorldPositionByBoundingBox(mesh: THREE.Group): THREE.Vector3 {
+        const bbox = new THREE.Box3().setFromObject(mesh);
+        const center = new THREE.Vector3();
+        bbox.getCenter(center);
+        return center.clone();
     }
 }
