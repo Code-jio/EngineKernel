@@ -849,7 +849,7 @@ export class BaseScene extends BasePlugin {
             }
 
             this.scene = new THREE.Scene()
-            this.scene.background = new THREE.Color(0xffffff)
+            this.scene.background = new THREE.Color(0x000000)
 
             // 初始化地板管理器和配置
             this.floorManager = new FloorManager(this.scene)
@@ -885,6 +885,7 @@ export class BaseScene extends BasePlugin {
                 antialias: true,
                 stencil: true,
             })
+
 
             // 直接将Three.js生成的canvas添加到body
             // this.renderer.domElement.style.position = 'fixed'
