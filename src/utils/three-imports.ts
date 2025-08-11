@@ -26,6 +26,8 @@ import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass'
 import { FXAAShader } from 'three/examples/jsm/shaders/FXAAShader'
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass'
 
+// import { range, texture, mix, uv, color, rotateUV, positionLocal, time, uniform } from ""
+
 
 // 导出所有内容
 export {

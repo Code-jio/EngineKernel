@@ -167,7 +167,7 @@ export class FloorManager {
         // 处理其他可选属性的默认值
         const finalTextureWidth = waterConfig.textureWidth || 512
         const finalTextureHeight = waterConfig.textureHeight || 512
-        const finalAlpha = waterConfig.alpha !== undefined ? waterConfig.alpha : 0
+        // const finalAlpha = waterConfig.alpha !== undefined ? waterConfig.alpha : 0
         const finalDistortionScale = waterConfig.distortionScale !== undefined ? waterConfig.distortionScale : 3.7
 
         // 创建水面几何体
@@ -204,15 +204,8 @@ export class FloorManager {
             this.waterUniforms.time.value = waterConfig.time || 0
         }
 
-        // 设置透明度
-        if (finalAlpha < 1.0) {
-            water.material.transparent = true
-            water.material.opacity = finalAlpha
-            // 如果有alpha uniform，也更新它
-            if (this.waterUniforms.alpha) {
-                this.waterUniforms.alpha.value = finalAlpha
-            }
-        }
+        water.material.transparent = true
+        water.material.depthWrite = true 
 
         return water
     }

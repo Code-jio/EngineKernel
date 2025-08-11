@@ -38,7 +38,7 @@ export class CloudMarker {
     private options: Required<CloudMarkerOptions>
     private group: THREE.Group
     private cloudMesh: THREE.Mesh
-    private material: THREE.RawShaderMaterial
+    private material: THREE.RawShaderMaterial | THREE.ShaderMaterial
     private animationTime: number = 0
     public texture: THREE.Texture = null!
     public geometry: THREE.ExtrudeGeometry | THREE.BoxGeometry = null!
@@ -69,22 +69,18 @@ export class CloudMarker {
         }
 
         this.cloudMesh = this.createMesh()
+        this.cloudMesh.renderOrder = 999
         this.material = this.cloudMesh.material as THREE.RawShaderMaterial
         this.group.add(this.cloudMesh)
+        this.group.scale.set(100,100,100)
     }
 
     private validateOptions(): void {
         if (!this.options.position) {
             throw new Error("云标注需要位置")
         }
-        if (this.options.position instanceof THREE.Vector3) {
-            if (this.options.position.z <= 0) {
-                throw new Error("云层高度必须大于0")
-            }
-        } else {
-            if (this.options.position[2] <= 0) {
-                throw new Error("云层高度必须大于0")
-            }
+        if (this.options.height <= 0) {
+            throw new Error("云层高度必须大于0")
         }
     }
 
@@ -132,15 +128,15 @@ export class CloudMarker {
      * 创建shader材质
      * @returns 
      */
-    private createMaterial(): THREE.RawShaderMaterial {
+    private createMaterial(): THREE.ShaderMaterial {
         // Material
 
         const vertexShader = /* glsl */ `
-            in vec3 position;
+            // in vec3 position;
 
-            uniform mat4 modelMatrix;
-            uniform mat4 modelViewMatrix;
-            uniform mat4 projectionMatrix;
+            // uniform mat4 modelMatrix;
+            // uniform mat4 modelViewMatrix;
+            // uniform mat4 projectionMatrix;
             uniform vec3 cameraPos;
 
             out vec3 vOrigin;
@@ -160,116 +156,66 @@ export class CloudMarker {
             precision highp float;
             precision highp sampler3D;
 
-            uniform mat4 modelViewMatrix;
-            uniform mat4 projectionMatrix;
-
             in vec3 vOrigin;
             in vec3 vDirection;
 
+            uniform sampler3D map;        // 3D 噪声纹理
+            uniform float threshold;     // 密度阈值
+            uniform float opacity;       // 单步不透明度
+            uniform float steps;         // 步数控制
+
             out vec4 color;
 
-            uniform vec3 base;
-            uniform sampler3D map;
-
-            uniform float threshold;
-            uniform float range;
-            uniform float opacity;
-            uniform float steps;
-            uniform float frame;
-
-            uint wang_hash(uint seed)
-            {
-                seed = (seed ^ 61u) ^ (seed >> 16u);
-                seed *= 9u;
-                seed = seed ^ (seed >> 4u);
-                seed *= 0x27d4eb2du;
-                seed = seed ^ (seed >> 15u);
-                return seed;
-            }
-
-            float randomFloat(inout uint seed)
-            {
-                    return float(wang_hash(seed)) / 4294967296.;
-            }
-
-            vec2 hitBox( vec3 orig, vec3 dir ) {
-                const vec3 box_min = vec3( - 0.5 );
-                const vec3 box_max = vec3( 0.5 );
+            // 光线与立方体相交检测
+            vec2 hitBox(vec3 orig, vec3 dir) {
+                const vec3 box_min = vec3(-0.5);
+                const vec3 box_max = vec3(0.5);
                 vec3 inv_dir = 1.0 / dir;
-                vec3 tmin_tmp = ( box_min - orig ) * inv_dir;
-                vec3 tmax_tmp = ( box_max - orig ) * inv_dir;
-                vec3 tmin = min( tmin_tmp, tmax_tmp );
-                vec3 tmax = max( tmin_tmp, tmax_tmp );
-                float t0 = max( tmin.x, max( tmin.y, tmin.z ) );
-                float t1 = min( tmax.x, min( tmax.y, tmax.z ) );
-                return vec2( t0, t1 );
+                vec3 tmin = min((box_max - orig) * inv_dir, (box_min - orig) * inv_dir);
+                vec3 tmax = max((box_max - orig) * inv_dir, (box_min - orig) * inv_dir);
+                float t0 = max(tmin.x, max(tmin.y, tmin.z));
+                float t1 = min(tmax.x, min(tmax.y, tmax.z));
+                return vec2(t0, t1);
             }
 
-            float sample1( vec3 p ) {
-                return texture( map, p ).r;
+            float sampleDensity(vec3 p) {
+                return texture(map, p + 0.5).r;  // 转换到 [0,1] 纹理坐标
             }
 
-            float shading( vec3 coord ) {
-                float step = 0.01;
-                return sample1( coord + vec3( - step ) ) - sample1( coord + vec3( step ) );
-            }
+            void main() {
+                vec3 rayDir = normalize(vDirection);
+                vec2 bounds = hitBox(vOrigin, rayDir);
 
-            vec4 linearToSRGB( in vec4 value ) {
-                return vec4( mix( pow( value.rgb, vec3( 0.41666 ) ) * 1.055 - vec3( 0.055 ), value.rgb * 12.92, vec3( lessThanEqual( value.rgb, vec3( 0.0031308 ) ) ) ), value.a );
-            }
+                if (bounds.x > bounds.y) discard;
+                bounds.x = max(bounds.x, 0.0);
 
-            void main(){
-                vec3 rayDir = normalize( vDirection );
-                vec2 bounds = hitBox( vOrigin, rayDir );
+                vec3 pos = vOrigin + bounds.x * rayDir;
 
-                if ( bounds.x > bounds.y ) discard;
+                // 自适应步长
+                vec3 inc = 1.0 / abs(rayDir);
+                float delta = min(inc.x, min(inc.y, inc.z)) / steps;
 
-                bounds.x = max( bounds.x, 0.0 );
+                vec4 fragColor = vec4(0.0);  // 初始透明黑色
 
-                vec3 p = vOrigin + bounds.x * rayDir;
-                vec3 inc = 1.0 / abs( rayDir );
-                float delta = min( inc.x, min( inc.y, inc.z ) );
-                delta /= steps;
+                for (float t = bounds.x; t < bounds.y; t += delta) {
+                    float density = sampleDensity(pos);
+                    float a = smoothstep(threshold - 0.1, threshold + 0.1, density) * opacity;
 
-                // Jitter
+                    // 累积颜色和透明度（Premultiplied Alpha）
+                    fragColor.rgb += (1.0 - fragColor.a) * a * vec3(0.8, 0.85, 0.9);  // 淡蓝白烟雾色
+                    fragColor.a   += (1.0 - fragColor.a) * a;
 
-                // Nice little seed from
-                // https://blog.demofox.org/2020/05/25/casual-shadertoy-path-tracing-1-basic-camera-diffuse-emissive/
-                uint seed = uint( gl_FragCoord.x ) * uint( 1973 ) + uint( gl_FragCoord.y ) * uint( 9277 ) + uint( frame ) * uint( 26699 );
-                vec3 size = vec3( textureSize( map, 0 ) );
-                float randNum = randomFloat( seed ) * 2.0 - 1.0;
-                p += rayDir * randNum * ( 1.0 / size );
+                    if (fragColor.a > 0.95) break;  // 提前终止
 
-                //
-
-                vec4 ac = vec4( base, 0.0 );
-
-                for ( float t = bounds.x; t < bounds.y; t += delta ) {
-
-                    float d = sample1( p + 0.5 );
-
-                    d = smoothstep( threshold - range, threshold + range, d ) * opacity;
-
-                    float col = shading( p + 0.5 ) * 3.0 + ( ( p.x + p.y ) * 0.25 ) + 0.2;
-
-                    ac.rgb += ( 1.0 - ac.a ) * d * col;
-
-                    ac.a += ( 1.0 - ac.a ) * d;
-
-                    if ( ac.a >= 0.95 ) break;
-
-                    p += rayDir * delta;
-
+                    pos += rayDir * delta;
                 }
 
-                color = linearToSRGB( ac );
-
-                if ( color.a == 0.0 ) discard;
-
+                if (fragColor.a == 0.0) discard;
+                color = fragColor;
             }
         `
 
-        const material = new THREE.RawShaderMaterial({
+        const material = new THREE.ShaderMaterial({
             glslVersion: THREE.GLSL3,
             uniforms: {
                 base: { value: new THREE.Color(0x798aa0) },
@@ -278,14 +224,22 @@ export class CloudMarker {
                 threshold: { value: 0.25 }, // 进一步降低阈值，让更多的云雾可见
                 opacity: { value: 0.25 }, // 降低不透明度使效果更加柔和
                 range: { value: 0.1 }, // 增加范围，使云雾更加扩散
-                steps: { value: 30 }, // 增加步数，提高渲染质量
+                steps: { value: 20 }, // 增加步数，提高渲染质量
                 frame: { value: 0 },
             },
             vertexShader,
             fragmentShader,
             side: THREE.DoubleSide,
             transparent: true,
+
+            depthWrite: false,  // 不写入深度缓冲
+            depthTest: true,    // 但仍测试深度（可选，有时可设为 false）
+            blending: THREE.NormalBlending, // 或其他 blending
+            // renderOrder: 999,
+
         })
+        
+        console.log("material", material)
 
         this.material = material
         return this.material
@@ -294,7 +248,7 @@ export class CloudMarker {
     private createMesh(): THREE.Mesh {
         
         // const geometry = this.createGeometry()
-        this.geometry = new THREE.BoxGeometry(1, 1, 1)
+        this.geometry = new THREE.BoxGeometry(50, 50, 50)
 
         return new THREE.Mesh(this.geometry, this.createMaterial())
     }
@@ -357,7 +311,7 @@ export class CloudMarker {
     public updateMaterial(camera: THREE.PerspectiveCamera): void {
         if (this.cloudMesh && this.cloudMesh.material) {
             const material = this.cloudMesh.material as THREE.RawShaderMaterial
-            material.uniforms.frame.value += 1
+            // material.uniforms.frame.value += 1
             material.uniforms.cameraPos.value.copy(camera.position)
         }
     }
