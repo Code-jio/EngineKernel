@@ -27,8 +27,9 @@ import { FXAAShader } from 'three/examples/jsm/shaders/FXAAShader'
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass'
 
 // import { range, texture, mix, uv, color, rotateUV, positionLocal, time, uniform } from ""
+import { Clock } from 'three';
 
-
+let clock = new Clock()
 // 导出所有内容
 export {
     THREE,
@@ -53,6 +54,7 @@ export {
     ShaderPass,
     FXAAShader,
     OutputPass,
+    clock,
 
     CSS2DRenderer,
     CSS2DObject,
