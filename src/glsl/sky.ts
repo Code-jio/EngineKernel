@@ -35,7 +35,9 @@ class Sky {
 				vertexShader: shader.vertexShader,
 				fragmentShader: shader.fragmentShader,
 				side: THREE.BackSide,
-				depthWrite: false
+				depthWrite: false,
+				depthTest: true,
+				transparent: false,
 			} );
 
 			const geometry = new THREE.BoxGeometry( 1, 1, 1 );

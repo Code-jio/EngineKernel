@@ -384,7 +384,7 @@ export class SkyBox extends BasePlugin {
             // 创建Sky实例
             this.skyMaterial = new Sky();
             this.mesh = this.skyMaterial.getMesh(); // 使用组合模式的mesh
-            this.mesh.renderOrder = 0; // 设置天空盒渲染顺序为0
+            this.mesh.renderOrder = -1; // 设置天空盒渲染顺序为-1
             this.mesh.name = "skyBox";
             this.mesh.userData.skyBoxType = this.config.type;
 

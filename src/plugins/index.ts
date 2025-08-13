@@ -25,7 +25,7 @@ export { BuildingControlPlugin } from './webgl/BuildingControlPlugin';
 
 export { WaterMarker } from './webgl/waterMarker';
 export { WaterMarkerPlugin } from './webgl/WaterMakerPlugin';
-export { FireMarker } from './webgl/fireMarker';
+export { FireParticleSystem, FireEffectManager } from './webgl/fireMarker';
 export { CloudMarkerPlugin } from './webgl/cloudMarkerPlugin';
 export { SmokeEffectManager, SmokeParticleSystem } from "./webgl/SmokeMarker";
 

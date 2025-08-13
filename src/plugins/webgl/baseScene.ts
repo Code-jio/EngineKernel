@@ -849,7 +849,7 @@ export class BaseScene extends BasePlugin {
             }
 
             this.scene = new THREE.Scene()
-            this.scene.background = new THREE.Color(0x000000)
+            this.scene.background = new THREE.Color(0xffffff)
 
             // 初始化地板管理器和配置
             this.floorManager = new FloorManager(this.scene)
@@ -876,16 +876,14 @@ export class BaseScene extends BasePlugin {
             this.scene.add(this.ambientLight)
 
             this.renderer = new THREE.WebGLRenderer({
-                // antialias: rendererOption.antialias, // 抗锯齿
                 alpha: rendererOption.alpha || true, // 透明
                 precision: rendererOption.precision, // 精度
                 powerPreference: rendererOption.powerPreference, // 性能
-                logarithmicDepthBuffer: true,
+                logarithmicDepthBuffer: true, // 
                 premultipliedAlpha: true, // 优化透明混合计算
-                antialias: true,
-                stencil: true,
+                antialias: true, // 默认抗锯齿
+                stencil: true, // 
             })
-
 
             // 直接将Three.js生成的canvas添加到body
             // this.renderer.domElement.style.position = 'fixed'
@@ -1048,10 +1046,10 @@ export class BaseScene extends BasePlugin {
             frustumSize / 2,
             frustumSize / -2,
             cameraOption.near || 0.1,
-            cameraOption.far || 100000
+            cameraOption.far || 5000
         )
 
-        // 初始化zoom属性（OrbitControls需要）
+        // 初始化zoom属性（OrbitControls需要）logarithmicDepthBuffer: Boolean
         orthographicCamera.zoom = 1.0
         orthographicCamera.updateProjectionMatrix()
 
@@ -1610,7 +1608,7 @@ export class BaseScene extends BasePlugin {
     }
 
     // 初始化设置
-    initialize() {
+    public initialize() {
         this.camera.updateProjectionMatrix()
 
         // 根据容器尺寸设置渲染器大小
@@ -1674,7 +1672,7 @@ export class BaseScene extends BasePlugin {
         console.log(width, height, 'width,height')
     }
 
-    handleResize(width = window.innerWidth, height = window.innerHeight) {
+    public handleResize(width = window.innerWidth, height = window.innerHeight) {
         this.updateRendererSize(width, height)
 
         // 更新两个相机的宽高比和投影矩阵
@@ -1962,10 +1960,10 @@ export class BaseScene extends BasePlugin {
         if (conflicts > 0) {
             console.warn(`⚠️ 检测到 ${conflicts} 个深度冲突`)
 
-            // 如果启用自动修复
-            if (this.depthConfig.conflictDetection.autoFix) {
-                this.autoFixDepthConflicts()
-            }
+            // // 如果启用自动修复
+            // if (this.depthConfig.conflictDetection.autoFix) {
+            //     this.autoFixDepthConflicts()
+            // }
         } else {
             console.log('✅ 未检测到深度冲突')
         }

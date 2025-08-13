@@ -191,10 +191,10 @@ export class FloorManager {
         })
 
         // 设置水面旋转，使其水平放置
-        water.rotation.x = -Math.PI / 2
+        water.rotation.x = - Math.PI / 2
         water.name = "waterFloor"
 
-        water.renderOrder = 1
+        water.renderOrder = 0
 
         // 保存水面的 uniforms 用于动画更新
         this.waterUniforms = water.material.uniforms
@@ -204,8 +204,9 @@ export class FloorManager {
             this.waterUniforms.time.value = waterConfig.time || 0
         }
 
-        water.material.transparent = true
-        water.material.depthWrite = true 
+        water.material.depthWrite = true
+        water.material.depthTest = true
+        water.material.transparent = false
 
         return water
     }
@@ -336,7 +337,7 @@ export class FloorManager {
     public updateFloor(deltaTime: number, camera?: THREE.Camera): void {
         if (!this.floor) return
 
-        // 更新水面动画 - 参考THREE.js官方示例，使用60fps固定增量
+        // 更新水面动画
         if (this.waterUniforms) {
             // 使用固定的时间增量来保持一致的动画速度
             this.waterUniforms.time.value += 1.0 / 60.0
@@ -346,7 +347,7 @@ export class FloorManager {
                 this.waterUniforms.eye.value.setFromMatrixPosition(camera.matrixWorld)
             }
 
-            // 更新太阳方向（用于水面反射效果）
+            // 更新太阳方向
             if (this.waterUniforms.sunDirection) {
                 // 设置一个默认的太阳方向，可以根据需要调整
                 const sunDirection = new THREE.Vector3(1, 1, 0).normalize()
