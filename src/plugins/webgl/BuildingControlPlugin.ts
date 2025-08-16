@@ -3121,6 +3121,94 @@ export class BuildingControlPlugin extends BasePlugin {
 
         return boundings
     }
+
+    /**
+     * 将Object3D对象添加到指定房间
+     * @param roomNumber 房间号（字符串类型）
+     * @param object3D Three.js的Object3D对象
+     */
+    public addObjectToRoom(roomNumber: string, object3D: THREE.Object3D): void {
+        // 查找对应的房间
+        const room = this.rooms.get(roomNumber)
+        
+        if (!room) {
+            console.warn(`⚠️ 未找到房间号: ${roomNumber}，无法添加对象`)
+            return
+        }
+
+        try {
+            // 将对象添加到房间的children集合中
+            room.group.add(object3D)
+            
+            // 更新对象的父级关系
+            object3D.parent = room.group
+            
+            console.log(`✅ 成功将对象添加到房间 ${roomNumber}`)
+            
+            // 如果房间当前不可见，设置对象也不可见
+            if (!room.isVisible) {
+                object3D.visible = false
+            }
+            
+            // 触发房间内容更新事件
+            eventBus.emit('roomContentUpdated', {
+                roomNumber: roomNumber,
+                action: 'addObject',
+                object: object3D
+            })
+            
+        } catch (error) {
+            console.error(`❌ 添加对象到房间 ${roomNumber} 时发生错误:`, error)
+        }
+    }
+
+    /**
+     * 将Object3D对象添加到指定设备
+     * @param deviceNumber 设备号（字符串类型）
+     * @param object3D Three.js的Object3D对象
+     */
+    public addObjectToDevice(deviceNumber: string, object3D: THREE.Object3D): void {
+        try {
+            // 在所有设备中查找匹配的设备
+            let targetDevice: THREE.Object3D | undefined
+
+            
+            // 优先在allDevices中查找，这是最直接的方式
+            targetDevice = this.allDevices.find(device => {
+                const info = device.userData.equipmentInfo
+                return info && (
+                    info.equipmentName === deviceNumber ||
+                    device.name === deviceNumber ||
+                    device.uuid === deviceNumber
+                )
+            })
+            
+            if (!targetDevice) {
+                console.warn(`⚠️ 未找到设备号: ${deviceNumber}，无法添加对象`)
+                return
+            }
+
+            // 将对象添加到设备的children集合中
+            targetDevice.add(object3D)
+            
+            console.log(`✅ 成功将对象添加到设备 ${deviceNumber}`)
+            
+            // 如果设备当前不可见，设置对象也不可见
+            if (!targetDevice.visible) {
+                object3D.visible = false
+            }
+            
+            // 触发设备内容更新事件
+            eventBus.emit('deviceContentUpdated', {
+                deviceNumber: deviceNumber,
+                action: 'addObject',
+                object: object3D
+            })
+            
+        } catch (error) {
+            console.error(`❌ 添加对象到设备 ${deviceNumber} 时发生错误:`, error)
+        }
+    }
 }
 
 /**
