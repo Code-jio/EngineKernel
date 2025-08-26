@@ -65,7 +65,7 @@ interface ImageConfig {
 // 标记配置接口
 interface TextMarkerConfig {
     text: string
-    position: Array<number> | THREE.Vector3
+    position: Array<number> | THREE.Vector3 | { x: number; y: number; z: number }
     textStyle?: Partial<TextStyle>
     backgroundStyle?: Partial<BackgroundStyle>
     image?: ImageConfig
@@ -115,6 +115,8 @@ export class TextMarkerPlugin extends BasePlugin {
     public defaultBackgroundStyle: BackgroundStyle
     public imageCache: Map<string, HTMLImageElement> = new Map()
 
+    private defaultConfig: Partial<TextMarkerConfig>
+
     constructor(meta: any = {}) {
         super(meta)
         this.enableDebugMode = meta.userData?.enableDebugMode || false
@@ -137,6 +139,18 @@ export class TextMarkerPlugin extends BasePlugin {
             borderRadius: 8,
             padding: { top: 8, right: 12, bottom: 8, left: 12 },
             ...meta.userData?.defaultBackgroundStyle,
+        }
+
+        // 设置默认配置
+        this.defaultConfig = {
+            fixedScale: false,
+            visible: true,
+            billboard: true,
+            clickable: false,
+            autoSize: false,
+            scale: 1,
+            rotation: 0,
+            ...meta.userData?.defaultConfig,
         }
 
         this.scene = meta.userData?.scene || null
@@ -209,6 +223,9 @@ export class TextMarkerPlugin extends BasePlugin {
     public addMarker(config: TextMarkerConfig): string {
         const markerId = this.generateMarkerId()
 
+        // 合并默认配置和用户配置
+        const finalConfig = { ...this.defaultConfig, ...config }
+
         // 创建Canvas和Context
         const canvas = document.createElement("canvas")
         const context = canvas.getContext("2d")!
@@ -223,42 +240,45 @@ export class TextMarkerPlugin extends BasePlugin {
             depthWrite: false, // 关闭深度写入
             transparent: true, // 如果有透明度需要开启
             blending: THREE.NormalBlending, // 避免混合问题
-            sizeAttenuation: config.fixedScale, // 禁用大小随距离衰减
+            sizeAttenuation: finalConfig.fixedScale, // 禁用大小随距离衰减
             alphaTest: 0.001,
         })
 
         const sprite = new THREE.Sprite(material)
         sprite.renderOrder = 999
+        
         // 设置位置
-        if (Array.isArray(config.position)) {
-            sprite.position.set(config.position[0], config.position[1], config.position[2])
+        if (Array.isArray(finalConfig.position)) {
+            sprite.position.set(finalConfig.position[0], finalConfig.position[1], finalConfig.position[2])
+        } else if (finalConfig.position instanceof THREE.Vector3) {
+            sprite.position.copy(finalConfig.position)
         } else {
-            sprite.position.copy(config.position)
+            sprite.position.set(finalConfig.position.x, finalConfig.position.y, finalConfig.position.z)
         }
         // // 设置缩放
-        // if (config.scale) {
-        //     sprite.scale.multiplyScalar(config.scale);
+        // if (finalConfig.scale) {
+        //     sprite.scale.multiplyScalar(finalConfig.scale);
         // }else{
         //     sprite.scale.set(0.001,0.001,0.001)
         // }
         // console.log(sprite.scale, "sprite.scale")
         // 设置旋转
-        if (config.rotation) {
-            material.rotation = config.rotation
+        if (finalConfig.rotation) {
+            material.rotation = finalConfig.rotation
         }
 
         // 设置可见性
-        sprite.visible = config.visible !== false
+        sprite.visible = finalConfig.visible !== false
 
         // 创建标记实例
         const instance: MarkerInstance = {
             id: markerId,
-            name: config.name || `marker_${markerId}`,
+            name: finalConfig.name || `marker_${markerId}`,
             sprite,
             material,
             canvas,
             context,
-            config,
+            config: finalConfig,
             isVisible: sprite.visible,
             isHovered: false,
             isDirty: true,
