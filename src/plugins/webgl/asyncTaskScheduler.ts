@@ -474,7 +474,7 @@ export class TaskScheduler<T = any> {
     private queue: AsyncQueue<T>
     private executor: (task: AsyncTask<T>) => Promise<T>
     private isRunning: boolean = false
-    private processingInterval: number = 100 // 处理间隔（毫秒）
+    private processingInterval: number = 10 // 处理间隔（毫秒）
 
     constructor(executor: (task: AsyncTask<T>) => Promise<T>, queueConfig: Partial<QueueConfig> = {}) {
         this.executor = executor
@@ -571,6 +571,7 @@ export class TaskScheduler<T = any> {
 
                 if (task) {
                     this.queue.markAsRunning(task)
+                    await this.sleep(0)
                     this.executeTask(task)
                 }
             }

@@ -261,7 +261,10 @@ export class ModelMarker extends BasePlugin {
             this.scene.add(instance.model)
         }
 
-        console.log(`✅ 模型标记已添加: ${modelId}`, instance)
+        // console.log(`✅ 模型标记已添加: ${modelId}`, instance)
+        if (finalConfig.onComplete) {
+            finalConfig.onComplete(instance.model as THREE.Group)
+        }
         eventBus.emit("model:added", { modelId, config: finalConfig })
 
         // 3. 返回完整的模型实例

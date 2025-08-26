@@ -597,12 +597,13 @@ interface CameraState {
 
 // 保持向后兼容的接口
 interface CameraFlyToOptions {
-    position: { x: number; y: number; z: number } // Target position for the camera
-    lookAt?: { x: number; y: number; z: number } // Target point for the camera to look at. If undefined, looks at options.position.
-    duration?: number // Duration of the animation in milliseconds
-    easing?: (amount: number) => number // TWEEN.js easing function
-    onUpdate?: () => void // Callback on each animation frame
-    onComplete?: () => void // Callback when animation finishes
+    position: { x: number; y: number; z: number } 
+    lookAt?: { x: number; y: number; z: number }
+    duration?: number
+    quaternion?:{x:number,y:number,z:number,w:number}
+    easing?: (amount: number) => number 
+    onUpdate?: () => void 
+    onComplete?: () => void 
 }
 
 export class BaseScene extends BasePlugin {
@@ -3074,6 +3075,7 @@ export class BaseScene extends BasePlugin {
                     cameraState.lookAt ||
                     cameraState.target ||
                     cameraState.position,
+                quaternion: cameraState.quaternion instanceof THREE.Quaternion ? cameraState.quaternion : undefined,
                 duration: cameraState.duration || 2000,
                 easing: cameraState.easing || TWEEN.Easing.Quadratic.InOut,
                 onUpdate: cameraState.onUpdate,
@@ -3085,6 +3087,7 @@ export class BaseScene extends BasePlugin {
             finalOptions = {
                 position: flyToOptions.position,
                 lookAt: flyToOptions.lookAt || flyToOptions.position,
+                quaternion:flyToOptions.quaternion,
                 duration: flyToOptions.duration || 2000,
                 easing: flyToOptions.easing || TWEEN.Easing.Quadratic.InOut,
                 onUpdate: flyToOptions.onUpdate,
@@ -3710,7 +3713,7 @@ export class BaseScene extends BasePlugin {
             // 设置正交相机位置和朝向
             this.camera.position.copy(currentPosition)
 
-            // 🚨 关键修复：调整正交相机的视野匹配透视相机
+            // 调整正交相机的视野匹配透视相机
             this.camera.left = frustum.left
             this.camera.right = frustum.right
             this.camera.top = frustum.top
@@ -3804,6 +3807,9 @@ export class BaseScene extends BasePlugin {
             currentPosition.z
         )
 
+        // 新增目标四元数姿态
+
+
         console.log('👁️ 开始俯视动画', {
             相机位置: `(${currentPosition.x.toFixed(2)}, ${currentPosition.y.toFixed(2)}, ${currentPosition.z.toFixed(2)})`,
             目标点: `(${lookAtTarget.x.toFixed(2)}, ${lookAtTarget.y.toFixed(2)}, ${lookAtTarget.z.toFixed(2)})`,
@@ -3873,7 +3879,7 @@ export class BaseScene extends BasePlugin {
                 try {
                     this.overLook(1500, () => {
                         try {
-                            // 🚨 关键修复: 俯视完成后，切换到正交相机
+                            // 俯视完成后，切换到正交相机
                             this.switchCamera()
                             console.log('✅ 3D → 2D 切换完成')
                             resolve('switched_to_2D')
@@ -4123,10 +4129,10 @@ export class BaseScene extends BasePlugin {
      * @param mesh 
      * @returns 
      */
-    public getWorldPositionByBoundingBox(mesh: THREE.Group): THREE.Vector3 {
+    public getWorldPositionByBoundingBox(mesh: THREE.Group | THREE.Mesh | THREE.Object3D): THREE.Vector3 {
         const bbox = new THREE.Box3().setFromObject(mesh);
         const center = new THREE.Vector3();
         bbox.getCenter(center);
-        return center.clone();
+        return center;
     }
 }

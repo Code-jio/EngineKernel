@@ -200,6 +200,8 @@ export class FireParticleSystem {
         })
 
         this.fireSystem = new THREE.Points(this.fireGeometry, this.fireMaterial)
+        this.fireSystem.renderOrder = 0
+        this.fireSystem.name = "fireParticles"
         this.scene.add(this.fireSystem)
 
         // 初始化火焰粒子池

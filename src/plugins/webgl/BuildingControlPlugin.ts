@@ -289,7 +289,7 @@ export class BuildingControlPlugin extends BasePlugin {
         // this.floorControlConfig.expandDistance = params.userData.expandDistance
 
         eventBus.on("update", () => {
-            this.activeTweens.update()
+            this.activeTweens && this.activeTweens.update()
         })
     }
 
@@ -1918,6 +1918,11 @@ export class BuildingControlPlugin extends BasePlugin {
         }
     }
 
+    /**
+     * 设置房间透明度、显隐
+     * @param room 
+     * @param opacity 
+     */
     private setRoomOpacity(room: THREE.Object3D | THREE.Scene | THREE.Group, opacity: number): void {
         // room.traverse((child) => {
         //     if (child instanceof THREE.Mesh && child.material) {
@@ -3142,6 +3147,11 @@ export class BuildingControlPlugin extends BasePlugin {
             
             // 更新对象的父级关系
             object3D.parent = room.group
+            // console.log(room.group, "room.group")
+            // room.group.updateMatrixWorld()
+            object3D.position.copy(
+                object3D.position.add(room.group.position)
+            )
             
             console.log(`✅ 成功将对象添加到房间 ${roomNumber}`)
             

@@ -200,7 +200,7 @@ export class SmokeParticleSystem {
         });
 
         this.particleSystem = new THREE.Points(this.geometry, this.material);
-        this.particleSystem.renderOrder = 99
+        this.particleSystem.name = "smoke"
         this.scene.add(this.particleSystem);
 
         // 初始化粒子池

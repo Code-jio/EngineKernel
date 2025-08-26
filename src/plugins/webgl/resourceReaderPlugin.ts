@@ -399,10 +399,10 @@ export class ResourceReaderPlugin extends BasePlugin {
                         }
                     },
                     // onError
-                    (error: any) => {
-                        console.error(`❌ 异步加载失败: ${task.config.url}`, error)
-                        reject(error)
-                    },
+                    // (error: any) => {
+                    //     console.error(`❌ 异步加载失败: ${task.config.url}`, error)
+                    //     reject(error)
+                    // },
                 )
             })
         }
@@ -1043,6 +1043,7 @@ export class ResourceReaderPlugin extends BasePlugin {
     //     })
     //     return total
     //   }
+    
     /**
      * 清理特定资源
      */
