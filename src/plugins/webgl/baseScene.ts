@@ -3075,7 +3075,7 @@ export class BaseScene extends BasePlugin {
                     cameraState.lookAt ||
                     cameraState.target ||
                     cameraState.position,
-                quaternion: cameraState.quaternion instanceof THREE.Quaternion ? cameraState.quaternion : undefined,
+                quaternion: cameraState.quaternion instanceof THREE.Quaternion ? cameraState.quaternion.clone() : undefined,
                 duration: cameraState.duration || 2000,
                 easing: cameraState.easing || TWEEN.Easing.Quadratic.InOut,
                 onUpdate: cameraState.onUpdate,
@@ -3087,7 +3087,7 @@ export class BaseScene extends BasePlugin {
             finalOptions = {
                 position: flyToOptions.position,
                 lookAt: flyToOptions.lookAt || flyToOptions.position,
-                quaternion:flyToOptions.quaternion,
+                quaternion: flyToOptions.quaternion instanceof THREE.Quaternion ? flyToOptions.quaternion.clone() : undefined,
                 duration: flyToOptions.duration || 2000,
                 easing: flyToOptions.easing || TWEEN.Easing.Quadratic.InOut,
                 onUpdate: flyToOptions.onUpdate,
@@ -3100,27 +3100,46 @@ export class BaseScene extends BasePlugin {
             console.error('cameraFlyTo: Camera is not initialized.')
             return
         }
-        // 检查目标位置类型
-        if (!(finalOptions.position instanceof THREE.Vector3)) {
-            finalOptions.position = new THREE.Vector3().set(
-                finalOptions.position.x,
-                finalOptions.position.y,
-                finalOptions.position.z
-            )
-        }else{
-            // 检查目标朝向类型
-            if (!(finalOptions.lookAt instanceof THREE.Vector3)) {
-                finalOptions.lookAt = finalOptions.position.clone()
-            }
-        }
 
         const camera = this.camera as THREE.PerspectiveCamera
-        const startPosition = camera.position.clone() // 起始相机位置
-        const endPosition = finalOptions.position // 目标相机位置
+        const startPosition = camera.position.clone()
+        const endPosition = finalOptions.position instanceof THREE.Vector3 
+            ? finalOptions.position.clone()
+            : new THREE.Vector3(finalOptions.position.x, finalOptions.position.y, finalOptions.position.z)
+
+        // 处理四元数
+        const startQuaternion = camera.quaternion.clone()
+        let endQuaternion: THREE.Quaternion
+
+        if (finalOptions.quaternion) {
+            // 使用提供的四元数
+            endQuaternion = finalOptions.quaternion instanceof THREE.Quaternion 
+                ? finalOptions.quaternion.clone()
+                : new THREE.Quaternion(finalOptions.quaternion.x || 0, finalOptions.quaternion.y || 0, finalOptions.quaternion.z || 0, finalOptions.quaternion.w || 1)
+        } else {
+            // 从 lookAt 计算四元数
+            const lookAtTarget = finalOptions.lookAt instanceof THREE.Vector3
+                ? finalOptions.lookAt.clone()
+                : new THREE.Vector3(
+                    finalOptions.lookAt?.x || 0,
+                    finalOptions.lookAt?.y || 0,
+                    finalOptions.lookAt?.z || 0
+                )
+            
+            // 计算从当前位置看向目标点的方向
+            const direction = new THREE.Vector3().subVectors(lookAtTarget, endPosition).normalize()
+            const up = camera.up.clone()
+            
+            // 创建目标四元数
+            const lookAtMatrix = new THREE.Matrix4()
+            lookAtMatrix.lookAt(new THREE.Vector3(0, 0, 0), direction, up)
+            endQuaternion = new THREE.Quaternion().setFromRotationMatrix(lookAtMatrix)
+        }
+
+        // 获取当前相机朝向点
         let startLookAt: THREE.Vector3
         let control = this.controls?.getControl()
 
-        // 获取当前相机朝向点（优先使用controls.target）
         if (control && control.target instanceof THREE.Vector3) {
             startLookAt = control.target.clone()
         } else {
@@ -3128,15 +3147,19 @@ export class BaseScene extends BasePlugin {
             startLookAt = new THREE.Vector3(0, 0, -1)
             startLookAt.applyQuaternion(camera.quaternion)
             startLookAt.add(camera.position)
-            console.warn(
-                'cameraFlyTo: OrbitControls or similar not found or target not set. Using calculated startLookAt.'
-            )
         }
-        let endLookAt: any
-        if (finalOptions.lookAt instanceof THREE.Vector3) {
-            endLookAt = finalOptions.lookAt.clone() // 目标朝向点
-        }else if(finalOptions.lookAt instanceof Object){
-            endLookAt = new THREE.Vector3().set(finalOptions.lookAt?.x,finalOptions.lookAt?.y,finalOptions.lookAt?.z)
+
+        let endLookAt: THREE.Vector3
+        if (finalOptions.lookAt) {
+            endLookAt = finalOptions.lookAt instanceof THREE.Vector3
+                ? finalOptions.lookAt.clone()
+                : new THREE.Vector3(
+                    finalOptions.lookAt?.x || 0,
+                    finalOptions.lookAt?.y || 0,
+                    finalOptions.lookAt?.z || 0
+                )
+        } else {
+            endLookAt = endPosition.clone()
         }
 
         // 用于tween插值的临时对象
@@ -3144,6 +3167,10 @@ export class BaseScene extends BasePlugin {
             camX: startPosition.x,
             camY: startPosition.y,
             camZ: startPosition.z,
+            qx: startQuaternion.x,
+            qy: startQuaternion.y,
+            qz: startQuaternion.z,
+            qw: startQuaternion.w,
             lookX: startLookAt.x,
             lookY: startLookAt.y,
             lookZ: startLookAt.z,
@@ -3161,6 +3188,10 @@ export class BaseScene extends BasePlugin {
                     camX: endPosition.x,
                     camY: endPosition.y,
                     camZ: endPosition.z,
+                    qx: endQuaternion.x,
+                    qy: endQuaternion.y,
+                    qz: endQuaternion.z,
+                    qw: endQuaternion.w,
                     lookX: endLookAt.x,
                     lookY: endLookAt.y,
                     lookZ: endLookAt.z,
@@ -3169,57 +3200,39 @@ export class BaseScene extends BasePlugin {
             )
             .easing(finalOptions.easing)
             .onUpdate(() => {
-                // 每帧更新相机位置和朝向
-                camera.position.set(
-                    tweenCoords.camX,
-                    tweenCoords.camY,
-                    tweenCoords.camZ
-                )
-                const currentLookAt = new THREE.Vector3(
-                    tweenCoords.lookX,
-                    tweenCoords.lookY,
-                    tweenCoords.lookZ
-                )
-
-                // 同时更新控制器target，确保控制器和相机保持同步
+                // 更新相机位置
+                camera.position.set(tweenCoords.camX, tweenCoords.camY, tweenCoords.camZ)
+                
+                // 更新相机旋转（四元数插值）
+                camera.quaternion.set(tweenCoords.qx, tweenCoords.qy, tweenCoords.qz, tweenCoords.qw)
+                console.log(camera.quaternion)
+                // 更新控制器target
                 if (this.controls) {
                     const control = this.controls.getControl()
                     if (control && control.target instanceof THREE.Vector3) {
-                        control.target.copy(currentLookAt)
+                        control.target.set(tweenCoords.lookX, tweenCoords.lookY, tweenCoords.lookZ)
                     }
                 }
 
-                camera.lookAt(currentLookAt)
-                // 用户自定义更新回调
                 finalOptions.onUpdate?.()
             })
             .onComplete(() => {
-                // 动画结束，确保相机和controls到达最终状态
+                // 确保最终状态
                 camera.position.copy(endPosition)
-                const finalLookAtTarget = endLookAt.clone()
+                camera.quaternion.copy(endQuaternion)
 
-                // 同步更新控制器的最终状态
+                // 同步控制器
                 if (this.controls) {
                     const control = this.controls.getControl()
                     if (control && control.target instanceof THREE.Vector3) {
-                        control.target.copy(finalLookAtTarget)
+                        control.target.copy(endLookAt)
                     }
-                }
-
-                camera.lookAt(finalLookAtTarget)
-
-                // 确保控制器更新，同步最终状态
-                if (this.controls) {
-                    const control = this.controls.getControl()
                     if (control && typeof control.update === 'function') {
                         control.update()
                     }
                 }
 
-                // 用户自定义完成回调
-                if (finalOptions.onComplete) {
-                    finalOptions.onComplete()
-                }
+                finalOptions.onComplete?.()
                 this._flyTween = null
                 console.log('Camera flight complete.')
             })
