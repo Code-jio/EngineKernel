@@ -74,11 +74,34 @@ export class OutLinePlugin extends BasePlugin {
     
     // 清除目前渲染的外部轮廓，清空outline内部的数组即可
     clearOutline(){
-
+        if (this.outline && this.outline.selectedObjects) {
+            this.outline.selectedObjects = [];
+            console.log('外部轮廓已清除');
+        }
     }
 
     // 添加高亮外轮廓：向outline内部的数组添加对象即可
-    addOutline(){}
+    addOutline(objects: THREE.Object3D | THREE.Object3D[]) {
+        if (!this.outline || !this.outline.selectedObjects) {
+            console.warn('Outline 插件未初始化');
+            return;
+        }
+
+        // 确保处理的是数组
+        const objectsArray = Array.isArray(objects) ? objects : [objects];
+        
+        // 过滤掉无效对象和重复对象
+        const validObjects = objectsArray.filter(obj => 
+            obj && 
+            obj instanceof THREE.Object3D && 
+            !this.outline.selectedObjects.includes(obj)
+        );
+
+        if (validObjects.length > 0) {
+            this.outline.selectedObjects.push(...validObjects);
+            console.log(`已添加 ${validObjects.length} 个对象到外部轮廓`, validObjects);
+        }
+    }
 
     // 
     destroy() {}
