@@ -33,7 +33,7 @@ export { SparkParticleSystem } from "./webgl/SparkMarker"
 
 export { EffectComposer, RenderPass, UnrealBloomPass, ShaderPass, FXAAShader, OutputPass } from '../utils/three-imports';
 export { CSS2DRenderer, CSS2DObject, CSS3DRenderer, CSS3DObject } from '../utils/three-imports';
-
+export { OutLinePlugin } from "./webgl/OutLinePlugin"
 
 // export { BaseModel } from './webgl/baseModel';
     

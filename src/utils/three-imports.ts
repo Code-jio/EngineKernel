@@ -26,6 +26,8 @@ import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass'
 import { FXAAShader } from 'three/examples/jsm/shaders/FXAAShader'
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass'
 
+import OutlinePass from "../pass/outlinePass"
+
 // import { range, texture, mix, uv, color, rotateUV, positionLocal, time, uniform } from ""
 import { Clock } from 'three';
 
@@ -54,6 +56,7 @@ export {
     ShaderPass,
     FXAAShader,
     OutputPass,
+    OutlinePass,
     clock,
 
     CSS2DRenderer,

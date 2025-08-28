@@ -1060,7 +1060,7 @@ export class BaseScene extends BasePlugin {
         // 设置正交相机为俯视模式
         orthographicCamera.position.set(0, 100, 0) // 从上方俯视
         orthographicCamera.lookAt(0, 0, 0) // 向下看向原点
-        orthographicCamera.up.set(0, 0, 1) // Z轴为上方向（标准俯视）
+        orthographicCamera.up.set(0, 1, 0) // Z轴为上方向（标准俯视）
 
         // 初始化相机配置对象
         this.cameraConfig = {

@@ -36,6 +36,12 @@ export default new Promise(async resolve => {
                 filename: '[name].dev.js', // 使用动态文件名
                 path: path.resolve(__dirname, '../dist'),
                 publicPath: '/',
+                library: {
+                    name: "EngineKernel",
+                    type: "umd",
+                    umdNamedDefine: true,
+                },
+                globalObject: "this",
             },
             optimization: {
                 // 开发环境下禁用代码分割，避免文件名冲突
