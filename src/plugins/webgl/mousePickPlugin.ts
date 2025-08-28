@@ -119,7 +119,7 @@ export class MousePickPlugin extends BasePlugin {
 
     // 调试可视化
     private debugRayLine: THREE.Line | null = null
-    private debugEnabled = false
+    public debugEnabled = false
 
     // 按键状态
     private isCtrlPressed = false
