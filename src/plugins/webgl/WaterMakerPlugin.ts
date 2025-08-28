@@ -1,5 +1,6 @@
 import { THREE, BasePlugin } from "../basePlugin"
 import { WaterMarker } from "./waterMarker";
+import TWEEN from '@tweenjs/tween.js';
 
 export class WaterMarkerPlugin extends BasePlugin{
     private scenePlugin: any
@@ -95,6 +96,69 @@ export class WaterMarkerPlugin extends BasePlugin{
             console.error(`❌ 为房间 ${roomCode} 创建水体标注时发生错误:`, error);
             return null;
         }
+    }
+
+    /**
+     * 使用tween动画平滑过渡水体高度
+     * @param targetHeight 目标高度值
+     * @param duration 动画持续时间（毫秒）
+     * @param easing 缓动函数类型，默认为线性
+     * @returns Promise<void> 动画完成的Promise
+     */
+    public async animateWaterHeight(
+        targetHeight: number,
+        duration: number = 1000,
+        easing: (k: number) => number = TWEEN.Easing.Linear.None
+    ): Promise<void> {
+        return new Promise((resolve) => {
+            if (!this.waterMarker) {
+                console.warn('⚠️ 没有可用的水体标注，请先创建水体标注');
+                resolve();
+                return;
+            }
+
+            const waterGroup = this.waterMarker.getGroup();
+            if (!waterGroup) {
+                console.warn('⚠️ 水体标注组为空，无法执行高度动画');
+                resolve();
+                return;
+            }
+
+            // 获取当前水体高度
+            const currentHeight = waterGroup.position.y;
+            
+            // 如果高度相同，直接返回
+            if (Math.abs(currentHeight - targetHeight) < 0.001) {
+                console.log('ℹ️ 目标高度与当前高度相同，无需动画');
+                resolve();
+                return;
+            }
+            
+            // 创建tween动画
+            const tween = new TWEEN.Tween({ height: currentHeight })
+                .to({ height: targetHeight }, duration)
+                .easing(easing)
+                .onUpdate((obj) => {
+                    // 更新水体组的Y位置
+                    waterGroup.position.y = obj.height;
+                })
+                .onComplete(() => {
+                    console.log(`✅ 水体高度动画完成: ${currentHeight.toFixed(2)} → ${targetHeight.toFixed(2)}`);
+                    resolve();
+                })
+                .start();
+        });
+    }
+
+    /**
+     * 获取当前水体高度
+     * @returns 当前水体高度，如果没有水体标注则返回0
+     */
+    public getCurrentWaterHeight(): number {
+        if (!this.waterMarker) {
+            return 0;
+        }
+        return this.waterMarker.getGroup().position.y;
     }
 
     /**
