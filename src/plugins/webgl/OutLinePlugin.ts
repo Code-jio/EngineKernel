@@ -7,8 +7,7 @@ import {
     OutputPass,
     OutlinePass,
 } from "../../utils/three-imports"
-import { resolve } from "path"
-import { rejects } from "assert"
+
 
 // 该插件主要承担射线拾取的工作，需要维护射线拾取的检测队列
 export class OutLinePlugin extends BasePlugin {
@@ -53,8 +52,10 @@ export class OutLinePlugin extends BasePlugin {
 				} );
 
 				const outputPass = new OutputPass();
-				that.composer.addPass( outputPass );
-
+                that.composer.addPass(outputPass);
+                
+                this.update()
+                this.resize()
 
                 console.log('OutLinePlugin 初始化完成');
                 resolve();
@@ -104,5 +105,17 @@ export class OutLinePlugin extends BasePlugin {
     }
 
     // 
-    destroy() {}
+    destroy() { }
+    
+    update(){
+        eventBus.on('update', () => {
+            this.composer?.render()
+        })
+    }
+    
+    resize() {
+        eventBus.on('resize', () => {
+            this.composer?.setSize(window.innerWidth, window.innerHeight)
+        })
+    }
 }
