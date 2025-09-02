@@ -66,11 +66,15 @@ const CopyShader = {
 
 		varying vec2 vUv;
 
+		#include <common>
+		#include <logdepthbuf_pars_vertex>
+
 		void main() {
 
 			vUv = uv;
 			gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
 
+			#include <logdepthbuf_vertex>
 		}`,
 
 	fragmentShader: /* glsl */`
@@ -81,12 +85,15 @@ const CopyShader = {
 
 		varying vec2 vUv;
 
+		#include <common>
+		#include <logdepthbuf_pars_fragment>
+
 		void main() {
 
 			vec4 texel = texture2D( tDiffuse, vUv );
 			gl_FragColor = opacity * texel;
 
-
+			#include <logdepthbuf_fragment>
 		}`
 
 };
@@ -152,6 +159,7 @@ class OutlinePass extends Pass {
 	public downSampleRatio: number;
 	public pulsePeriod: number;
 	public _visibilityCache: Map<any, any>;
+	public debugMode: boolean = false;  // 调试模式开关
 	public resolution: Vector2;
 	public renderTargetMaskBuffer: WebGLRenderTarget;
 	public depthMaterial: MeshDepthMaterial;
@@ -185,11 +193,11 @@ class OutlinePass extends Pass {
 		this.selectedObjects = selectedObjects !== undefined ? selectedObjects : [];
 		this.visibleEdgeColor = new Color(1, 1, 1);
 		this.hiddenEdgeColor = new Color(0.1, 0.04, 0.02);
-		this.edgeGlow = 0.0;
+		this.edgeGlow = 1.0;  // 增强发光效果
 		this.usePatternTexture = false;
-		this.edgeThickness = 1.0;
-		this.edgeStrength = 3.0;
-		this.downSampleRatio = 2;
+		this.edgeThickness = 2.0;  // 增加边缘厚度
+		this.edgeStrength = 5.0;   // 增强边缘强度
+		this.downSampleRatio = 1;  // 减少降采样，提高质量
 		this.pulsePeriod = 0;
 		this._visibilityCache = new Map();
 		this.resolution = resolution !== undefined ? new Vector2(resolution.x, resolution.y) : new Vector2(256, 256);
@@ -260,6 +268,38 @@ class OutlinePass extends Pass {
 		}
 	}
 
+	// 验证对象是否适合轮廓渲染
+	validateSelectedObjects(): boolean {
+		if (this.selectedObjects.length === 0) {
+			if (this.debugMode) console.log('OutlinePass: 没有选中对象');
+			return false;
+		}
+
+		let validObjects = 0;
+		for (let i = 0; i < this.selectedObjects.length; i++) {
+			const obj = this.selectedObjects[i];
+			if (!obj) continue;
+
+			let hasRenderableChild = false;
+			obj.traverse((child:any) => {
+				if (child.isMesh || child.isSprite || child.isPoints || child.isLine) {
+					hasRenderableChild = true;
+				}
+			});
+
+			if (hasRenderableChild) {
+				validObjects++;
+				if (this.debugMode) {
+				}
+			} else {
+				if (this.debugMode) {
+				}
+			}
+		}
+
+		return validObjects > 0;
+	}
+
 	dispose(): void {
 		this.renderTargetMaskBuffer.dispose();
 		this.renderTargetDepthBuffer.dispose();
@@ -296,18 +336,25 @@ class OutlinePass extends Pass {
 
 	changeVisibilityOfSelectedObjects(bVisible: boolean): void {
 		const cache = this._visibilityCache;
+		
 		function gatherSelectedMeshesCallBack(object: any) {
-			if (object.isMesh) {
+			// 支持所有可渲染对象类型
+			if (object.isMesh || object.isSprite || object.isPoints || object.isLine || object.isGroup || object.type === 'Group') {
 				if (bVisible === true) {
-					object.visible = cache.get(object);
+					if (cache.has(object)) {
+						object.visible = cache.get(object);
+					}
 				} else {
 					cache.set(object, object.visible);
 					object.visible = bVisible;
 				}
 			}
 		}
+		
 		for (let i = 0; i < this.selectedObjects.length; i++) {
 			const selectedObject = this.selectedObjects[i];
+			if (this.debugMode) {
+			}
 			selectedObject.traverse(gatherSelectedMeshesCallBack);
 		}
 	}
@@ -361,7 +408,11 @@ class OutlinePass extends Pass {
 	}
 
 	render(renderer: WebGLRenderer, writeBuffer: WebGLRenderTarget, readBuffer: WebGLRenderTarget, deltaTime: number, maskActive: boolean): void {
-		if (this.selectedObjects.length > 0) {
+		if (this.debugMode) {
+			this.validateSelectedObjects();
+		}
+		
+		if (this.selectedObjects.length > 0 && this.validateSelectedObjects()) {
 			renderer.getClearColor(this._oldClearColor);
 			this.oldClearAlpha = renderer.getClearAlpha();
 			const oldAutoClear = renderer.autoClear;
@@ -483,6 +534,9 @@ class OutlinePass extends Pass {
 				varying vec4 vPosition;
 				uniform mat4 textureMatrix;
 
+				#include <common>
+				#include <logdepthbuf_pars_vertex>
+
 				void main() {
 
 					#include <skinbase_vertex>
@@ -505,6 +559,7 @@ class OutlinePass extends Pass {
 
 					projTexCoord = textureMatrix * worldPosition;
 
+					#include <logdepthbuf_vertex>
 				}`,
 
 			fragmentShader:
@@ -541,9 +596,14 @@ class OutlinePass extends Pass {
 			vertexShader:
 				`varying vec2 vUv;
 
+				#include <common>
+				#include <logdepthbuf_pars_vertex>
+
 				void main() {
 					vUv = uv;
 					gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+
+					#include <logdepthbuf_vertex>
 				}`,
 
 			fragmentShader:
@@ -553,6 +613,8 @@ class OutlinePass extends Pass {
 				uniform vec2 texSize;
 				uniform vec3 visibleEdgeColor;
 				uniform vec3 hiddenEdgeColor;
+				#include <common>
+				#include <logdepthbuf_pars_fragment>
 
 				void main() {
 					vec2 invSize = 1.0 / texSize;
@@ -569,6 +631,8 @@ class OutlinePass extends Pass {
 					float visibilityFactor = min(a1, a2);
 					vec3 edgeColor = 1.0 - visibilityFactor > 0.001 ? visibleEdgeColor : hiddenEdgeColor;
 					gl_FragColor = vec4(edgeColor, 1.0) * vec4(d);
+
+					#include <logdepthbuf_fragment>
 				}`
 		} );
 
@@ -592,9 +656,14 @@ class OutlinePass extends Pass {
 			vertexShader:
 				`varying vec2 vUv;
 
+				#include <common>
+				#include <logdepthbuf_pars_vertex>
+
 				void main() {
 					vUv = uv;
 					gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+
+					#include <logdepthbuf_vertex>
 				}`,
 
 			fragmentShader:
@@ -604,6 +673,9 @@ class OutlinePass extends Pass {
 				uniform vec2 texSize;
 				uniform vec2 direction;
 				uniform float kernelRadius;
+
+				#include <common>
+				#include <logdepthbuf_pars_fragment>
 
 				float gaussianPdf(in float x, in float sigma) {
 					return 0.39894 * exp( -0.5 * x * x/( sigma * sigma))/sigma;
@@ -626,6 +698,8 @@ class OutlinePass extends Pass {
 						uvOffset += delta;
 					}
 					gl_FragColor = diffuseSum/weightSum;
+
+					#include <logdepthbuf_fragment>
 				}`
 		} );
 
@@ -648,9 +722,14 @@ class OutlinePass extends Pass {
 			vertexShader:
 				`varying vec2 vUv;
 
+				#include <common>
+				#include <logdepthbuf_pars_vertex>
+
 				void main() {
 					vUv = uv;
 					gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+				
+					#include <logdepthbuf_vertex>
 				}`,
 
 			fragmentShader:
@@ -664,6 +743,9 @@ class OutlinePass extends Pass {
 				uniform float edgeGlow;
 				uniform bool usePatternTexture;
 
+				#include <common>
+				#include <logdepthbuf_pars_fragment>
+
 				void main() {
 					vec4 edgeValue1 = texture2D(edgeTexture1, vUv);
 					vec4 edgeValue2 = texture2D(edgeTexture2, vUv);
@@ -675,17 +757,14 @@ class OutlinePass extends Pass {
 					if(usePatternTexture)
 						finalColor += + visibilityFactor * (1.0 - maskColor.r) * (1.0 - patternColor.r);
 					gl_FragColor = finalColor;
+
+					#include <logdepthbuf_fragment>
 				}`,
 			blending: AdditiveBlending,
 			depthTest: false,
 			depthWrite: false,
 			transparent: true
 		} );
-
 	}
-
 }
-
-
-
 export  default OutlinePass ;
