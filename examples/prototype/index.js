@@ -42,7 +42,7 @@ console.log(baseScene, "基础场景插件")
 engine.register({
     name: "orbitControl",
     path: "/plugin/webgl/renderLoop",
-    pluginClass: EngineKernel.OrbitControls,
+    pluginClass: EngineKernel.orbitControls,
     userData: {
         camera: baseScene.camera,
     },

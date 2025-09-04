@@ -29,11 +29,12 @@ export { FireParticleSystem, FireEffectManager } from './webgl/fireMarker';
 export { CloudMarkerPlugin } from './webgl/cloudMarkerPlugin';
 export { SmokeEffectManager, SmokeParticleSystem } from "./webgl/SmokeMarker";
 
+export { FountainParticleSystem } from "./webgl/FountainMarker"
 export { SparkParticleSystem } from "./webgl/SparkMarker"
 
-export { EffectComposer, RenderPass, UnrealBloomPass, ShaderPass, FXAAShader, OutputPass } from '../utils/three-imports';
+export { EffectComposer, RenderPass, OutlinePass, ShaderPass, FXAAShader, OutputPass } from '../utils/three-imports';
 export { CSS2DRenderer, CSS2DObject, CSS3DRenderer, CSS3DObject } from '../utils/three-imports';
 export { OutLinePlugin } from "./webgl/OutLinePlugin"
 
+
 // export { BaseModel } from './webgl/baseModel';
-    

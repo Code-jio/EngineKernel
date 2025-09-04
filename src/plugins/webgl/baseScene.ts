@@ -1617,7 +1617,6 @@ export class BaseScene extends BasePlugin {
 
         window.addEventListener('resize', () => {
             this.handleResize()
-            eventBus.emit("resize")
         })
 
         eventBus.emit('scene-ready', {

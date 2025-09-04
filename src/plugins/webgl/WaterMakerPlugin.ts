@@ -1,6 +1,6 @@
 import { THREE, BasePlugin } from "../basePlugin"
 import { WaterMarker } from "./waterMarker";
-import TWEEN from '@tweenjs/tween.js';
+import * as TWEEN from "@tweenjs/tween.js"
 
 export class WaterMarkerPlugin extends BasePlugin{
     private scenePlugin: any

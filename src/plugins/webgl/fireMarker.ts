@@ -1,23 +1,24 @@
-import { THREE, BasePlugin } from "../basePlugin";
-import { SmokeParticleSystem } from "./SmokeMarker";
+import { THREE, BasePlugin } from "../basePlugin"
+import { SmokeParticleSystem } from "./SmokeMarker"
+import * as TWEEN from "@tweenjs/tween.js"
 
 interface FireMarkerOptions {
-    maxFireParticles: number;
-    maxSmokeParticles: number;
-    fireEmissionRate: number;
-    smokeEmissionRate: number;
-    fireLifetime: number;
-    smokeLifetime: number;
-    fireColorStart: THREE.Color;
-    fireColorMid: THREE.Color;
-    fireColorEnd: THREE.Color;
-    smokeColorStart: THREE.Color;
-    smokeColorEnd: THREE.Color;
-    position: THREE.Vector3;
-    coneAngle: number;
-    coneHeight: number;
-    turbulence: number;
-    windForce: THREE.Vector3;
+    maxFireParticles: number
+    maxSmokeParticles: number
+    fireEmissionRate: number
+    smokeEmissionRate: number
+    fireLifetime: number
+    smokeLifetime: number
+    fireColorStart: THREE.Color
+    fireColorMid: THREE.Color
+    fireColorEnd: THREE.Color
+    smokeColorStart: THREE.Color
+    smokeColorEnd: THREE.Color
+    position: THREE.Vector3
+    coneAngle: number
+    coneHeight: number
+    turbulence: number
+    windForce: THREE.Vector3
 }
 
 /**
@@ -25,98 +26,105 @@ interface FireMarkerOptions {
  * 创建逼真的火焰燃烧效果，包含火焰源、烟雾和倒锥形扩散
  */
 export class FireParticleSystem {
-    public scene: THREE.Scene;
-    public options: FireMarkerOptions;
+    public scene: THREE.Scene
+    public options: FireMarkerOptions
     // 火焰粒子系统
     private fireParticles: Array<{
-        index: number;
-        active: boolean;
-        age: number;
-        lifetime: number;
-        position: THREE.Vector3;
-        velocity: THREE.Vector3;
-        color: THREE.Color;
-        size: number;
-        alpha: number;
-    }> = [];
+        index: number
+        active: boolean
+        age: number
+        lifetime: number
+        position: THREE.Vector3
+        velocity: THREE.Vector3
+        color: THREE.Color
+        size: number
+        alpha: number
+    }> = []
     private activeFireParticles: Array<{
-        index: number;
-        active: boolean;
-        age: number;
-        lifetime: number;
-        position: THREE.Vector3;
-        velocity: THREE.Vector3;
-        color: THREE.Color;
-        size: number;
-        alpha: number;
-    }> = [];
-    private fireGeometry!: THREE.BufferGeometry;
-    private firePositions!: Float32Array;
-    private fireColors!: Float32Array;
-    private fireSizes!: Float32Array;
-    private fireAlphas!: Float32Array;
-    private fireAges!: Float32Array;
-    private fireMaterial!: THREE.ShaderMaterial;
-    private fireSystem!: THREE.Points;
+        index: number
+        active: boolean
+        age: number
+        lifetime: number
+        position: THREE.Vector3
+        velocity: THREE.Vector3
+        color: THREE.Color
+        size: number
+        alpha: number
+    }> = []
+    private fireGeometry!: THREE.BufferGeometry
+    private firePositions!: Float32Array
+    private fireColors!: Float32Array
+    private fireSizes!: Float32Array
+    private fireAlphas!: Float32Array
+    private fireAges!: Float32Array
+    private fireMaterial!: THREE.ShaderMaterial
+    private fireSystem!: THREE.Points
     // 烟雾粒子系统
     private smokeParticles: Array<{
-        index: number;
-        active: boolean;
-        age: number;
-        lifetime: number;
-        position: THREE.Vector3;
-        velocity: THREE.Vector3;
-        color: THREE.Color;
-        size: number;
-        alpha: number;
-    }> = [];
+        index: number
+        active: boolean
+        age: number
+        lifetime: number
+        position: THREE.Vector3
+        velocity: THREE.Vector3
+        color: THREE.Color
+        size: number
+        alpha: number
+    }> = []
     private activeSmokeParticles: Array<{
-        index: number;
-        active: boolean;
-        age: number;
-        lifetime: number;
-        position: THREE.Vector3;
-        velocity: THREE.Vector3;
-        color: THREE.Color;
-        size: number;
-        alpha: number;
-    }> = [];
-    private smokeGeometry!: THREE.BufferGeometry;
-    private smokePositions!: Float32Array;
-    private smokeColors!: Float32Array;
-    private smokeSizes!: Float32Array;
-    private smokeAlphas!: Float32Array;
-    private smokeMaterial!: THREE.ShaderMaterial;
-    private smokeSystem!: THREE.Points;
-    private clock: THREE.Clock;
+        index: number
+        active: boolean
+        age: number
+        lifetime: number
+        position: THREE.Vector3
+        velocity: THREE.Vector3
+        color: THREE.Color
+        size: number
+        alpha: number
+    }> = []
+    private smokeGeometry!: THREE.BufferGeometry
+    private smokePositions!: Float32Array
+    private smokeColors!: Float32Array
+    private smokeSizes!: Float32Array
+    private smokeAlphas!: Float32Array
+    private smokeMaterial!: THREE.ShaderMaterial
+    private smokeSystem!: THREE.Points
+    private clock: THREE.Clock
+    // 动画相关属性
+    private growAnimation: any = null
+    private shrinkAnimation: any = null
+    private currentFireScale: number = 1.0
+    private originalFireEmissionRate: number = 0
+    private originalSmokeEmissionRate: number = 0
+
     constructor(scene: THREE.Scene, options: FireMarkerOptions) {
-        this.scene = scene;
-        this.options = { ...options };
-        this.options.maxFireParticles = this.options.maxFireParticles ?? 800;
-        this.options.maxSmokeParticles = this.options.maxSmokeParticles ?? 400;
-        this.options.fireEmissionRate = this.options.fireEmissionRate ?? 60;
-        this.options.smokeEmissionRate = this.options.smokeEmissionRate ?? 20;
-        this.options.fireLifetime = this.options.fireLifetime ?? 2.0;
-        this.options.smokeLifetime = this.options.smokeLifetime ?? 4.0;
-        this.options.fireColorStart = this.options.fireColorStart ?? new THREE.Color(0xff4500);
-        this.options.fireColorMid = this.options.fireColorMid ?? new THREE.Color(0xff8c00);
-        this.options.fireColorEnd = this.options.fireColorEnd ?? new THREE.Color(0xffd700);
-        this.options.smokeColorStart = this.options.smokeColorStart ?? new THREE.Color(0x333333);
-        this.options.smokeColorEnd = this.options.smokeColorEnd ?? new THREE.Color(0x111111);
-        this.options.position = this.options.position ?? new THREE.Vector3(0, 0, 0);
-        this.options.coneAngle = this.options.coneAngle ?? Math.PI / 6;
-        this.options.coneHeight = this.options.coneHeight ?? 8.0;
-        this.options.turbulence = this.options.turbulence ?? 0.8;
-        this.options.windForce = this.options.windForce ?? new THREE.Vector3(0.1, 2.0, 0.1);
+        this.scene = scene
+        this.options = { ...options }
+        this.options.maxFireParticles = this.options.maxFireParticles ?? 800
+        this.options.maxSmokeParticles = this.options.maxSmokeParticles ?? 400
+        this.options.fireEmissionRate = this.options.fireEmissionRate ?? 60
+        this.options.smokeEmissionRate = this.options.smokeEmissionRate ?? 20
+        this.options.fireLifetime = this.options.fireLifetime ?? 2.0
+        this.options.smokeLifetime = this.options.smokeLifetime ?? 4.0
+        this.options.fireColorStart = this.options.fireColorStart ?? new THREE.Color(0xff4500)
+        this.options.fireColorMid = this.options.fireColorMid ?? new THREE.Color(0xff8c00)
+        this.options.fireColorEnd = this.options.fireColorEnd ?? new THREE.Color(0xffd700)
+        this.options.smokeColorStart = this.options.smokeColorStart ?? new THREE.Color(0x333333)
+        this.options.smokeColorEnd = this.options.smokeColorEnd ?? new THREE.Color(0x111111)
+        this.options.position = this.options.position ?? new THREE.Vector3(0, 0, 0)
+        this.options.coneAngle = this.options.coneAngle ?? Math.PI / 6
+        this.options.coneHeight = this.options.coneHeight ?? 8.0
+        this.options.turbulence = this.options.turbulence ?? 0.8
+        this.options.windForce = this.options.windForce ?? new THREE.Vector3(0.1, 2.0, 0.1)
 
-        this.fireParticles = [];
-        this.activeFireParticles = [];
-        this.smokeParticles = [];
-        this.activeSmokeParticles = [];
-        this.clock = new THREE.Clock();
+        this.fireParticles = []
+        this.activeFireParticles = []
+        this.smokeParticles = []
+        this.activeSmokeParticles = []
+        this.clock = new THREE.Clock()
 
-        this.initFireSystem();
-        this.initSmokeSystem();
+        this.initFireSystem()
+        this.initSmokeSystem()
     }
 
     initFireSystem() {
@@ -453,15 +461,15 @@ export class FireParticleSystem {
 
     updateParticleSystem(
         particles: Array<{
-            index: number;
-            active: boolean;
-            age: number;
-            lifetime: number;
-            position: THREE.Vector3;
-            velocity: THREE.Vector3;
-            color: THREE.Color;
-            size: number;
-            alpha: number;
+            index: number
+            active: boolean
+            age: number
+            lifetime: number
+            position: THREE.Vector3
+            velocity: THREE.Vector3
+            color: THREE.Color
+            size: number
+            alpha: number
         }>,
         positions: Float32Array,
         colors: Float32Array,
@@ -471,36 +479,36 @@ export class FireParticleSystem {
         colorMid: THREE.Color | null,
         colorEnd: THREE.Color | null,
         deltaTime: number,
-        type: string
+        type: string,
     ) {
         for (let i = particles.length - 1; i >= 0; i--) {
-            const particle = particles[i];
-            particle.age += deltaTime;
+            const particle = particles[i]
+            particle.age += deltaTime
 
             if (particle.age >= particle.lifetime) {
-                particle.active = false;
-                particles.splice(i, 1);
-                continue;
+                particle.active = false
+                particles.splice(i, 1)
+                continue
             }
 
-            const lifeRatio = particle.age / particle.lifetime;
+            const lifeRatio = particle.age / particle.lifetime
 
             // 更新位置
-            particle.position.add(particle.velocity.clone().multiplyScalar(deltaTime));
+            particle.position.add(particle.velocity.clone().multiplyScalar(deltaTime))
 
             // 添加湍流效果
             if (type === "fire") {
-                particle.velocity.x += (Math.random() - 0.5) * this.options.turbulence * 0.1;
-                particle.velocity.z += (Math.random() - 0.5) * this.options.turbulence * 0.1;
-                particle.velocity.y += 0.02; // 持续上升
+                particle.velocity.x += (Math.random() - 0.5) * this.options.turbulence * 0.1
+                particle.velocity.z += (Math.random() - 0.5) * this.options.turbulence * 0.1
+                particle.velocity.y += 0.02 // 持续上升
             } else {
-                particle.velocity.x += (Math.random() - 0.5) * this.options.turbulence * 0.05;
-                particle.velocity.z += (Math.random() - 0.5) * this.options.turbulence * 0.05;
-                particle.velocity.y += 0.01;
+                particle.velocity.x += (Math.random() - 0.5) * this.options.turbulence * 0.05
+                particle.velocity.z += (Math.random() - 0.5) * this.options.turbulence * 0.05
+                particle.velocity.y += 0.01
             }
 
             // 速度衰减
-            particle.velocity.multiplyScalar(0.995);
+            particle.velocity.multiplyScalar(0.995)
 
             // 更新颜色
             if (type === "fire" && colorEnd) {
@@ -508,37 +516,37 @@ export class FireParticleSystem {
                     particle.color.lerpColors(
                         lifeRatio < 0.5 ? colorStart : colorMid,
                         lifeRatio < 0.5 ? colorMid : colorEnd,
-                        lifeRatio < 0.5 ? lifeRatio * 2 : (lifeRatio - 0.5) * 2
-                    );
+                        lifeRatio < 0.5 ? lifeRatio * 2 : (lifeRatio - 0.5) * 2,
+                    )
                 } else {
-                    particle.color.lerpColors(colorStart, colorEnd, lifeRatio);
+                    particle.color.lerpColors(colorStart, colorEnd, lifeRatio)
                 }
             } else if (colorEnd) {
-                particle.color.lerpColors(colorStart, colorEnd, lifeRatio);
+                particle.color.lerpColors(colorStart, colorEnd, lifeRatio)
             }
 
             // 更新大小
             if (type === "fire") {
-                particle.size *= 1.02; // 火焰逐渐变大
+                particle.size *= 1.02 // 火焰逐渐变大
             } else {
-                particle.size *= 1.03; // 烟雾扩散更快
+                particle.size *= 1.03 // 烟雾扩散更快
             }
 
             // 更新透明度
-            particle.alpha = Math.max(0, 1.0 - lifeRatio);
+            particle.alpha = Math.max(0, 1.0 - lifeRatio)
 
             // 更新缓冲区数据
-            const index = particle.index;
-            positions[index * 3] = particle.position.x;
-            positions[index * 3 + 1] = particle.position.y;
-            positions[index * 3 + 2] = particle.position.z;
+            const index = particle.index
+            positions[index * 3] = particle.position.x
+            positions[index * 3 + 1] = particle.position.y
+            positions[index * 3 + 2] = particle.position.z
 
-            colors[index * 3] = particle.color.r;
-            colors[index * 3 + 1] = particle.color.g;
-            colors[index * 3 + 2] = particle.color.b;
+            colors[index * 3] = particle.color.r
+            colors[index * 3 + 1] = particle.color.g
+            colors[index * 3 + 2] = particle.color.b
 
-            sizes[index] = particle.size;
-            alphas[index] = particle.alpha;
+            sizes[index] = particle.size
+            alphas[index] = particle.alpha
         }
     }
 
@@ -549,11 +557,6 @@ export class FireParticleSystem {
     setEmissionRates(fireRate: number, smokeRate: number) {
         this.options.fireEmissionRate = fireRate
         this.options.smokeEmissionRate = smokeRate
-    }
-
-    setIntensity(intensity: number) {
-        this.options.fireEmissionRate = 60 * intensity
-        this.options.smokeEmissionRate = 20 * intensity
     }
 
     destroy() {
@@ -569,6 +572,209 @@ export class FireParticleSystem {
             this.smokeMaterial.dispose()
         }
     }
+
+    /**
+     * 让火焰逐渐变大
+     * @param {number} targetScale - 目标缩放倍数 (默认1.5)
+     * @param {number} duration - 变大持续时间（秒，默认2.0）
+     * @param {Function} onComplete - 完成回调函数
+     */
+    growFire(targetScale: number = 1.5, duration: number = 2.0, onComplete: (() => void) | null = null) {
+        if (this.growAnimation) {
+            this.growAnimation.stop()
+        }
+
+        // 保存原始值
+        this.originalFireEmissionRate = this.originalFireEmissionRate || this.options.fireEmissionRate
+        this.originalSmokeEmissionRate = this.originalSmokeEmissionRate || this.options.smokeEmissionRate
+
+        const startScale = this.currentFireScale || 1.0
+        const targetFireRate = this.originalFireEmissionRate * targetScale
+        const targetSmokeRate = this.originalSmokeEmissionRate * targetScale
+
+        this.growAnimation = new TWEEN.Tween({
+            scale: startScale,
+            fireRate: this.originalFireEmissionRate,
+            smokeRate: this.originalSmokeEmissionRate,
+        })
+            .to(
+                {
+                    scale: targetScale,
+                    fireRate: targetFireRate,
+                    smokeRate: targetSmokeRate,
+                },
+                duration * 1000,
+            )
+            .easing(TWEEN.Easing.Quadratic.Out)
+            .onUpdate(obj => {
+                this.currentFireScale = obj.scale
+                this.fireSystem.scale.setScalar(obj.scale)
+                this.smokeSystem.scale.setScalar(obj.scale)
+
+                // 同步调整发射率
+                this.options.fireEmissionRate = obj.fireRate
+                this.options.smokeEmissionRate = obj.smokeRate
+
+                // 同步调整锥形高度和角度
+                this.options.coneHeight = 8.0 * obj.scale
+                this.options.coneAngle = (Math.PI / 6) * (1 + (obj.scale - 1) * 0.3)
+            })
+            .onComplete(() => {
+                if (onComplete) {
+                    onComplete()
+                }
+                this.growAnimation = null
+            })
+            .start()
+    }
+
+    /**
+     * 让火焰逐渐变小直到熄灭
+     * @param {number} duration - 变小持续时间（秒，默认3.0）
+     * @param {Function} onComplete - 完成回调函数
+     */
+    shrinkFire(duration: number = 3.0, onComplete: (() => void) | null = null) {
+        if (this.shrinkAnimation) {
+            this.shrinkAnimation.stop()
+        }
+
+        // 获取当前缩放值
+        const currentScale = this.currentFireScale || 1.0
+        const originalFireRate = this.originalFireEmissionRate || this.options.fireEmissionRate
+        const originalSmokeRate = this.originalSmokeEmissionRate || this.options.smokeEmissionRate
+
+        this.shrinkAnimation = new TWEEN.Tween({
+            scale: currentScale,
+            fireRate: this.options.fireEmissionRate,
+            smokeRate: this.options.smokeEmissionRate,
+            opacity: 1.0,
+        })
+            .to(
+                {
+                    scale: 0.0,
+                    fireRate: 0,
+                    smokeRate: 0,
+                    opacity: 0.0,
+                },
+                duration * 1000,
+            )
+            .easing(TWEEN.Easing.Quadratic.In)
+            .onUpdate(obj => {
+                this.currentFireScale = obj.scale
+                this.fireSystem.scale.setScalar(obj.scale)
+                this.smokeSystem.scale.setScalar(obj.scale)
+
+                // 逐渐减小发射率
+                this.options.fireEmissionRate = obj.fireRate
+                this.options.smokeEmissionRate = obj.smokeRate
+
+                // 调整锥形参数
+                this.options.coneHeight = 8.0 * obj.scale
+                this.options.coneAngle = (Math.PI / 6) * obj.scale
+
+                // 降低材质透明度
+                if (this.fireMaterial.uniforms) {
+                    this.fireMaterial.uniforms.globalOpacity = { value: obj.opacity }
+                }
+                if (this.smokeMaterial.uniforms) {
+                    this.smokeMaterial.uniforms.globalOpacity = {
+                        value: obj.opacity * 0.6,
+                    }
+                }
+            })
+            .onComplete(() => {
+                // 完全停止发射
+                this.options.fireEmissionRate = 0
+                this.options.smokeEmissionRate = 0
+
+                // 隐藏粒子系统
+                this.fireSystem.visible = false
+                this.smokeSystem.visible = false
+
+                if (onComplete) onComplete()
+                this.shrinkAnimation = null
+            })
+            .start()
+    }
+
+    /**
+     * 重置火焰到初始状态
+     */
+    resetFire() {
+        if (this.growAnimation) {
+            this.growAnimation.stop()
+            this.growAnimation = null
+        }
+        if (this.shrinkAnimation) {
+            this.shrinkAnimation.stop()
+            this.shrinkAnimation = null
+        }
+
+        // 重置缩放
+        this.currentFireScale = 1.0
+        this.fireSystem.scale.setScalar(1.0)
+        this.smokeSystem.scale.setScalar(1.0)
+
+        // 重置发射率
+        if (this.originalFireEmissionRate) {
+            this.options.fireEmissionRate = this.originalFireEmissionRate
+        }
+        if (this.originalSmokeEmissionRate) {
+            this.options.smokeEmissionRate = this.originalSmokeEmissionRate
+        }
+
+        // 重置透明度
+        if (this.fireMaterial.uniforms) {
+            this.fireMaterial.uniforms.globalOpacity = { value: 1.0 }
+        }
+        if (this.smokeMaterial.uniforms) {
+            this.smokeMaterial.uniforms.globalOpacity = { value: 0.6 }
+        }
+
+        // 重置锥形参数
+        this.options.coneHeight = 8.0
+        this.options.coneAngle = Math.PI / 6
+
+        // 显示粒子系统
+        this.fireSystem.visible = true
+        this.smokeSystem.visible = true
+    }
+
+    /**
+     * 检查动画状态
+     * @returns {Object} 动画状态信息
+     */
+    getAnimationStatus(): object {
+        return {
+            isGrowing: !!this.growAnimation,
+            isShrinking: !!this.shrinkAnimation,
+            currentScale: this.currentFireScale || 1.0,
+            fireEmissionRate: this.options.fireEmissionRate,
+            smokeEmissionRate: this.options.smokeEmissionRate,
+            coneHeight: this.options.coneHeight,
+            coneAngle: this.options.coneAngle,
+        }
+    }
+
+    /**
+     * 设置火焰强度（快捷方法）
+     * @param {number} intensity - 强度系数 (0-2)
+     */
+    setIntensity(intensity: number) {
+        const clampedIntensity = Math.max(0, Math.min(2, intensity))
+
+        if (this.growAnimation) this.growAnimation.stop()
+        if (this.shrinkAnimation) this.shrinkAnimation.stop()
+
+        this.currentFireScale = clampedIntensity
+        this.fireSystem.scale.setScalar(clampedIntensity)
+        this.smokeSystem.scale.setScalar(clampedIntensity)
+
+        this.options.fireEmissionRate = 60 * clampedIntensity
+        this.options.smokeEmissionRate = 20 * clampedIntensity
+        this.options.coneHeight = 8.0 * clampedIntensity
+        this.options.coneAngle = (Math.PI / 6) * (1 + (clampedIntensity - 1) * 0.3)
+    }
 }
 
 /**
@@ -576,16 +782,16 @@ export class FireParticleSystem {
  * 提供简化的火焰效果创建接口
  */
 export class FireEffectManager {
-    public scene: THREE.Scene;
+    public scene: THREE.Scene
     public effects: Array<{
-        type: string;
-        effect: FireParticleSystem;
-        update: (deltaTime: number) => void;
-    }>;
+        type: string
+        effect: FireParticleSystem
+        update: (deltaTime: number) => void
+    }>
 
     constructor(scene: THREE.Scene) {
-        this.scene = scene;
-        this.effects = [];
+        this.scene = scene
+        this.effects = []
     }
 
     createFireEffect(options: Partial<FireMarkerOptions> = {}): FireParticleSystem {
@@ -607,40 +813,40 @@ export class FireEffectManager {
             coneHeight: 8.0,
             turbulence: 0.8,
             windForce: new THREE.Vector3(0.1, 2.0, 0.1),
-            ...options
-        };
+            ...options,
+        }
 
-        const fireEffect = new FireParticleSystem(this.scene, mergedOptions);
-        
+        const fireEffect = new FireParticleSystem(this.scene, mergedOptions)
+
         this.effects.push({
             type: "fire",
             effect: fireEffect,
             update: (deltaTime: number) => fireEffect.update(deltaTime),
-        });
+        })
 
-        return fireEffect;
+        return fireEffect
     }
 
     removeEffect(effect: FireParticleSystem | SmokeParticleSystem) {
-        const index = this.effects.findIndex(e => e.effect === effect);
+        const index = this.effects.findIndex(e => e.effect === effect)
         if (index !== -1) {
-            this.effects[index].effect.destroy();
-            this.effects.splice(index, 1);
+            this.effects[index].effect.destroy()
+            this.effects.splice(index, 1)
         }
     }
 
     update(deltaTime: number) {
         this.effects.forEach(({ effect }) => {
             if (effect && effect.update) {
-                effect.update(deltaTime);
+                effect.update(deltaTime)
             }
-        });
+        })
     }
 
     destroy() {
         this.effects.forEach(({ effect }) => {
-            effect.destroy();
-        });
-        this.effects = [];
+            effect.destroy()
+        })
+        this.effects = []
     }
 }
