@@ -5,129 +5,9 @@ import { FloorConfig, FloorManager } from './floorManager'
 import { BaseControls, OrbitControlOptions } from './baseControl'
 import * as TWEEN from '@tweenjs/tween.js'
 
+import { degreesToRadians, radiansToDegrees } from "../../utils/tools"
+
 const tween_group = new TWEEN.Group()
-
-/**
- * BaseScene - 基础场景插件（增强版）
- *
- * 🏢 地板功能使用示例：
- *
- * // 1. 创建带水面地板的场景
- * const scene = BaseScene.createWithFloor('water', 20000)
- *
- * // 2. 动态切换地板类型
- * scene.setFloorType('grid')  // 切换到网格地板
- * scene.setWaterFloor(30000)  // 设置水面地板
- * scene.setStaticFloor(10000, { color: 0x654321 })  // 设置静态地板
- *
- * // 3. 使用贴图的地板
- * scene.setStaticFloorWithTexture(15000, './textures/floor.jpg')  // 单贴图地板
- * scene.setStaticFloorWithPBR(20000, {  // PBR地板
- *     diffuse: './textures/floor_diffuse.jpg',
- *     normal: './textures/floor_normal.jpg',
- *     roughness: './textures/floor_roughness.jpg',
- *     metallic: './textures/floor_metallic.jpg'
- * })
- * scene.setWaterFloorWithTexture(25000, './textures/water_normals.jpg')  // 水面法线贴图
- *
- * // 4. 配置地板参数
- * scene.updateFloorConfig({
- *     waterConfig: {
- *         color: 0x004466,
- *         distortionScale: 5.0
- *     }
- * })
- *
- * // 5. 切换地板显示
- * scene.toggleFloor(false)  // 隐藏地板
- * scene.toggleFloor(true)   // 显示地板
- *
- * // 6. 获取地板信息
- * const floorInfo = scene.getFloorInfo()
- * console.log('地板信息:', floorInfo)
- *
- * 🎥 相机切换功能使用示例：
- *
- * // 1. 2D/3D相机切换
- * scene.switchTo2D()        // 切换到2D俯视模式
- * scene.switchTo3D()        // 切换到3D透视模式
- * scene.toggleCameraMode()  // 自动切换模式
- *
- * // 2. 相机状态查询
- * const mode = scene.getCameraMode()         // 获取当前模式 '2D' 或 '3D'
- * const camera = scene.getCurrentCamera()    // 获取当前激活的相机
- *
- * // 3. 2D相机缩放控制
- * const zoom = scene.get2DCameraZoom()       // 获取2D相机缩放
- * scene.set2DCameraZoom(2.0)                 // 设置2D相机缩放
- * scene.apply2DCameraZoomDelta(0.5)          // 增加缩放增量
- *
- * 🔧 抗锯齿功能使用示例：
- *
- * // 1. 创建高级抗锯齿场景
- * const scene = BaseScene.createWithAdvancedAntialias('msaa', { samples: 8 })
- *
- * // 2. 动态切换抗锯齿类型
- * scene.setAntialiasType('fxaa', { intensity: 0.75, quality: 'high' })
- * scene.setAntialiasType('msaa', { samples: 4 })
- * scene.toggleAntialias(false)  // 禁用抗锯齿
- *
- * // 3. 获取抗锯齿信息
- * const aaConfig = scene.getAntialiasConfig()
- * const aaQuality = scene.getAntialiasQuality()
- * console.log('抗锯齿配置:', aaConfig, '质量:', aaQuality)
- *
- * 🛡️ 深度冲突防护使用示例：
- *
- * // 1. 创建深度优化场景
- * const scene = BaseScene.createWithDepthOptimization(true)
- *
- * // 2. 深度管理操作
- * scene.autoOptimizeDepth()           // 自动优化深度范围
- * scene.enablePolygonOffset(1.0, 1.0) // 启用多边形偏移
- * scene.runDepthConflictDetection()   // 检测深度冲突
- *
- * // 3. 深度配置
- * scene.setDepthConfig({
- *     depthRangeConfig: {
- *         autoOptimize: true,
- *         nearFarRatio: 1/10000
- *     },
- *     conflictDetection: {
- *         enabled: true,
- *         autoFix: true
- *     }
- * })
- *
- * // 4. 获取深度统计
- * const depthStats = scene.getDepthStats()
- * console.log('深度统计:', depthStats)
- *
- * 🎯 完美质量场景使用示例：
- *
- * // 创建抗锯齿+深度优化的完美场景
- * const scene = BaseScene.createPerfectQuality('msaa', true)
- *
- * // 移动端优化场景
- * const mobileScene = BaseScene.createMobileOptimized()
- *
- * 支持的抗锯齿类型：
- * - msaa: 多重采样抗锯齿（硬件级别）
- * - fxaa: 快速近似抗锯齿（后处理）
- * - smaa: 子像素形态学抗锯齿（后处理）
- * - taa: 时间抗锯齿（后处理）
- * - none: 禁用抗锯齿
- *
- * 支持的地板类型：
- * - water: 水面地板（参照three.js webgl_shaders_ocean）
- * - static: 静态贴图地板（支持PBR材质）
- * - reflection: 实时反射地板
- * - grid: 网格地板（程序生成）
- * - glow: 发光地板（带脉冲动画）
- * - infinite: 无限地板（跟随相机）
- */
-
-// 性能监控接口
 interface PerformanceStats {
     fps: number
     frameTime: number
@@ -597,13 +477,18 @@ interface CameraState {
 
 // 保持向后兼容的接口
 interface CameraFlyToOptions {
-    position: { x: number; y: number; z: number } 
+    position: { x: number; y: number; z: number }
     lookAt?: { x: number; y: number; z: number }
     duration?: number
-    quaternion?:{x:number,y:number,z:number,w:number}
-    easing?: (amount: number) => number 
-    onUpdate?: () => void 
-    onComplete?: () => void 
+    enableLookAt?: boolean
+    rotation?: {
+        pitch: number // 俯仰角: 角度制
+        yaw: number   // 偏航角: 角度制
+        roll: number  // 翻滚角: 角度制
+    }
+    easing?: (amount: number) => number
+    onUpdate?: () => void
+    onComplete?: () => void
 }
 
 export class BaseScene extends BasePlugin {
@@ -1079,30 +964,6 @@ export class BaseScene extends BasePlugin {
             正交相机: '2D视图',
             当前模式: this.cameraConfig.currentMode,
         })
-    }
-
-    /**
-     * 验证是否为有效的HTMLCanvasElement
-     */
-    private isValidCanvas(element: any): boolean {
-        if (!element) return false
-
-        // 检查是否是HTMLCanvasElement
-        if (
-            typeof HTMLCanvasElement !== 'undefined' &&
-            element instanceof HTMLCanvasElement
-        ) {
-            return true
-        }
-
-        // 检查是否具有canvas的基本方法（用于兼容性检查）
-        return !!(
-            element &&
-            typeof element === 'object' &&
-            typeof element.addEventListener === 'function' &&
-            typeof element.getContext === 'function' &&
-            element.tagName === 'CANVAS'
-        )
     }
 
     /**
@@ -1662,6 +1523,8 @@ export class BaseScene extends BasePlugin {
 
     /**
      * 更新渲染器尺寸
+     * @param width 窗口宽度
+     * @param height 窗口高度
      */
     public updateRendererSize(
         width = window.innerWidth,
@@ -1673,6 +1536,11 @@ export class BaseScene extends BasePlugin {
         console.log(width, height, 'width,height')
     }
 
+    /**
+     * 处理窗口 resize 事件
+     * @param width 窗口宽度
+     * @param height 窗口高度
+     */
     public handleResize(width = window.innerWidth, height = window.innerHeight) {
         this.updateRendererSize(width, height)
 
@@ -1737,57 +1605,6 @@ export class BaseScene extends BasePlugin {
     }
 
     /**
-     * 获取渲染器配置信息
-     */
-    public getRendererConfig(): any {
-        return {
-            ...this.rendererAdvancedConfig,
-            size: {
-                width: this.renderer.domElement.width,
-                height: this.renderer.domElement.height,
-            },
-            capabilities: this.renderer.capabilities,
-        }
-    }
-
-    /**
-     * 更新阴影设置
-     */
-    public setShadowEnabled(enabled: boolean): void {
-        this.rendererAdvancedConfig.shadowMapEnabled = enabled
-        this.renderer.shadowMap.enabled = enabled
-        this.directionalLight.castShadow = enabled
-
-        if (enabled) {
-            this.renderer.shadowMap.type =
-                this.rendererAdvancedConfig.shadowMapType
-        }
-
-        console.log(`🌒 阴影${enabled ? '已启用' : '已禁用'}`)
-        eventBus.emit('renderer:shadow-toggled', { enabled })
-    }
-
-    /**
-     * 更新色调映射
-     */
-    public setToneMapping(
-        toneMapping: THREE.ToneMapping,
-        exposure?: number
-    ): void {
-        this.renderer.toneMapping = toneMapping
-        this.rendererAdvancedConfig.toneMapping = toneMapping
-
-        if (exposure !== undefined) {
-            this.renderer.toneMappingExposure = exposure
-            this.rendererAdvancedConfig.toneMappingExposure = exposure
-        }
-
-        console.log(
-            `🎨 色调映射已更新: ${this.getToneMappingName(toneMapping)}`
-        )
-    }
-
-    /**
      * 获取场景信息
      */
     public getSceneInfo(): any {
@@ -1805,272 +1622,6 @@ export class BaseScene extends BasePlugin {
             background: this.scene.background,
             fog: this.scene.fog !== null,
         }
-    }
-
-    // ================================
-    // 抗锯齿管理相关方法
-    // ================================
-
-    /**
-     * 设置抗锯齿类型
-     * @param type 抗锯齿类型
-     * @param options 相关配置选项
-     */
-    public setAntialiasType(
-        type: AntialiasConfig['type'],
-        options?: any
-    ): void {
-        this.antialiasConfig.type = type
-        this.antialiasConfig.enabled = type !== 'none'
-
-        // 根据类型设置相关配置
-        switch (type) {
-            case 'msaa':
-                this.antialiasConfig.msaaConfig = {
-                    samples: options?.samples || 4,
-                    ...this.antialiasConfig.msaaConfig,
-                }
-                break
-            case 'fxaa':
-                this.antialiasConfig.fxaaConfig = {
-                    intensity: options?.intensity || 0.75,
-                    quality: options?.quality || 'medium',
-                    ...this.antialiasConfig.fxaaConfig,
-                }
-                break
-            case 'smaa':
-                this.antialiasConfig.smaaConfig = {
-                    threshold: options?.threshold || 0.1,
-                    maxSearchSteps: options?.maxSearchSteps || 16,
-                    ...this.antialiasConfig.smaaConfig,
-                }
-                break
-            case 'taa':
-                this.antialiasConfig.taaConfig = {
-                    accumulation: options?.accumulation || 0.95,
-                    jitterPattern: options?.jitterPattern || 'halton',
-                    ...this.antialiasConfig.taaConfig,
-                }
-                break
-        }
-
-        // 重新应用配置
-        this.applyAntialiasConfig()
-
-        console.log(`🔄 抗锯齿类型已更改为: ${type}`)
-        eventBus.emit('antialias:type-changed', { type, options })
-    }
-
-    /**
-     * 切换抗锯齿启用状态
-     * @param enabled 是否启用
-     */
-    public toggleAntialias(enabled: boolean): void {
-        this.antialiasConfig.enabled = enabled
-        this.applyAntialiasConfig()
-
-        console.log(`🔄 抗锯齿${enabled ? '已启用' : '已禁用'}`)
-        eventBus.emit('antialias:toggled', { enabled })
-    }
-
-    /**
-     * 获取当前抗锯齿配置
-     */
-    public getAntialiasConfig(): AntialiasConfig {
-        return { ...this.antialiasConfig }
-    }
-
-    /**
-     * 获取抗锯齿质量信息
-     */
-    public getAntialiasQuality(): string {
-        if (!this.antialiasConfig.enabled) return 'none'
-
-        switch (this.antialiasConfig.type) {
-            case 'msaa':
-                return this.getMSAAQualityLevel(
-                    this.antialiasConfig.msaaConfig?.samples || 4
-                )
-            case 'fxaa':
-                return this.antialiasConfig.fxaaConfig?.quality || 'medium'
-            case 'smaa':
-                return 'high'
-            case 'taa':
-                return 'ultra'
-            default:
-                return 'none'
-        }
-    }
-
-    // ================================
-    // 深度管理相关方法
-    // ================================
-
-    /**
-     * 设置深度配置
-     * @param config 深度配置
-     */
-    public setDepthConfig(config: Partial<DepthConfig>): void {
-        Object.assign(this.depthConfig, config)
-        this.applyDepthConfig()
-
-        console.log('🔄 深度配置已更新')
-        eventBus.emit('depth:config-updated', { config })
-    }
-
-    /**
-     * 切换深度管理启用状态
-     * @param enabled 是否启用
-     */
-    public toggleDepthManagement(enabled: boolean): void {
-        this.depthConfig.enabled = enabled
-        this.applyDepthConfig()
-
-        console.log(`🔄 深度管理${enabled ? '已启用' : '已禁用'}`)
-        eventBus.emit('depth:toggled', { enabled })
-    }
-
-    /**
-     * 自动优化深度设置
-     */
-    public autoOptimizeDepth(): void {
-        if (!this.depthConfig.enabled) {
-            console.log('⚠️ 深度管理未启用，无法自动优化')
-            return
-        }
-
-        // 启用自动优化
-        this.depthConfig.depthRangeConfig.autoOptimize = true
-        this.optimizeCameraDepthRange(this.depthConfig.depthRangeConfig)
-
-        console.log('✅ 深度设置已自动优化')
-        eventBus.emit('depth:auto-optimized')
-    }
-
-    /**
-     * 执行深度冲突检测
-     */
-    public runDepthConflictDetection(): number {
-        if (!this.depthConfig.conflictDetection.enabled) {
-            console.log('⚠️ 深度冲突检测未启用')
-            return 0
-        }
-
-        const conflicts = this.detectDepthConflicts()
-
-        if (conflicts > 0) {
-            console.warn(`⚠️ 检测到 ${conflicts} 个深度冲突`)
-
-            // // 如果启用自动修复
-            // if (this.depthConfig.conflictDetection.autoFix) {
-            //     this.autoFixDepthConflicts()
-            // }
-        } else {
-            console.log('✅ 未检测到深度冲突')
-        }
-
-        return conflicts
-    }
-
-    /**
-     * 自动修复深度冲突
-     */
-    private autoFixDepthConflicts(): void {
-        console.log('🔧 正在自动修复深度冲突...')
-
-        // 简单的修复策略：为重叠的对象添加小的Z偏移
-        const meshes: THREE.Mesh[] = []
-        const threshold = this.depthConfig.conflictDetection.threshold
-
-        this.scene.traverse((object) => {
-            if (object instanceof THREE.Mesh) {
-                meshes.push(object)
-            }
-        })
-
-        let fixedCount = 0
-        const usedPositions = new Set<string>()
-
-        for (const mesh of meshes) {
-            const key = `${mesh.position.x.toFixed(3)},${mesh.position.y.toFixed(3)},${mesh.position.z.toFixed(3)}`
-
-            if (usedPositions.has(key)) {
-                // 发现冲突，添加小的偏移
-                mesh.position.z += threshold * 2 * (Math.random() - 0.5)
-                fixedCount++
-            } else {
-                usedPositions.add(key)
-            }
-        }
-
-        console.log(`✅ 自动修复了 ${fixedCount} 个深度冲突`)
-        eventBus.emit('depth:conflicts-fixed', { fixedCount })
-    }
-
-    /**
-     * 获取当前深度配置
-     */
-    public getDepthConfig(): DepthConfig {
-        return { ...this.depthConfig }
-    }
-
-    /**
-     * 获取深度统计信息
-     */
-    public getDepthStats(): any {
-        return {
-            nearFarRatio: this.enhancedStats.nearFarRatio,
-            depthConflicts: this.enhancedStats.depthConflicts,
-            optimizationLevel: this.enhancedStats.depthOptimizationLevel,
-            cameraDepthRange: {
-                near: this.camera.near,
-                far: this.camera.far,
-            },
-        }
-    }
-
-    /**
-     * 启用多边形偏移
-     * @param factor 偏移因子
-     * @param units 偏移单位
-     */
-    public enablePolygonOffset(
-        factor: number = 1.0,
-        units: number = 1.0
-    ): void {
-        this.depthConfig.polygonOffsetConfig.enabled = true
-        this.depthConfig.polygonOffsetConfig.factor = factor
-        this.depthConfig.polygonOffsetConfig.units = units
-
-        this.applyPolygonOffsetConfig(this.depthConfig.polygonOffsetConfig)
-
-        console.log(`✅ 多边形偏移已启用: factor=${factor}, units=${units}`)
-        eventBus.emit('depth:polygon-offset-enabled', { factor, units })
-    }
-
-    /**
-     * 禁用多边形偏移
-     */
-    public disablePolygonOffset(): void {
-        this.depthConfig.polygonOffsetConfig.enabled = false
-
-        // 移除现有材质的多边形偏移
-        this.scene.traverse((object) => {
-            if (object instanceof THREE.Mesh && object.material) {
-                const materials = Array.isArray(object.material)
-                    ? object.material
-                    : [object.material]
-                materials.forEach((material) => {
-                    if (material instanceof THREE.Material) {
-                        material.polygonOffset = false
-                        material.needsUpdate = true
-                    }
-                })
-            }
-        })
-
-        console.log('🚫 多边形偏移已禁用')
-        eventBus.emit('depth:polygon-offset-disabled')
     }
 
     /**
@@ -2108,229 +1659,6 @@ export class BaseScene extends BasePlugin {
     }
 
     /**
-     * 静态工厂方法 - 创建高性能场景
-     */
-    static createHighPerformance(customConfig: any = {}): BaseScene {
-        return new BaseScene({
-            userData: {
-                preset: 'highPerformance',
-                ...customConfig,
-            },
-        })
-    }
-
-    /**
-     * 静态工厂方法 - 创建平衡配置场景（推荐）
-     */
-    static createBalanced(customConfig: any = {}): BaseScene {
-        return new BaseScene({
-            userData: {
-                preset: 'balanced',
-                ...customConfig,
-            },
-        })
-    }
-
-    /**
-     * 静态工厂方法 - 创建高质量场景
-     */
-    static createHighQuality(customConfig: any = {}): BaseScene {
-        return new BaseScene({
-            userData: {
-                preset: 'highQuality',
-                ...customConfig,
-            },
-        })
-    }
-
-    /**
-     * 静态工厂方法 - 创建开发调试场景
-     */
-    static createDevelopment(customConfig: any = {}): BaseScene {
-        return new BaseScene({
-            userData: {
-                preset: 'development',
-                ...customConfig,
-            },
-        })
-    }
-
-    /**
-     * 静态工厂方法 - 创建最简场景（最少配置）
-     */
-    static createMinimal(): BaseScene {
-        return new BaseScene({
-            userData: {
-                preset: 'balanced',
-            },
-        })
-    }
-
-    /**
-     * 静态工厂方法 - 创建带Debug模式的场景
-     */
-    static createWithDebug(
-        preset: string = 'development',
-        customConfig: any = {}
-    ): BaseScene {
-        return new BaseScene({
-            userData: {
-                preset,
-                debugConfig: {
-                    enabled: true,
-                    gridHelper: true,
-                    axesHelper: true,
-                    ...customConfig.debugConfig,
-                },
-                ...customConfig,
-            },
-        })
-    }
-
-    /**
-     * 静态工厂方法 - 创建带自定义地板的场景
-     */
-    static createWithFloor(
-        floorType: FloorConfig['type'],
-        floorSize: number = 10000,
-        customConfig: any = {}
-    ): BaseScene {
-        const floorConfig: Partial<FloorConfig> = {
-            enabled: true,
-            type: floorType,
-            size: floorSize,
-            position: [0, 0, 0] as [number, number, number],
-        }
-
-        // 根据地板类型设置默认配置
-        switch (floorType) {
-            case 'water':
-                floorConfig.waterConfig = {
-                    color: 0x001e0f,
-                    sunColor: 0xffffff,
-                    distortionScale: 3.7,
-                    textureWidth: 512,
-                    textureHeight: 512,
-                    alpha: 1.0,
-                    time: 0,
-                    ...customConfig.waterConfig,
-                }
-                break
-            case 'static':
-                floorConfig.staticConfig = {
-                    color: 0x808080,
-                    opacity: 1.0,
-                    roughness: 0.8,
-                    metalness: 0.2,
-                    tiling: [20, 20],
-                    ...customConfig.staticConfig,
-                }
-                break
-            case 'grid':
-                floorConfig.gridConfig = {
-                    gridSize: 100,
-                    lineWidth: 0.1,
-                    primaryColor: 0x444444,
-                    secondaryColor: 0x888888,
-                    opacity: 0.8,
-                    divisions: 10,
-                }
-                break
-        }
-
-        return new BaseScene({
-            userData: {
-                preset: 'balanced',
-                floorConfig,
-                ...customConfig,
-            },
-        })
-    }
-
-    /**
-     * 静态工厂方法 - 创建带贴图地板的场景
-     * @param floorType 地板类型
-     * @param textureUrl 贴图地址
-     * @param floorSize 地板大小
-     * @param customConfig 自定义配置
-     */
-    static createWithTexturedFloor(
-        floorType: 'static' | 'water',
-        textureUrl: string,
-        floorSize: number = 10000,
-        customConfig: any = {}
-    ): BaseScene {
-        const scene = new BaseScene({
-            userData: {
-                preset: 'balanced',
-                floorConfig: {
-                    enabled: false, // 先禁用，后面通过方法设置
-                    type: 'none',
-                    size: 1000,
-                    position: [0, 0, 0],
-                },
-                ...customConfig,
-            },
-        })
-
-        // 创建后立即设置带贴图的地板
-        if (floorType === 'static') {
-            scene.setStaticFloorWithTexture(
-                floorSize,
-                textureUrl,
-                customConfig.staticConfig
-            )
-        } else if (floorType === 'water') {
-            scene.setWaterFloorWithTexture(
-                floorSize,
-                textureUrl,
-                customConfig.waterConfig
-            )
-        }
-
-        return scene
-    }
-
-    /**
-     * 静态工厂方法 - 创建带PBR贴图地板的场景
-     * @param textures PBR贴图集合
-     * @param floorSize 地板大小
-     * @param customConfig 自定义配置
-     */
-    static createWithPBRFloor(
-        textures: {
-            diffuse?: string
-            normal?: string
-            roughness?: string
-            metallic?: string
-        },
-        floorSize: number = 10000,
-        customConfig: any = {}
-    ): BaseScene {
-        const scene = new BaseScene({
-            userData: {
-                preset: 'balanced',
-                floorConfig: {
-                    enabled: false,
-                    type: 'none',
-                    size: 1000,
-                    position: [0, 0, 0],
-                },
-                ...customConfig,
-            },
-        })
-
-        // 创建后立即设置PBR地板
-        scene.setStaticFloorWithPBR(
-            floorSize,
-            textures,
-            customConfig.staticConfig
-        )
-
-        return scene
-    }
-
-    /**
      * 获取所有可用的配置预设
      */
     static getAvailablePresets(): string[] {
@@ -2342,218 +1670,6 @@ export class BaseScene extends BasePlugin {
      */
     static getPresetConfig(preset: string): any {
         return DEFAULT_CONFIGS[preset as keyof typeof DEFAULT_CONFIGS] || null
-    }
-
-    /**
-     * 静态工厂方法 - 创建高级抗锯齿场景
-     * @param antialiasType 抗锯齿类型
-     * @param customConfig 自定义配置
-     */
-    static createWithAdvancedAntialias(
-        antialiasType: AntialiasConfig['type'],
-        customConfig: any = {}
-    ): BaseScene {
-        const antialiasConfig: AntialiasConfig = {
-            enabled: antialiasType !== 'none',
-            type: antialiasType,
-        }
-
-        // 根据类型设置默认配置
-        switch (antialiasType) {
-            case 'msaa':
-                antialiasConfig.msaaConfig = {
-                    samples: customConfig.samples || 8,
-                }
-                break
-            case 'fxaa':
-                antialiasConfig.fxaaConfig = {
-                    intensity: customConfig.intensity || 0.75,
-                    quality: customConfig.quality || 'high',
-                }
-                break
-            case 'smaa':
-                antialiasConfig.smaaConfig = {
-                    threshold: customConfig.threshold || 0.1,
-                    maxSearchSteps: customConfig.maxSearchSteps || 16,
-                }
-                break
-            case 'taa':
-                antialiasConfig.taaConfig = {
-                    accumulation: customConfig.accumulation || 0.95,
-                    jitterPattern: customConfig.jitterPattern || 'halton',
-                }
-                break
-        }
-
-        return new BaseScene({
-            userData: {
-                preset: 'highQuality',
-                antialiasConfig,
-                ...customConfig,
-            },
-        })
-    }
-
-    /**
-     * 静态工厂方法 - 创建深度优化场景
-     * @param enableLogDepth 是否启用对数深度
-     * @param customConfig 自定义配置
-     */
-    static createWithDepthOptimization(
-        enableLogDepth: boolean = true,
-        customConfig: any = {}
-    ): BaseScene {
-        const depthConfig: DepthConfig = {
-            enabled: true,
-            depthBufferConfig: {
-                enableLogDepth,
-                depthBits: 32,
-                stencilBits: 8,
-            },
-            polygonOffsetConfig: {
-                enabled: true,
-                factor: 2.0,
-                units: 2.0,
-            },
-            depthRangeConfig: {
-                autoOptimize: true,
-                nearFarRatio: 1 / 10000,
-                minNear: 0.001,
-                maxFar: 1000000,
-            },
-            conflictDetection: {
-                enabled: true,
-                threshold: 0.00001,
-                autoFix: true,
-            },
-            depthSortConfig: {
-                enabled: true,
-                transparent: true,
-                opaque: true,
-            },
-        }
-
-        return new BaseScene({
-            userData: {
-                preset: 'highQuality',
-                depthConfig,
-                ...customConfig,
-            },
-        })
-    }
-
-    /**
-     * 静态工厂方法 - 创建抗锯齿+深度优化的完美场景
-     * @param antialiasType 抗锯齿类型
-     * @param enableLogDepth 是否启用对数深度
-     * @param customConfig 自定义配置
-     */
-    static createPerfectQuality(
-        antialiasType: AntialiasConfig['type'] = 'msaa',
-        enableLogDepth: boolean = true,
-        customConfig: any = {}
-    ): BaseScene {
-        // 高级抗锯齿配置
-        const antialiasConfig: AntialiasConfig = {
-            enabled: antialiasType !== 'none',
-            type: antialiasType,
-            msaaConfig: { samples: 8 },
-            fxaaConfig: { intensity: 0.9, quality: 'high' },
-        }
-
-        // 完整深度优化配置
-        const depthConfig: DepthConfig = {
-            enabled: true,
-            depthBufferConfig: {
-                enableLogDepth,
-                depthBits: 32,
-                stencilBits: 8,
-            },
-            polygonOffsetConfig: {
-                enabled: true,
-                factor: 2.0,
-                units: 2.0,
-            },
-            depthRangeConfig: {
-                autoOptimize: true,
-                nearFarRatio: 1 / 10000,
-                minNear: 0.001,
-                maxFar: 1000000,
-            },
-            conflictDetection: {
-                enabled: true,
-                threshold: 0.00001,
-                autoFix: true,
-            },
-            depthSortConfig: {
-                enabled: true,
-                transparent: true,
-                opaque: true,
-            },
-        }
-
-        return new BaseScene({
-            userData: {
-                preset: 'highQuality',
-                antialiasConfig,
-                depthConfig,
-                ...customConfig,
-            },
-        })
-    }
-
-    /**
-     * 静态工厂方法 - 创建移动端优化场景（轻量抗锯齿+基础深度管理）
-     * @param customConfig 自定义配置
-     */
-    static createMobileOptimized(customConfig: any = {}): BaseScene {
-        const antialiasConfig: AntialiasConfig = {
-            enabled: true,
-            type: 'fxaa',
-            fxaaConfig: {
-                intensity: 0.5,
-                quality: 'low',
-            },
-        }
-
-        const depthConfig: DepthConfig = {
-            enabled: true,
-            depthBufferConfig: {
-                enableLogDepth: false,
-                depthBits: 16,
-                stencilBits: 0,
-            },
-            polygonOffsetConfig: {
-                enabled: false,
-                factor: 0,
-                units: 0,
-            },
-            depthRangeConfig: {
-                autoOptimize: true,
-                nearFarRatio: 1 / 1000,
-                minNear: 0.1,
-                maxFar: 50000,
-            },
-            conflictDetection: {
-                enabled: true,
-                threshold: 0.001,
-                autoFix: true,
-            },
-            depthSortConfig: {
-                enabled: false,
-                transparent: true,
-                opaque: false,
-            },
-        }
-
-        return new BaseScene({
-            userData: {
-                preset: 'highPerformance',
-                antialiasConfig,
-                depthConfig,
-                ...customConfig,
-            },
-        })
     }
 
     destroy() {
@@ -3061,10 +2177,12 @@ export class BaseScene extends BasePlugin {
     public cameraFlyTo(options: CameraFlyToOptions | CameraState): void {
         // 处理不同的输入格式
         let finalOptions: CameraFlyToOptions
+        let control:any
 
         // 检查是否为 CameraState 格式（包含 mode 属性）
         if ('mode' in options) {
             const cameraState = options as CameraState
+            // 注意：如果是 CameraState 格式，在这里不会携带rotation参数
             finalOptions = {
                 position: new THREE.Vector3(
                     cameraState.position.x,
@@ -3075,8 +2193,8 @@ export class BaseScene extends BasePlugin {
                     cameraState.lookAt ||
                     cameraState.target ||
                     cameraState.position,
-                quaternion: cameraState.quaternion instanceof THREE.Quaternion ? cameraState.quaternion.clone() : undefined,
                 duration: cameraState.duration || 2000,
+                enableLookAt: true, // 默认启用注视
                 easing: cameraState.easing || TWEEN.Easing.Quadratic.InOut,
                 onUpdate: cameraState.onUpdate,
                 onComplete: cameraState.onComplete,
@@ -3087,12 +2205,20 @@ export class BaseScene extends BasePlugin {
             finalOptions = {
                 position: flyToOptions.position,
                 lookAt: flyToOptions.lookAt || flyToOptions.position,
-                quaternion: flyToOptions.quaternion instanceof THREE.Quaternion ? flyToOptions.quaternion.clone() : undefined,
                 duration: flyToOptions.duration || 2000,
+                enableLookAt: flyToOptions.enableLookAt ?? true, // 默认启用注视
+                rotation: flyToOptions.rotation, // 可选的旋转参数
+
                 easing: flyToOptions.easing || TWEEN.Easing.Quadratic.InOut,
                 onUpdate: flyToOptions.onUpdate,
                 onComplete: flyToOptions.onComplete,
             }
+        }
+
+        // 参数验证
+        if (!finalOptions.position || isNaN(finalOptions.position.x)) {
+            console.error('cameraFlyTo: 无效的目标位置');
+            return;
         }
 
         // 检查相机是否初始化
@@ -3101,143 +2227,101 @@ export class BaseScene extends BasePlugin {
             return
         }
 
-        const camera = this.camera as THREE.PerspectiveCamera
-        const startPosition = camera.position.clone()
-        const endPosition = finalOptions.position instanceof THREE.Vector3 
-            ? finalOptions.position.clone()
-            : new THREE.Vector3(finalOptions.position.x, finalOptions.position.y, finalOptions.position.z)
-
-        // 处理四元数
-        const startQuaternion = camera.quaternion.clone()
-        let endQuaternion: THREE.Quaternion
-
-        if (finalOptions.quaternion) {
-            // 使用提供的四元数
-            endQuaternion = finalOptions.quaternion instanceof THREE.Quaternion 
-                ? finalOptions.quaternion.clone()
-                : new THREE.Quaternion(finalOptions.quaternion.x || 0, finalOptions.quaternion.y || 0, finalOptions.quaternion.z || 0, finalOptions.quaternion.w || 1)
-        } else {
-            // 从 lookAt 计算四元数
-            const lookAtTarget = finalOptions.lookAt instanceof THREE.Vector3
-                ? finalOptions.lookAt.clone()
-                : new THREE.Vector3(
-                    finalOptions.lookAt?.x || 0,
-                    finalOptions.lookAt?.y || 0,
-                    finalOptions.lookAt?.z || 0
-                )
-            
-            // 计算从当前位置看向目标点的方向
-            const direction = new THREE.Vector3().subVectors(lookAtTarget, endPosition).normalize()
-            const up = camera.up.clone()
-            
-            // 创建目标四元数
-            const lookAtMatrix = new THREE.Matrix4()
-            lookAtMatrix.lookAt(new THREE.Vector3(0, 0, 0), direction, up)
-            endQuaternion = new THREE.Quaternion().setFromRotationMatrix(lookAtMatrix)
+        // 保存当前控制器状态并禁用控制器
+        if (this.controls && this.controls.getControl()) {
+            control = this.controls.getControl()
+            if (control) {
+                control.enabled = false
+            }
         }
 
-        // 获取当前相机朝向点
-        let startLookAt: THREE.Vector3
-        let control = this.controls?.getControl()
+        // 将目标位置转换为 THREE.Vector3 类型
+        const targetPosition = new THREE.Vector3(
+            finalOptions.position.x,
+            finalOptions.position.y,
+            finalOptions.position.z
+        )
 
-        if (control && control.target instanceof THREE.Vector3) {
-            startLookAt = control.target.clone()
-        } else {
-            // 若无controls，取相机前方一点作为朝向
-            startLookAt = new THREE.Vector3(0, 0, -1)
-            startLookAt.applyQuaternion(camera.quaternion)
-            startLookAt.add(camera.position)
-        }
+        // 利用方位角计算出目标姿态(yaw,pitch/roll角度值先转为弧度,再转四元数)
+        const targetRotation = new THREE.Euler(
+            degreesToRadians(finalOptions.rotation?.pitch || 0),  // pitch -> 绕X轴旋转
+            degreesToRadians(finalOptions.rotation?.yaw || 0),    // yaw -> 绕Y轴旋转  
+            degreesToRadians(finalOptions.rotation?.roll || 0),   // roll -> 绕Z轴旋转
+            'YXZ'
+        )
+        const targetQuaternion = new THREE.Quaternion().setFromEuler(targetRotation)
 
-        let endLookAt: THREE.Vector3
-        if (finalOptions.lookAt) {
-            endLookAt = finalOptions.lookAt instanceof THREE.Vector3
-                ? finalOptions.lookAt.clone()
-                : new THREE.Vector3(
-                    finalOptions.lookAt?.x || 0,
-                    finalOptions.lookAt?.y || 0,
-                    finalOptions.lookAt?.z || 0
-                )
-        } else {
-            endLookAt = endPosition.clone()
-        }
+        // 当前相机位置
+        const currentPosition = this.camera.position.clone()
+        // 当前相机姿态
+        const currentQuaternion = new THREE.Quaternion().setFromEuler(this.camera.rotation)
 
-        // 用于tween插值的临时对象
-        const tweenCoords = {
-            camX: startPosition.x,
-            camY: startPosition.y,
-            camZ: startPosition.z,
-            qx: startQuaternion.x,
-            qy: startQuaternion.y,
-            qz: startQuaternion.z,
-            qw: startQuaternion.w,
-            lookX: startLookAt.x,
-            lookY: startLookAt.y,
-            lookZ: startLookAt.z,
-        }
+        const currentTarget = control?.target.clone() // 现在的注视目标
+        
+        const endTarget = new THREE.Vector3(
+            finalOptions.lookAt?.x ?? 0,
+            finalOptions.lookAt?.y ?? 0,
+            finalOptions.lookAt?.z ?? 0
+        )
 
-        // 动画互斥：如有上一个飞行动画，先停止
-        if (this._flyTween) {
-            this._flyTween.stop()
-        }
+        // 如果需要一直注视某个位置的话（enableLookAt为true）在动画执行过程中就不能针对姿态进行改变，
+        // 如果需要改变姿态的话就不能注视某个位置（enableLookAt为false）
 
-        // 创建tween动画
-        this._flyTween = new TWEEN.Tween(tweenCoords)
-            .to(
-                {
-                    camX: endPosition.x,
-                    camY: endPosition.y,
-                    camZ: endPosition.z,
-                    qx: endQuaternion.x,
-                    qy: endQuaternion.y,
-                    qz: endQuaternion.z,
-                    qw: endQuaternion.w,
-                    lookX: endLookAt.x,
-                    lookY: endLookAt.y,
-                    lookZ: endLookAt.z,
-                },
-                finalOptions.duration
-            )
+        // 创建TWEEN动画
+        const tween = new TWEEN.Tween({
+            position: currentPosition.clone(),
+            quaternion: currentQuaternion.clone(),
+            target: currentTarget ? currentTarget.clone() : new THREE.Vector3()
+        })
+            .to({
+                position: targetPosition.clone(),
+                quaternion: targetQuaternion.clone(),
+                target: endTarget.clone()
+            }, finalOptions.duration)
             .easing(finalOptions.easing)
-            .onUpdate(() => {
+            .onUpdate((obj) => {
                 // 更新相机位置
-                camera.position.set(tweenCoords.camX, tweenCoords.camY, tweenCoords.camZ)
+                this.camera.position.copy(obj.position)
                 
-                // 更新相机旋转（四元数插值）
-                camera.quaternion.set(tweenCoords.qx, tweenCoords.qy, tweenCoords.qz, tweenCoords.qw)
-                console.log(camera.quaternion)
-                // 更新控制器target
-                if (this.controls) {
-                    const control = this.controls.getControl()
-                    if (control && control.target instanceof THREE.Vector3) {
-                        control.target.set(tweenCoords.lookX, tweenCoords.lookY, tweenCoords.lookZ)
+                if (finalOptions.enableLookAt) {
+                    // 启用注视模式：相机始终看向目标点
+                    if (control) {
+                        control.target.copy(obj.target)
+                        control.update()
+                    } else {
+                        // 如果没有控制器，直接设置相机朝向
+                        this.camera.lookAt(obj.target)
                     }
+                } else {
+                    // 禁用注视模式：使用四元数直接设置相机姿态
+                    this.camera.quaternion.copy(obj.quaternion)
                 }
-
-                finalOptions.onUpdate?.()
+                // 手动触发渲染更新
+                this.renderer.render(this.scene, this.camera)
             })
             .onComplete(() => {
-                // 确保最终状态
-                camera.position.copy(endPosition)
-                camera.quaternion.copy(endQuaternion)
-
-                // 同步控制器
-                if (this.controls) {
-                    const control = this.controls.getControl()
-                    if (control && control.target instanceof THREE.Vector3) {
-                        control.target.copy(endLookAt)
+                // 恢复控制器状态
+                if (control) {
+                    control.enabled = true
+                    // 确保最终状态正确
+                    if (finalOptions.enableLookAt) {
+                        control.target.copy(endTarget)
                     }
-                    if (control && typeof control.update === 'function') {
-                        control.update()
-                    }
+                    control.update()
                 }
 
-                finalOptions.onComplete?.()
-                this._flyTween = null
-                console.log('Camera flight complete.')
+                // 触发完成回调
+                if (finalOptions.onComplete) {
+                    finalOptions.onComplete()
+                }
+
+                // 最终渲染
+                this.renderer.render(this.scene, this.camera)
             })
             .start()
-        tween_group.add(this._flyTween)
+
+        // 将动画添加到渲染循环
+        tween_group.add(tween)
     }
 
     /**
