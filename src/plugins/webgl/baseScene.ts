@@ -2974,15 +2974,35 @@ export class BaseScene extends BasePlugin {
             // 3D → 2D: 先俯视，再切换到正交相机
             return new Promise((resolve, reject) => {
                 try {
-                    this.overLook(1500, () => {
-                        try {
-                            // 俯视完成后，切换到正交相机
-                            this.switchCamera()
-                            console.log('✅ 3D → 2D 切换完成')
-                            resolve('switched_to_2D')
-                        } catch (error) {
-                            console.error('❌ 相机切换失败:', error)
-                            reject(error)
+                    // this.overLook(1500, () => {
+                    //     try {
+                    //         // 俯视完成后，切换到正交相机
+                    //         this.switchCamera()
+                    //         console.log('✅ 3D → 2D 切换完成')
+                    //         resolve('switched_to_2D')
+                    //     } catch (error) {
+                    //         console.error('❌ 相机切换失败:', error)
+                    //         reject(error)
+                    //     }
+                    // })
+                    this.cameraFlyTo({
+                        position:{x:0,y:100,z:0},
+                        enableLookAt:false,
+                        rotation:{
+                            pitch:-90,
+                            yaw:0,
+                            roll:0
+                        },
+                        onComplete:()=>{
+                            try {
+                                // 俯视完成后，切换到正交相机
+                                this.switchCamera()
+                                console.log('✅ 3D → 2D 切换完成')
+                                resolve('switched_to_2D')
+                            } catch (error) {
+                                console.error('❌ 相机切换失败:', error)
+                                reject(error)
+                            }
                         }
                     })
                 } catch (error) {
