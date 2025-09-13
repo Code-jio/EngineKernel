@@ -2010,4 +2010,330 @@ export class ModelMarker extends BasePlugin {
             return false
         }
     }
+
+    /**
+     * 将模型移动到指定位置
+     * @param model 模型对象或模型ID
+     * @param targetPosition 目标位置 (支持数组[x,y,z]，对象{x,y,z}或THREE.Vector3)
+     * @param options 可选配置参数
+     * @returns 控制对象，包含停止、暂停、恢复等方法
+     */
+    public async moveToPosition(
+        model: THREE.Group | THREE.Scene | string,
+        targetPosition: Array<number> | {x: number, y: number, z: number} | THREE.Vector3,
+        options: {
+            duration?: number;          // 运动时间（毫秒，默认2000ms）
+            easing?: string;            // 缓动函数（默认'easeInOut'）
+            lookAtDirection?: boolean;  // 是否朝向运动方向（默认false）
+            onStart?: () => void;       // 开始回调
+            onUpdate?: (progress: number) => void; // 更新回调，progress: 0-1
+            onComplete?: () => void;    // 完成回调
+            onStop?: () => void;        // 停止回调
+            relative?: boolean;         // 是否相对当前位置移动（默认false）
+            updateRotation?: boolean;   // 是否实时更新旋转（默认true）
+        } = {}
+    ): Promise<{
+        start: () => Promise<void>;
+        stop: () => void;
+        pause: () => void;
+        resume: () => void;
+        getProgress: () => number;
+        isPlaying: () => boolean;
+    }> {
+        // 参数默认值
+        const config = {
+            duration: 2000,
+            easing: 'easeInOut',
+            lookAtDirection: false,
+            relative: false,
+            updateRotation: true,
+            ...options
+        };
+
+        // 获取模型对象
+        let targetModel: THREE.Group | THREE.Scene | null = null;
+        let modelId: string | null = null;
+
+        if (typeof model === 'string') {
+            const instance = this.modelInstances.get(model);
+            if (instance) {
+                targetModel = instance.model;
+                modelId = model;
+            }
+        } else {
+            targetModel = model;
+            // 查找对应的模型ID
+            for (const id of Array.from(this.modelInstances.keys())) {
+                const instance = this.modelInstances.get(id);
+                if (instance && instance.model === model) {
+                    modelId = id;
+                    break;
+                }
+            }
+        }
+
+        if (!targetModel) {
+            throw new Error('Model not found');
+        }
+
+        // 转换目标位置为Vector3
+        let targetPos: THREE.Vector3;
+        if (Array.isArray(targetPosition)) {
+            targetPos = new THREE.Vector3(targetPosition[0] ?? 0, targetPosition[1] ?? 0, targetPosition[2] ?? 0);
+        } else if (targetPosition instanceof THREE.Vector3) {
+            targetPos = targetPosition.clone();
+        } else {
+            targetPos = new THREE.Vector3(targetPosition.x ?? 0, targetPosition.y ?? 0, targetPosition.z ?? 0);
+        }
+
+        // 如果是相对移动，计算实际目标位置
+        if (config.relative) {
+            targetPos.add(targetModel.position);
+        }
+
+        // 起始位置
+        const startPos = targetModel.position.clone();
+        
+        // 动画状态
+        let isPlaying = false;
+        let isPaused = false;
+        let currentProgress = 0;
+        let currentTween: TWEEN.Tween<{ value: number }> | null = null;
+
+        // 缓动函数映射
+        const easingFunctions = {
+            linear: TWEEN.Easing.Linear.None,
+            easeIn: TWEEN.Easing.Quadratic.In,
+            easeOut: TWEEN.Easing.Quadratic.Out,
+            easeInOut: TWEEN.Easing.Quadratic.InOut,
+            easeInCubic: TWEEN.Easing.Cubic.In,
+            easeOutCubic: TWEEN.Easing.Cubic.Out,
+            easeInOutCubic: TWEEN.Easing.Cubic.InOut,
+            easeInElastic: TWEEN.Easing.Elastic.In,
+            easeOutElastic: TWEEN.Easing.Elastic.Out,
+            easeInOutElastic: TWEEN.Easing.Elastic.InOut,
+        };
+
+        // 创建动画对象
+        const progress = { value: 0 };
+
+        // 更新模型位置的函数
+        const updateModelPosition = () => {
+            currentProgress = progress.value;
+            
+            if (!targetModel) return;
+            
+            // 计算当前位置
+            const currentPos = new THREE.Vector3().lerpVectors(startPos, targetPos, progress.value);
+            targetModel.position.copy(currentPos);
+
+            // 如果需要朝向运动方向
+            if (config.lookAtDirection && progress.value < 0.99) {
+                const direction = new THREE.Vector3().subVectors(targetPos, startPos).normalize();
+                if (direction.length() > 0.001) {
+                    const lookAtPos = currentPos.clone().add(direction);
+                    targetModel.lookAt(lookAtPos);
+                }
+            }
+
+            // 调用更新回调
+            if (config.onUpdate) {
+                try {
+                    config.onUpdate(progress.value);
+                } catch (error) {
+                    console.warn('onUpdate callback error:', error);
+                }
+            }
+        };
+
+        // 开始动画
+        const startAnimation = (): Promise<void> => {
+            return new Promise((resolve, reject) => {
+                if (isPlaying) {
+                    resolve();
+                    return;
+                }
+
+                isPlaying = true;
+                isPaused = false;
+                progress.value = 0;
+
+                // 触发开始回调
+                if (config.onStart) {
+                    try {
+                        config.onStart();
+                    } catch (error) {
+                        console.warn('onStart callback error:', error);
+                    }
+                }
+
+                // 触发事件
+                if (modelId) {
+                    eventBus.emit('model:moveStarted', { 
+                        modelId, 
+                        startPosition: startPos.toArray(),
+                        targetPosition: targetPos.toArray(),
+                        duration: config.duration 
+                    });
+                }
+
+                currentTween = new TWEEN.Tween(progress)
+                    .to({ value: 1 }, config.duration)
+                    .easing(easingFunctions[config.easing as keyof typeof easingFunctions] || TWEEN.Easing.Quadratic.InOut)
+                    .onUpdate(() => {
+                        updateModelPosition();
+                    })
+                    .onComplete(() => {
+                        isPlaying = false;
+                        
+                        // 确保最终位置准确
+                        if (targetModel) {
+                            targetModel.position.copy(targetPos);
+                        }
+                        
+                        // 触发完成回调
+                        if (config.onComplete) {
+                            try {
+                                config.onComplete();
+                            } catch (error) {
+                                console.warn('onComplete callback error:', error);
+                            }
+                        }
+
+                        // 触发事件
+                        if (modelId) {
+                            eventBus.emit('model:moveCompleted', { 
+                                modelId, 
+                                position: targetPos.toArray() 
+                            });
+                        }
+                        
+                        resolve();
+                    })
+                    .start();
+
+                // 添加到动画组
+                this.animateGroup.add(currentTween);
+
+                // 启动动画循环
+                const animate = () => {
+                    if (isPlaying && !isPaused) {
+                        this.animateGroup.update();
+                        requestAnimationFrame(animate);
+                    }
+                };
+                animate();
+            });
+        };
+
+        // 停止动画
+        const stopAnimation = () => {
+            if (currentTween) {
+                currentTween.stop();
+                this.animateGroup.remove(currentTween);
+                currentTween = null;
+            }
+            
+            isPlaying = false;
+            isPaused = false;
+            progress.value = 0;
+
+            // 重置到起始位置
+            if (targetModel) {
+                targetModel.position.copy(startPos);
+            }
+
+            // 触发停止回调
+            if (config.onStop) {
+                try {
+                    config.onStop();
+                } catch (error) {
+                    console.warn('onStop callback error:', error);
+                }
+            }
+
+            // 触发事件
+            if (modelId) {
+                eventBus.emit('model:moveStopped', { modelId });
+            }
+        };
+
+        // 暂停动画
+        const pauseAnimation = () => {
+            if (isPlaying && !isPaused && currentTween) {
+                // TWEEN.js没有直接的pause方法，使用stop并记录当前进度
+                currentTween.stop();
+                isPaused = true;
+                isPlaying = false;
+            }
+        };
+
+        // 恢复动画
+        const resumeAnimation = () => {
+            if (isPaused && currentTween) {
+                // 重新创建Tween从当前进度继续
+                currentTween = new TWEEN.Tween({ value: progress.value })
+                    .to({ value: 1 }, config.duration * (1 - progress.value))
+                    .easing(easingFunctions[config.easing as keyof typeof easingFunctions] || TWEEN.Easing.Quadratic.InOut)
+                    .onUpdate((obj) => {
+                        progress.value = obj.value;
+                        updateModelPosition();
+                    })
+                    .onComplete(() => {
+                        isPlaying = false;
+                        if (targetModel) {
+                            targetModel.position.copy(targetPos);
+                        }
+                        if (config.onComplete) {
+                            try {
+                                config.onComplete();
+                            } catch (error) {
+                                console.warn('onComplete callback error:', error);
+                            }
+                        }
+                        if (modelId) {
+                            eventBus.emit('model:moveCompleted', { 
+                                modelId, 
+                                position: targetPos.toArray() 
+                            });
+                        }
+                    })
+                    .start();
+                this.animateGroup.add(currentTween);
+                isPaused = false;
+                isPlaying = true;
+            }
+        };
+
+        // 获取当前进度
+        const getProgress = () => currentProgress;
+        const isCurrentlyPlaying = () => isPlaying;
+
+        // 自动开始动画（如果需要）
+        if (config.duration > 0) {
+            // 异步方法中不自动开始，需要手动调用start()
+        } else {
+            // 如果持续时间为0，直接设置到目标位置
+            if (targetModel) {
+                targetModel.position.copy(targetPos);
+            }
+            if (config.onComplete) {
+                try {
+                    config.onComplete();
+                } catch (error) {
+                    console.warn('onComplete callback error:', error);
+                }
+            }
+        }
+
+        return {
+            start: startAnimation,
+            stop: stopAnimation,
+            pause: pauseAnimation,
+            resume: resumeAnimation,
+            getProgress,
+            isPlaying: isCurrentlyPlaying,
+        };
+    }
+
 }
