@@ -380,18 +380,15 @@ export class SimpleTrajectoryPlugin extends BasePlugin {
      * 启动更新循环
      */
     private startUpdateLoop(): void {
-        const update = () => {
+        
+        eventBus.on("update", () => {
             // 更新所有活跃的轨迹
             this.trajectoryInstances.forEach(instance => {
                 if (instance.isActive) {
                     this.updateTrajectory(instance);
                 }
             });
-
-            this.updateTimer = requestAnimationFrame(update);
-        };
-
-        update();
+        })
     }
 
     /**

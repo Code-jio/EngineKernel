@@ -506,9 +506,6 @@ export class CSS3DRenderPlugin extends BasePlugin {
      * 优化的更新方法 - 支持连续渲染和按需渲染
      */
     update(): void {
-        // 更新动画
-        this.animations.update()
-
         // 更新屏幕空间对象的位置
         this.updateScreenSpaceObjects()
 
@@ -700,11 +697,10 @@ export class CSS3DRenderPlugin extends BasePlugin {
             return
         }
 
-        this.updateHandler = () => {
+        eventBus.on("update", () => {
             this.update()
-        }
-
-        eventBus.on("update", this.updateHandler)
+        })
+        
         console.log("🎬 CSS3D渲染循环已启动")
     }
 

@@ -120,6 +120,7 @@ export class RenderLoop extends BasePlugin {
         }
     }
 
+    // 更新性能指标
     private updatePerformanceMetrics(currentTime: number): void {
         const deltaTime = currentTime - this.performanceMetrics.lastFrameTime;
         this.performanceMetrics.frameTime = deltaTime;

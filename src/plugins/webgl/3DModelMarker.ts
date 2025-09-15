@@ -1324,8 +1324,8 @@ export class ModelMarker extends BasePlugin {
      * 启动动画循环
      */
     private startAnimationLoop(): void {
-        eventBus.on("update", (modelId: string) => {
-            this.updateAnimations(this.clock.getDelta())
+        eventBus.on("update", ({ deltaTime, elapsedTime, frameTime, fps }) => {
+            this.updateAnimations(deltaTime)
         })
     }
 
@@ -1681,14 +1681,6 @@ export class ModelMarker extends BasePlugin {
             startAnimation()
         }
 
-        // 添加TWEEN更新到动画循环中
-        const updateTween = () => {
-            this.animateGroup.update()
-            if (isPlaying || isPaused) {
-                requestAnimationFrame(updateTween)
-            }
-        }
-        updateTween()
 
         // 返回控制接口
         return {
@@ -1928,8 +1920,8 @@ export class ModelMarker extends BasePlugin {
                 if (material.hasOwnProperty("color")) {
                     if (!material.userData.originalColor) {
                         material.userData.originalColor = (material as any).color.clone()
-                    }
-                    ;(material as any).color.copy(color)
+                    };
+                    (material as any).color.copy(color)
                     material.needsUpdate = true
                     return true
                 }
@@ -1979,7 +1971,7 @@ export class ModelMarker extends BasePlugin {
                     materials.forEach(material => {
                         if (material.userData.originalColor) {
                             if (material.hasOwnProperty("color")) {
-                                ;(material as any).color.copy(material.userData.originalColor)
+                                ; (material as any).color.copy(material.userData.originalColor)
                                 material.needsUpdate = true
                                 restoredCount++
                             }
@@ -2020,7 +2012,7 @@ export class ModelMarker extends BasePlugin {
      */
     public async moveToPosition(
         model: THREE.Group | THREE.Scene | string,
-        targetPosition: Array<number> | {x: number, y: number, z: number} | THREE.Vector3,
+        targetPosition: Array<number> | { x: number, y: number, z: number } | THREE.Vector3,
         options: {
             duration?: number;          // 运动时间（毫秒，默认2000ms）
             easing?: string;            // 缓动函数（默认'easeInOut'）
@@ -2093,7 +2085,7 @@ export class ModelMarker extends BasePlugin {
 
         // 起始位置
         const startPos = targetModel.position.clone();
-        
+
         // 动画状态
         let isPlaying = false;
         let isPaused = false;
@@ -2120,9 +2112,9 @@ export class ModelMarker extends BasePlugin {
         // 更新模型位置的函数
         const updateModelPosition = () => {
             currentProgress = progress.value;
-            
+
             if (!targetModel) return;
-            
+
             // 计算当前位置
             const currentPos = new THREE.Vector3().lerpVectors(startPos, targetPos, progress.value);
             targetModel.position.copy(currentPos);
@@ -2169,11 +2161,11 @@ export class ModelMarker extends BasePlugin {
 
                 // 触发事件
                 if (modelId) {
-                    eventBus.emit('model:moveStarted', { 
-                        modelId, 
+                    eventBus.emit('model:moveStarted', {
+                        modelId,
                         startPosition: startPos.toArray(),
                         targetPosition: targetPos.toArray(),
-                        duration: config.duration 
+                        duration: config.duration
                     });
                 }
 
@@ -2185,12 +2177,12 @@ export class ModelMarker extends BasePlugin {
                     })
                     .onComplete(() => {
                         isPlaying = false;
-                        
+
                         // 确保最终位置准确
                         if (targetModel) {
                             targetModel.position.copy(targetPos);
                         }
-                        
+
                         // 触发完成回调
                         if (config.onComplete) {
                             try {
@@ -2202,12 +2194,12 @@ export class ModelMarker extends BasePlugin {
 
                         // 触发事件
                         if (modelId) {
-                            eventBus.emit('model:moveCompleted', { 
-                                modelId, 
-                                position: targetPos.toArray() 
+                            eventBus.emit('model:moveCompleted', {
+                                modelId,
+                                position: targetPos.toArray()
                             });
                         }
-                        
+
                         resolve();
                     })
                     .start();
@@ -2215,14 +2207,11 @@ export class ModelMarker extends BasePlugin {
                 // 添加到动画组
                 this.animateGroup.add(currentTween);
 
-                // 启动动画循环
-                const animate = () => {
-                    if (isPlaying && !isPaused) {
-                        this.animateGroup.update();
-                        requestAnimationFrame(animate);
+                eventBus.on("update", () => {
+                    if (isPlaying || isPaused) {
+                        this.animateGroup.update()
                     }
-                };
-                animate();
+                })
             });
         };
 
@@ -2233,7 +2222,7 @@ export class ModelMarker extends BasePlugin {
                 this.animateGroup.remove(currentTween);
                 currentTween = null;
             }
-            
+
             isPlaying = false;
             isPaused = false;
             progress.value = 0;
@@ -2292,9 +2281,9 @@ export class ModelMarker extends BasePlugin {
                             }
                         }
                         if (modelId) {
-                            eventBus.emit('model:moveCompleted', { 
-                                modelId, 
-                                position: targetPos.toArray() 
+                            eventBus.emit('model:moveCompleted', {
+                                modelId,
+                                position: targetPos.toArray()
                             });
                         }
                     })
@@ -2335,5 +2324,4 @@ export class ModelMarker extends BasePlugin {
             isPlaying: isCurrentlyPlaying,
         };
     }
-
 }

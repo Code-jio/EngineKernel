@@ -15,6 +15,14 @@ interface Config {
     initialPosition?: { x: number; y: number; z: number } | THREE.Vector3
 }
 
+interface UpdateParams {
+    deltaTime: number;
+    elapsedTime: number;
+    frameTime: number;
+    fps:number;
+}
+
+
 /**
  * 喷水粒子系统类
  * 用于创建和控制喷水特效，支持自定义方向、速度和重力
@@ -96,8 +104,18 @@ export class FountainParticleSystem {
 
         this.createParticleMaterial()
         this.createParticleGeometry()
+        this.visible = false // 默认不显示
    
     }
+
+    get visible() {
+        return this.root.visible
+    }
+
+    set visible(value) {
+        this.root.visible = value
+    }
+
 
     /**
      * 创建粒子材质
@@ -214,7 +232,7 @@ export class FountainParticleSystem {
      * 每帧调用，处理粒子循环运动和物理模拟
      * @param {number} deltaTime - 时间增量（秒）
      */
-    update(deltaTime: number) {
+    update({ deltaTime }: { deltaTime: number }) {
         // 持续发射新粒子
         this.lastEmitTime += deltaTime
         const emitInterval = 1 / this.emissionRate
@@ -263,12 +281,13 @@ export class FountainParticleSystem {
             this.particleGeometry.attributes.size.needsUpdate = true
         }
 
+        this.particleGeometry.attributes.size.needsUpdate = true;
+
         // 保持恒定透明度
         if (this.particleMaterial) {
-            this.particleMaterial.opacity = 0.8
+            this.particleMaterial.opacity = 0.8;
         }
     }
-
     /**
      * 设置喷射方向
      * @param {Object | THREE.Vector3} direction - 喷射方向向量，支持{x,y,z}对象格式

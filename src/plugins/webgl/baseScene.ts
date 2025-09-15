@@ -491,30 +491,45 @@ interface CameraFlyToOptions {
     onComplete?: () => void
 }
 
+interface UpdateParams {
+    deltaTime: number;
+    elapsedTime: number;
+    frameTime: number;
+    fps: number;
+}
+
 export class BaseScene extends BasePlugin {
-    private camera: THREE.PerspectiveCamera | THREE.OrthographicCamera // 默认透视相机
-    private aspectRatio = window.innerWidth / window.innerHeight
-    private scene: THREE.Scene
-    private ambientLight: THREE.AmbientLight
-    private renderer: THREE.WebGLRenderer
-    private pipelineManager: PipelineManager
-    private directionalLight: THREE.DirectionalLight
-    private controls: BaseControls | null = null
+    public camera: THREE.PerspectiveCamera | THREE.OrthographicCamera // 默认透视相机
+    public aspectRatio = window.innerWidth / window.innerHeight
+    public scene: THREE.Scene
+    public ambientLight: THREE.AmbientLight
+    public renderer: THREE.WebGLRenderer
+    public pipelineManager: PipelineManager
+    public directionalLight: THREE.DirectionalLight
+    public controls: BaseControls | null = null
 
     // 相机管理相关
-    private cameraConfig!: {
+    public cameraConfig!: {
         perspectiveCamera: THREE.PerspectiveCamera
         orthographicCamera: THREE.OrthographicCamera
         currentMode: '2D' | '3D'
         switchAnimationDuration: number
     }
+    public cameraOption!: {
+        lookAt: number[],
+        position: number[],
+        type: "perspective" | "orthographic",
+        fov: number,
+        far: number,
+        near: number,
+    }
 
     // 地板管理器
-    private floorManager: FloorManager
-    private floorConfig: FloorConfig
+    public floorManager: FloorManager
+    public floorConfig: FloorConfig
 
     // 性能监控相关
-    private performanceMonitor: {
+    public performanceMonitor: {
         enabled: boolean
         stats: PerformanceStats
         lastTime: number
@@ -524,7 +539,7 @@ export class BaseScene extends BasePlugin {
     }
 
     // 渲染器高级配置
-    private rendererAdvancedConfig: {
+    public rendererAdvancedConfig: {
         container: HTMLElement | null
         physicallyCorrectLights: boolean
         outputColorSpace: string
@@ -536,7 +551,7 @@ export class BaseScene extends BasePlugin {
     }
 
     // Debug模式相关
-    private debugConfig: {
+    public debugConfig: {
         enabled: boolean
         gridHelper: boolean
         axesHelper: boolean
@@ -546,29 +561,29 @@ export class BaseScene extends BasePlugin {
     }
 
     // Debug辅助器实例
-    private debugHelpers: {
+    public debugHelpers: {
         gridHelper: THREE.GridHelper | null
         axesHelper: THREE.AxesHelper | null
     }
 
     // 抗锯齿配置
-    private antialiasConfig: AntialiasConfig
+    public antialiasConfig: AntialiasConfig
 
     // 深度管理配置
-    private depthConfig: DepthConfig
+    public depthConfig: DepthConfig
 
     // 增强的性能统计
-    private enhancedStats: EnhancedPerformanceStats
+    public enhancedStats: EnhancedPerformanceStats
 
     // 深度冲突计数器
-    private depthConflictCounter: number = 0
+    public depthConflictCounter: number = 0
 
-    private _flyTween: any = null
+    public _flyTween: any = null
 
     // 正交相机和相机状态保存
-    private orthographicCamera: THREE.OrthographicCamera | null = null
-    private perspectiveCamera: THREE.PerspectiveCamera | null = null
-    private lastCameraState: {
+    public orthographicCamera: THREE.OrthographicCamera | null = null
+    public perspectiveCamera: THREE.PerspectiveCamera | null = null
+    public lastCameraState: {
         position: THREE.Vector3
         quaternion: THREE.Quaternion
     } | null = null
@@ -634,7 +649,7 @@ export class BaseScene extends BasePlugin {
                     THREE.PCFSoftShadowMap,
                 pixelRatio: Math.min(
                     finalConfig.rendererConfig.pixelRatio ||
-                        window.devicePixelRatio,
+                    window.devicePixelRatio,
                     2
                 ),
             }
@@ -717,16 +732,16 @@ export class BaseScene extends BasePlugin {
                 nearFarRatio: this.depthConfig.depthRangeConfig.nearFarRatio,
             }
 
-            const cameraOption = finalConfig.cameraConfig
+            this.cameraOption = finalConfig.cameraConfig
             const rendererOption = {
                 ...finalConfig.rendererConfig,
             }
 
             // 初始化双相机系统
-            this.initializeDualCameraSystem(cameraOption)
+            this.initializeDualCameraSystem(this.cameraOption)
 
             // 设置主相机（根据配置类型）
-            if (cameraOption.type == 'perspective') {
+            if (this.cameraOption.type == 'perspective') {
                 this.camera = this.cameraConfig.perspectiveCamera
                 this.cameraConfig.currentMode = '3D'
             } else {
@@ -804,7 +819,7 @@ export class BaseScene extends BasePlugin {
             // 显示初始化信息
             const usedPreset = meta.userData.preset || 'highQuality'
             console.log(`✅ BaseScene初始化完成 - 使用预设: ${usedPreset}`, {
-                相机类型: cameraOption.type,
+                相机类型: this.cameraOption.type,
                 光照系统: 'Three.js r155+ 物理正确光照',
                 阴影系统: this.rendererAdvancedConfig.shadowMapEnabled
                     ? '启用'
@@ -897,6 +912,15 @@ export class BaseScene extends BasePlugin {
                 boundaryRadius: 100000,
             })
 
+            if (this.controls.control) {
+                this.controls.control.target.set(
+                    this.cameraOption.lookAt[0],
+                    this.cameraOption.lookAt[1],
+                    this.cameraOption.lookAt[2]
+                )
+
+            }
+
             console.log('🎮 控制器系统已初始化')
         } catch (error) {
             console.error('❌ 控制器初始化失败:', error)
@@ -920,10 +944,12 @@ export class BaseScene extends BasePlugin {
         perspectiveCamera.position.set(
             ...(cameraOption.position as [number, number, number])
         )
-        perspectiveCamera.lookAt(
-            ...(cameraOption.lookAt as [number, number, number])
-        )
-
+        // perspectiveCamera.lookAt(
+        //     cameraOption.lookAt[0],
+        //     cameraOption.lookAt[1],
+        //     cameraOption.lookAt[2],
+        // )
+        console.log(cameraOption.lookAt, "lookAt")
         // 创建正交相机（2D）- 专用于俯视视角
         const frustumSize = 1000 // 适中的视锥体大小，便于观察和缩放
         const orthographicCamera = new THREE.OrthographicCamera(
@@ -937,15 +963,15 @@ export class BaseScene extends BasePlugin {
 
         // 初始化zoom属性（OrbitControls需要）logarithmicDepthBuffer: Boolean
         orthographicCamera.zoom = 1.0
-        orthographicCamera.updateProjectionMatrix()
+        orthographicCamera.updateProjectionMatrix();
 
         // 标记这是一个俯视相机，用于后续的控制限制
-        ;(orthographicCamera as any).isTopDownCamera = true
+        (orthographicCamera as any).isTopDownCamera = true
 
         // 设置正交相机为俯视模式
         orthographicCamera.position.set(0, 100, 0) // 从上方俯视
         orthographicCamera.lookAt(0, 0, 0) // 向下看向原点
-        orthographicCamera.up.set(0, 1, 0) // Z轴为上方向（标准俯视）
+        orthographicCamera.up.set(0, 1, 0) // Y轴为上方向（标准俯视）
 
         // 初始化相机配置对象
         this.cameraConfig = {
@@ -1486,38 +1512,8 @@ export class BaseScene extends BasePlugin {
             renderer: this.renderer,
         })
 
-        eventBus.on('update', () => {
-            const deltaTime = performance.now()
-
-            // 更新TWEEN动画（相机切换动画）
-            tween_group.update(deltaTime)
-
-            // 性能监控
-            if (this.performanceMonitor.enabled) {
-                this.updatePerformanceStats()
-            }
-
-            // 更新地板动画
-            this.floorManager.updateFloor(deltaTime, this.camera)
-
-            // 更新反射（如果是反射地板或水面地板）
-            if (
-                this.floorConfig.type === 'reflection' ||
-                this.floorConfig.type === 'water'
-            ) {
-                this.floorManager.updateReflection(this.camera, this.renderer)
-            }
-
-            // 添加控制器更新（关键修复）
-            if (this.controls) {
-                const control = this.controls.getControl()
-                if (control && typeof control.update === 'function') {
-                    control.update()
-                }
-            }
-
-            // 渲染场景（使用当前激活的相机）
-            this.renderer.render(this.scene, this.camera)
+        eventBus.on('update', ({ deltaTime, elapsedTime, frameTime, fps }) => {
+            this.update({ deltaTime, elapsedTime, frameTime, fps })
         })
     }
 
@@ -1532,7 +1528,8 @@ export class BaseScene extends BasePlugin {
     ): void {
         // 设置渲染器尺寸
         this.renderer.setSize(width, height)
-        this.renderer.setPixelRatio(window.devicePixelRatio * 1.5) // 这里一般不×2，目前×2是为了抵消实际项目中使用的v-scale-screen缩放后造成的渲染模糊问题
+        // this.renderer.setPixelRatio(window.devicePixelRatio * 1.5) // 这里一般不×2，目前×2是为了抵消实际项目中使用的v-scale-screen缩放后造成的渲染模糊问题
+        this.renderer.setPixelRatio(window.devicePixelRatio) // 这里一般不×2，目前×2是为了抵消实际项目中使用的v-scale-screen缩放后造成的渲染模糊问题
         console.log(width, height, 'width,height')
     }
 
@@ -1695,8 +1692,33 @@ export class BaseScene extends BasePlugin {
         console.log('🧹 BaseScene已销毁')
     }
 
-    update() {
-        // 预留给子类的更新方法
+    update({ deltaTime }: UpdateParams) {
+        // 性能监控
+        if (this.performanceMonitor.enabled) {
+            this.updatePerformanceStats()
+        }
+
+        // 更新地板动画
+        this.floorManager.updateFloor(deltaTime, this.camera)
+
+        // 更新反射（如果是反射地板或水面地板）
+        if (
+            this.floorConfig.type === 'reflection' ||
+            this.floorConfig.type === 'water'
+        ) {
+            this.floorManager.updateReflection(this.camera, this.renderer)
+        }
+
+        // 添加控制器更新（关键修复）
+        if (this.controls) {
+            const control = this.controls.getControl()
+            if (control && typeof control.update === 'function') {
+                control.update()
+            }
+        }
+
+        // 渲染场景（使用当前激活的相机）
+        this.renderer.render(this.scene, this.camera)
     }
 
     // 添加Debug辅助器
@@ -2177,7 +2199,7 @@ export class BaseScene extends BasePlugin {
     public cameraFlyTo(options: CameraFlyToOptions | CameraState): void {
         // 处理不同的输入格式
         let finalOptions: CameraFlyToOptions
-        let control:any
+        let control: any
 
         // 检查是否为 CameraState 格式（包含 mode 属性）
         if ('mode' in options) {
@@ -2257,7 +2279,7 @@ export class BaseScene extends BasePlugin {
         const currentQuaternion = new THREE.Quaternion().setFromEuler(this.camera.rotation)
 
         const currentTarget = control?.target.clone() // 现在的注视目标
-        
+
         const endTarget = new THREE.Vector3(
             finalOptions.lookAt?.x ?? 0,
             finalOptions.lookAt?.y ?? 0,
@@ -2282,7 +2304,6 @@ export class BaseScene extends BasePlugin {
             .onUpdate((obj) => {
                 // 更新相机位置
                 this.camera.position.copy(obj.position)
-                
                 if (finalOptions.enableLookAt) {
                     // 启用注视模式：相机始终看向目标点
                     if (control) {
@@ -2292,31 +2313,27 @@ export class BaseScene extends BasePlugin {
                         // 如果没有控制器，直接设置相机朝向
                         this.camera.lookAt(obj.target)
                     }
-                } else {
-                    // 禁用注视模式：使用四元数直接设置相机姿态
-                    this.camera.quaternion.copy(obj.quaternion)
                 }
                 // 手动触发渲染更新
-                this.renderer.render(this.scene, this.camera)
+                // this.renderer.render(this.scene, this.camera)
             })
-            .onComplete(() => {
+            .onComplete((obj) => {
                 // 恢复控制器状态
                 if (control) {
                     control.enabled = true
                     // 确保最终状态正确
                     if (finalOptions.enableLookAt) {
                         control.target.copy(endTarget)
+                    }else{
+                        // 禁用注视模式：使用四元数直接设置相机姿态
+                        this.camera.quaternion.copy(obj.quaternion)
                     }
-                    control.update()
                 }
 
                 // 触发完成回调
                 if (finalOptions.onComplete) {
                     finalOptions.onComplete()
                 }
-
-                // 最终渲染
-                this.renderer.render(this.scene, this.camera)
             })
             .start()
 
@@ -2548,7 +2565,7 @@ export class BaseScene extends BasePlugin {
      * 使用等轴测视角，确保场景完整可见，注视场景中心点
      */
     public autoFitScene(): void {
-        // 1. 计算场景包围盒和中心点
+        // 计算场景包围盒和中心点
         const viewInfo = this.initializeView()
 
         if (!viewInfo.hasValidBounds) {
@@ -2558,39 +2575,27 @@ export class BaseScene extends BasePlugin {
 
         const { boundingBox, center } = viewInfo
 
-        // 2. 计算包围盒尺寸
         const size = new THREE.Vector3()
         boundingBox!.getSize(size)
 
-        // 3. 计算场景的最大尺寸
         const maxDimension = Math.max(size.x, size.y, size.z)
 
-        // 4. 获取当前相机FOV并计算合适的距离
+        // 获取当前相机FOV并计算合适的距离
         const currentCamera = this.camera as THREE.PerspectiveCamera
         const fov = currentCamera.fov || 45
         const fovRad = (fov * Math.PI) / 180
 
-        // 计算距离，包含1.5倍边距确保场景完整可见
+        // 包含1.5倍边距确保场景完整可见
         const distance = (maxDimension * 1.5) / (2 * Math.tan(fovRad / 2))
 
-        // 5. 计算等轴测相机位置（45度角，从右上前方观察）
+        // 计算等轴测相机位置（45度角，从右上前方观察）
         const cameraPosition = new THREE.Vector3(
             center.x + distance * 0.7071, // cos(45°) ≈ 0.7071
             center.y + distance * 0.7071,
             center.z + distance * 0.7071
         )
 
-        console.log(`📷 自动适应场景:`)
-        console.log(
-            `   🎯 场景中心: (${center.x.toFixed(2)}, ${center.y.toFixed(2)}, ${center.z.toFixed(2)})`
-        )
-        console.log(
-            `   📍 相机位置: (${cameraPosition.x.toFixed(2)}, ${cameraPosition.y.toFixed(2)}, ${cameraPosition.z.toFixed(2)})`
-        )
-        console.log(`   📏 场景尺寸: ${maxDimension.toFixed(2)}`)
-        console.log(`   🚀 开始飞行...`)
-
-        // 6. 飞行到目标位置，注视场景中心点
+        // 飞行到目标位置，注视场景中心点
         this.cameraFlyTo({
             position: cameraPosition,
             lookAt: center,
@@ -2808,7 +2813,7 @@ export class BaseScene extends BasePlugin {
             this.cameraConfig.currentMode = '2D'
 
             // 设置正交相机位置和朝向
-            this.camera.position.copy(currentPosition)
+            // this.camera.position.copy(currentPosition)
 
             // 调整正交相机的视野匹配透视相机
             this.camera.left = frustum.left
@@ -2816,6 +2821,7 @@ export class BaseScene extends BasePlugin {
             this.camera.top = frustum.top
             this.camera.bottom = frustum.bottom
             this.camera.zoom = 1.0 // 重置缩放
+
 
             console.log(
                 `🔍 视野匹配: 距离=${distance.toFixed(2)}, 视野高度=${frustum.visibleHeight.toFixed(2)}, FOV=${perspectiveCamera.fov}°`
@@ -2939,7 +2945,7 @@ export class BaseScene extends BasePlugin {
         // mode参数支持："2D" | "3D" | "auto" | null，默认为"auto"自动切换
         const currentMode =
             this.controls?.getControl()?.object instanceof
-            THREE.PerspectiveCamera
+                THREE.PerspectiveCamera
                 ? '3D'
                 : '2D'
 
@@ -2986,14 +2992,14 @@ export class BaseScene extends BasePlugin {
                     //     }
                     // })
                     this.cameraFlyTo({
-                        position:{x:0,y:100,z:0},
-                        enableLookAt:false,
-                        rotation:{
-                            pitch:-90,
-                            yaw:0,
-                            roll:0
+                        position: { x: 0, y: 100, z: 0 },
+                        enableLookAt: false,
+                        rotation: {
+                            pitch: -90,
+                            yaw: 0,
+                            roll: 0
                         },
-                        onComplete:()=>{
+                        onComplete: () => {
                             try {
                                 // 俯视完成后，切换到正交相机
                                 this.switchCamera()
@@ -3129,9 +3135,11 @@ export class BaseScene extends BasePlugin {
             .easing(TWEEN.Easing.Quadratic.InOut)
             .onUpdate(() => {
                 // this.camera.position.set(targetPosition)
-                this.camera.updateMatrixWorld()
+                // this.camera.updateMatrixWorld()
             })
-            .onComplete(() => {})
+            .onComplete(() => {
+                // console.log("相机沿视线方向前进" + distance + "个单位")
+            })
             .start()
 
         tween_group.add(tween)

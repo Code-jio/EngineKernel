@@ -1,7 +1,13 @@
 import { THREE, BasePlugin } from "../basePlugin"
-import { CloudMarker } from "./cloudMarker"
 import eventBus from "../../eventBus/eventBus"
 import * as TWEEN from "@tweenjs/tween.js"
+
+interface UpdateParams {
+    deltaTime: number;
+    elapsedTime: number;
+    frameTime: number;
+    fps:number;
+}
 
 /**
  * 烟雾粒子系统类
@@ -21,18 +27,18 @@ export class SmokeParticleSystem {
         spread: THREE.Vector3;
         url: string
     } = {
-        maxParticles: 1000,
-        particleSize: 2.0,
-        emissionRate: 50,
-        lifetime: 5.0,
-        windForce: new THREE.Vector3(0.5, 0.8, 0.1),
-        turbulence: 0.3,
-        colorStart: new THREE.Color(0x888888),
-        colorEnd: new THREE.Color(0x333333),
-        position: new THREE.Vector3(0, 0, 0),
-        spread: new THREE.Vector3(10, 5, 10),
-        url: ""
-    };
+            maxParticles: 1000,
+            particleSize: 2.0,
+            emissionRate: 50,
+            lifetime: 5.0,
+            windForce: new THREE.Vector3(0.5, 0.8, 0.1),
+            turbulence: 0.3,
+            colorStart: new THREE.Color(0x888888),
+            colorEnd: new THREE.Color(0x333333),
+            position: new THREE.Vector3(0, 0, 0),
+            spread: new THREE.Vector3(10, 5, 10),
+            url: ""
+        };
 
     private particles: Array<{
         index: number;
@@ -110,9 +116,18 @@ export class SmokeParticleSystem {
         this.activeParticles = [];
         this.clock = new THREE.Clock();
         this.emitter = null;
-        
+
         this.init();
     }
+
+    get visible() {
+        return this.particleSystem.visible
+    }
+
+    set visible(value) {
+        this.particleSystem.visible = value
+    }
+
 
     init() {
         // 创建粒子几何体
@@ -131,7 +146,7 @@ export class SmokeParticleSystem {
 
         if (!this.options.url) {
             throw new Error("未传入url参数")
-        }else{
+        } else {
             this.smokeTexture = new THREE.TextureLoader().load(this.options.url);
         }
 
@@ -206,6 +221,8 @@ export class SmokeParticleSystem {
 
         this.particleSystem = new THREE.Points(this.geometry, this.material);
         this.particleSystem.name = "smoke"
+        this.visible = false // 默认不显示
+
         this.scene.add(this.particleSystem);
 
         // 初始化粒子池
@@ -242,7 +259,7 @@ export class SmokeParticleSystem {
         particle.active = true;
         particle.age = 0;
         particle.lifetime = this.options.lifetime * (0.8 + Math.random() * 0.4);
-        
+
         // 随机初始位置
         particle.position.copy(this.options.position);
         particle.position.x += (Math.random() - 0.5) * this.options.spread.x;
@@ -263,9 +280,9 @@ export class SmokeParticleSystem {
         this.activeParticles.push(particle);
     }
 
-    update(deltaTime: number) {
+    update({ deltaTime, elapsedTime, frameTime, fps }: UpdateParams) {
         const currentTime = this.clock.getElapsedTime();
-        
+
         // 更新着色器时间
         this.material.uniforms.time.value = currentTime;
 
@@ -292,7 +309,7 @@ export class SmokeParticleSystem {
 
             // 更新位置
             particle.position.add(particle.velocity.clone().multiplyScalar(deltaTime));
-            
+
             // 添加风力和湍流
             const turbulence = new THREE.Vector3(
                 (Math.random() - 0.5) * this.options.turbulence,
@@ -359,125 +376,125 @@ export class SmokeParticleSystem {
             this.material.dispose();
         }
     }
-      /**
-   * 让烟雾逐渐变大
-   * @param {number} targetScale - 目标缩放倍数 (默认2.0)
-   * @param {number} duration - 变大持续时间（秒，默认3.0）
-   * @param {Function} onComplete - 完成回调函数
-   */
-  growSmoke(targetScale = 2.0, duration = 3.0, onComplete: (() => void) | null = null) {
-    if (this.growAnimation) {
-      this.growAnimation.stop();
-    }
-
-    this.growAnimation = new TWEEN.Tween({ scale: 1.0 })
-      .to({ scale: targetScale }, duration * 1000)
-      .easing(TWEEN.Easing.Quadratic.Out)
-      .onUpdate((obj) => {
-        this.currentScale = obj.scale;
-        this.particleSystem.scale.setScalar(obj.scale);
-
-        // 同步调整发射位置的范围
-        const scaleFactor = obj.scale;
-        this.options.spread.multiplyScalar(1 + (scaleFactor - 1) * 0.1);
-      })
-      .onComplete(() => {
-        if (onComplete) onComplete();
-        this.growAnimation = null;
-      })
-      .start();
-  }
-
-  /**
-   * 让烟雾逐渐变小直到消失
-   * @param {number} duration - 变小持续时间（秒，默认2.0）
-   * @param {Function} onComplete - 完成回调函数
-   */
-  shrinkSmoke(duration = 2.0, onComplete: (() => void) | null = null) {
-    if (this.shrinkAnimation) {
-      this.shrinkAnimation.stop();
-    }
-
-    // 获取当前缩放值
-    const currentScale = this.currentScale || 1.0;
-
-    this.shrinkAnimation = new TWEEN.Tween({
-      scale: currentScale,
-      opacity: 1.0,
-    })
-      .to({ scale: 0.0, opacity: 0.0 }, duration * 1000)
-      .easing(TWEEN.Easing.Quadratic.In)
-      .onUpdate((obj) => {
-        this.currentScale = obj.scale;
-        this.particleSystem.scale.setScalar(obj.scale);
-
-        // 同时降低透明度
-        if (this.material.uniforms) {
-          this.material.uniforms.globalOpacity = { value: obj.opacity };
+    /**
+     * 让烟雾逐渐变大
+     * @param {number} targetScale - 目标缩放倍数 (默认2.0)
+     * @param {number} duration - 变大持续时间（秒，默认3.0）
+     * @param {Function} onComplete - 完成回调函数
+     */
+    growSmoke(targetScale: number = 2.0, duration: number = 3.0, onComplete: (() => void) | null = null) {
+        if (this.growAnimation) {
+            this.growAnimation.stop();
         }
 
-        // 逐渐减小发射率
-        const emissionRatio = obj.scale / currentScale;
-        this.originalEmissionRate =
-          this.originalEmissionRate || this.options.emissionRate;
-        this.options.emissionRate = this.originalEmissionRate * emissionRatio;
-      })
-      .onComplete(() => {
-        // 完全停止发射
-        this.options.emissionRate = 0;
+        this.growAnimation = new TWEEN.Tween({ scale: 1.0 })
+            .to({ scale: targetScale }, duration * 1000)
+            .easing(TWEEN.Easing.Quadratic.Out)
+            .onUpdate((obj) => {
+                this.currentScale = obj.scale;
+                this.particleSystem.scale.setScalar(obj.scale);
 
-        // 隐藏粒子系统
-        this.particleSystem.visible = false;
-
-        if (onComplete) onComplete();
-        this.shrinkAnimation = null;
-      })
-      .start();
-  }
-
-  /**
-   * 重置烟雾到初始状态
-   */
-  resetSmoke() {
-    if (this.growAnimation) {
-      this.growAnimation.stop();
-      this.growAnimation = null;
-    }
-    if (this.shrinkAnimation) {
-      this.shrinkAnimation.stop();
-      this.shrinkAnimation = null;
+                // 同步调整发射位置的范围
+                const scaleFactor = obj.scale;
+                this.options.spread.multiplyScalar(1 + (scaleFactor - 1) * 0.1);
+            })
+            .onComplete(() => {
+                if (onComplete) onComplete();
+                this.growAnimation = null;
+            })
+            .start();
     }
 
-    // 重置缩放
-    this.currentScale = 1.0;
-    this.particleSystem.scale.setScalar(1.0);
+    /**
+     * 让烟雾逐渐变小直到消失
+     * @param {number} duration - 变小持续时间（秒，默认2.0）
+     * @param {Function} onComplete - 完成回调函数
+     */
+    shrinkSmoke(duration: number = 2.0, onComplete: (() => void) | null = null) {
+        if (this.shrinkAnimation) {
+            this.shrinkAnimation.stop();
+        }
 
-    // 重置透明度
-    if (this.material.uniforms) {
-      this.material.uniforms.globalOpacity = { value: 1.0 };
+        // 获取当前缩放值
+        const currentScale = this.currentScale || 1.0;
+
+        this.shrinkAnimation = new TWEEN.Tween({
+            scale: currentScale,
+            opacity: 1.0,
+        })
+            .to({ scale: 0.0, opacity: 0.0 }, duration * 1000)
+            .easing(TWEEN.Easing.Quadratic.In)
+            .onUpdate((obj) => {
+                this.currentScale = obj.scale;
+                this.particleSystem.scale.setScalar(obj.scale);
+
+                // 同时降低透明度
+                if (this.material.uniforms) {
+                    this.material.uniforms.globalOpacity = { value: obj.opacity };
+                }
+
+                // 逐渐减小发射率
+                const emissionRatio = obj.scale / currentScale;
+                this.originalEmissionRate =
+                    this.originalEmissionRate || this.options.emissionRate;
+                this.options.emissionRate = this.originalEmissionRate * emissionRatio;
+            })
+            .onComplete(() => {
+                // 完全停止发射
+                this.options.emissionRate = 0;
+
+                // 隐藏粒子系统
+                this.particleSystem.visible = false;
+
+                if (onComplete) onComplete();
+                this.shrinkAnimation = null;
+            })
+            .start();
     }
 
-    // 重置发射率
-    if (this.originalEmissionRate) {
-      this.options.emissionRate = this.originalEmissionRate;
+    /**
+     * 重置烟雾到初始状态
+     */
+    resetSmoke() {
+        if (this.growAnimation) {
+            this.growAnimation.stop();
+            this.growAnimation = null;
+        }
+        if (this.shrinkAnimation) {
+            this.shrinkAnimation.stop();
+            this.shrinkAnimation = null;
+        }
+
+        // 重置缩放
+        this.currentScale = 1.0;
+        this.particleSystem.scale.setScalar(1.0);
+
+        // 重置透明度
+        if (this.material.uniforms) {
+            this.material.uniforms.globalOpacity = { value: 1.0 };
+        }
+
+        // 重置发射率
+        if (this.originalEmissionRate) {
+            this.options.emissionRate = this.originalEmissionRate;
+        }
+
+        // 显示粒子系统
+        this.particleSystem.visible = true;
     }
 
-    // 显示粒子系统
-    this.particleSystem.visible = true;
-  }
-
-  /**
-   * 检查动画状态
-   * @returns {Object} 动画状态信息
-   */
-  getAnimationStatus() {
-    return {
-      isGrowing: !!this.growAnimation,
-      isShrinking: !!this.shrinkAnimation,
-      currentScale: this.currentScale || 1.0,
-      emissionRate: this.options.emissionRate,
-    };
-  }
+    /**
+     * 检查动画状态
+     * @returns {Object} 动画状态信息
+     */
+    getAnimationStatus() {
+        return {
+            isGrowing: !!this.growAnimation,
+            isShrinking: !!this.shrinkAnimation,
+            currentScale: this.currentScale || 1.0,
+            emissionRate: this.options.emissionRate,
+        };
+    }
 }
 
 /**
@@ -523,7 +540,7 @@ export class SmokeEffectManager {
         if (index !== -1) {
             this.effects[index].effect.destroy();
             this.effects.splice(index, 1);
-            
+
             // 从全局效果列表中移除
             if (this.effects) {
                 const index = this.effects.findIndex(e => e.effect === effect);
@@ -534,11 +551,11 @@ export class SmokeEffectManager {
         }
     }
 
-    update(deltaTime: number) {
+    update({ deltaTime, elapsedTime, frameTime, fps }: UpdateParams) {
         if (!this.effects) return;
         this.effects.forEach(({ effect }) => {
             if (effect.update) {
-                effect.update(deltaTime);
+                effect.update({ deltaTime, elapsedTime, frameTime, fps });
             }
         });
     }
@@ -560,7 +577,7 @@ declare global {
     interface Window {
         effects: Array<{
             type: string;
-            update: (deltaTime: number) => void;
+            update: ({ deltaTime, elapsedTime, frameTime, fps }: UpdateParams) => void;
             effect?: SmokeParticleSystem;
         }>;
     }

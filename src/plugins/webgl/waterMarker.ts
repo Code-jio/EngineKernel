@@ -6,6 +6,13 @@
 import { THREE } from "../basePlugin";
 import { Water } from "../../utils/three-imports"
 
+interface UpdateParams {
+    deltaTime: number;
+    elapsedTime: number;
+    frameTime: number;
+    fps:number;
+}
+
 // 水体配置接口
 interface WaterMarkerOptions {
     height: number; // 水体高度
@@ -47,9 +54,18 @@ export class WaterMarker {
         };
 
         this.group = new THREE.Group();
+        this.visible = false // 默认不显示
 
         this.validateOptions();
         this.init(this.options);
+    }
+
+    get visible() {
+        return this.group.visible
+    }
+
+    set visible(value){
+        this.group.visible = value 
     }
 
     /**
@@ -187,13 +203,7 @@ export class WaterMarker {
         
         // 使用ExtrudeGeometry创建几何体
         const extrudeGeometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
-        
-        // 修复：几何体变换顺序
-        // 1. 先旋转使其在XZ平面上，沿Y轴向上拉伸
         extrudeGeometry.rotateX(-Math.PI / 2);
-        
-        // 2. 将几何体移动到正确的世界位置
-        // 使用平均Y值作为基准高度，而不是最小值
         extrudeGeometry.translate(centerX, avgY, centerZ);
         
         console.log(`🔧 水体几何体创建完成: 轮廓点数=${this.options.contour.length}, 高度=${this.options.height}`);
@@ -216,7 +226,7 @@ export class WaterMarker {
     /**
      * 更新动画
      */
-    public update(deltaTime: number): void {
+    public update({ deltaTime, elapsedTime, frameTime, fps }: UpdateParams): void {
         if (!this.options.enableAnimation) return;
 
         this.animationTime += deltaTime * this.options.flowSpeed!;

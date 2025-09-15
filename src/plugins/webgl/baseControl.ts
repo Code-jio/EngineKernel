@@ -2,7 +2,6 @@
 import { THREE } from "../basePlugin"
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js"
 import eventBus from '../../eventBus/eventBus'
-import * as TWEEN from "@tweenjs/tween.js"
 
 export type OrbitControlOptions = {
     damping?: boolean
@@ -30,12 +29,12 @@ interface CameraFlyToOptions {
 }
 
 export class BaseControls {
-    private control: OrbitControls
-    private camera: THREE.PerspectiveCamera | THREE.OrthographicCamera
-    private boundaryRadius: number = 20000 // 默认边界半径
-    private controlLayer: HTMLElement
-    private currentMode: '2D' | '3D' = '3D' // 当前相机模式
-    private saved3DLimits: any = null // 保存3D模式的限制
+    public control: OrbitControls
+    public camera: THREE.PerspectiveCamera | THREE.OrthographicCamera
+    public boundaryRadius: number = 20000 // 默认边界半径
+    public controlLayer: HTMLElement
+    public currentMode: '2D' | '3D' = '3D' // 当前相机模式
+    public saved3DLimits: any = null // 保存3D模式的限制
 
     constructor(camera: THREE.PerspectiveCamera | THREE.OrthographicCamera, domElement?: HTMLElement, options?: OrbitControlOptions) {
 
@@ -326,93 +325,5 @@ export class BaseControls {
 
     public destroy() {
         this.control.dispose()
-    }
-
-    /**
-     * 相机平滑飞行到目标位置
-     * @param options CameraFlyToOptions
-     */
-    public cameraFlyTo(options: CameraFlyToOptions): void {
-        // 默认参数配置
-        const defaultOptions: CameraFlyToOptions = {
-            position: new THREE.Vector3(0, 0, 0), // 必须由用户传入，默认值仅作兜底
-            lookAt: undefined,                    // 默认朝向目标点
-            duration: 1000,                       // 默认1秒
-            delay: 0,                             // 默认无延迟
-            autoLookAt: true,                     // 默认自动lookAt
-            easing: (t: number) => t,             // 默认线性
-            onUpdate: undefined,                  // 默认无回调
-            onComplete: undefined                 // 默认无回调
-        };
-
-        // 合并用户参数和默认参数
-        const finalOptions = { ...defaultOptions, ...options };
-
-        // 参数校验
-        if (!finalOptions.position || !(finalOptions.position instanceof THREE.Vector3)) {
-            console.error("cameraFlyTo: 需要传入目标位置（THREE.Vector3）");
-            return;
-        }
-
-        const duration = finalOptions.duration!;
-        const delay = finalOptions.delay!;
-        const easing = finalOptions.easing!;
-        const lookAtTarget = finalOptions.lookAt ? finalOptions.lookAt.clone() : finalOptions.position.clone();
-        const autoLookAt = finalOptions.autoLookAt!;
-
-        // 记录起始位置和朝向
-        const startPosition = this.camera.position.clone();
-        const startTarget = this.control.target.clone();
-
-        // 用于tween插值的对象
-        const tweenObj = {
-            camX: startPosition.x,
-            camY: startPosition.y,
-            camZ: startPosition.z,
-            targetX: startTarget.x,
-            targetY: startTarget.y,
-            targetZ: startTarget.z
-        };
-
-        // 动画互斥：如有上一个飞行动画，先停止
-        if ((this as any)._flyTween && typeof (this as any)._flyTween.stop === 'function') {
-            (this as any)._flyTween.stop();
-        }
-
-        // 创建TWEEN动画
-        (this as any)._flyTween = new TWEEN.Tween(tweenObj)
-            .to({
-                camX: finalOptions.position.x,
-                camY: finalOptions.position.y,
-                camZ: finalOptions.position.z,
-                targetX: lookAtTarget.x,
-                targetY: lookAtTarget.y,
-                targetZ: lookAtTarget.z
-            }, duration)
-            .delay(delay)
-            .easing(easing)
-            .onUpdate(() => {
-                // 每帧更新相机和target
-                this.camera.position.set(tweenObj.camX, tweenObj.camY, tweenObj.camZ);
-                this.control.target.set(tweenObj.targetX, tweenObj.targetY, tweenObj.targetZ);
-                this.control.update();
-                // 自动lookAt（如需禁用则跳过）
-                if (autoLookAt) {
-                    this.camera.lookAt(this.control.target);
-                }
-                finalOptions.onUpdate?.();
-            })
-            .onComplete(() => {
-                // 动画结束，确保到达最终状态
-                this.camera.position.copy(finalOptions.position);
-                this.control.target.copy(lookAtTarget);
-                this.control.update();
-                if (autoLookAt) {
-                    this.camera.lookAt(this.control.target);
-                }
-                finalOptions.onComplete?.();
-                (this as any)._flyTween = null;
-            })
-            .start();
     }
 }

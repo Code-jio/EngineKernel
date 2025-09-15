@@ -1,6 +1,7 @@
 import { THREE, BasePlugin } from "../basePlugin"
 import { WaterMarker } from "./waterMarker";
 import * as TWEEN from "@tweenjs/tween.js"
+import { Water } from "../../utils/three-imports"
 
 export class WaterMarkerPlugin extends BasePlugin{
     private scenePlugin: any
@@ -13,7 +14,9 @@ export class WaterMarkerPlugin extends BasePlugin{
 
     public createWaterMarker(options: any){
         this.waterMarker = new WaterMarker(options)
-        let waterMaterial = this.scenePlugin.floorManager.floor.material
+        let waterMaterial = this.scenePlugin.floorManager.floor.material.clone()
+        // let waterMaterial = new THREE.Material().copy(this.scenePlugin.floorManager.floor.material)
+        // let waterMaterial = this.createWaterMaterial()
 
         // 安全地访问和设置材质
         const mesh = this.waterMarker.getGroup().children[0] as THREE.Mesh
@@ -206,4 +209,49 @@ export class WaterMarkerPlugin extends BasePlugin{
             return 0;
         }
     }
+
+        /**
+         * 创建水面材质（仅用于顶面）
+         */
+        private createWaterMaterial(): THREE.ShaderMaterial {
+            let waterConfig = {
+                textureWidth: 512,
+                textureHeight: 512,
+                alpha: 1.0,
+                time: 0,
+                waterColor: 0x4a90e2,
+                distortionScale: 2.0,
+                waterNormalsUrl: "./textures/waternormals.jpg",
+                animationSpeed: 0.3,
+                waveScale: 0.5
+            };
+            const finalWaterColor = waterConfig.waterColor
+    
+            // 处理其他可选属性的默认值
+            const finalTextureWidth = waterConfig.textureWidth || 512
+            const finalTextureHeight = waterConfig.textureHeight || 512
+            const finalAlpha = waterConfig.alpha !== undefined ? waterConfig.alpha : 0
+            const finalDistortionScale = waterConfig.distortionScale !== undefined ? waterConfig.distortionScale : 3.7
+            
+            
+            // 创建水面几何体
+            const waterGeometry = new THREE.PlaneGeometry(100, 100)
+    
+            // 创建水面
+            const water = new Water(waterGeometry, {
+                textureWidth: finalTextureWidth,
+                textureHeight: finalTextureHeight,
+                waterNormals: new THREE.TextureLoader().load(
+                    waterConfig.waterNormalsUrl || "./textures/waternormals.jpg",
+                    function (texture) {
+                        texture.wrapS = texture.wrapT = THREE.RepeatWrapping
+                    },
+                ),
+                sunDirection: new THREE.Vector3(),
+                waterColor: finalWaterColor,
+                distortionScale: finalDistortionScale,
+            })
+    
+            return water.material
+        }
 }

@@ -7,7 +7,6 @@
 import { THREE, BasePlugin } from "../basePlugin"
 import * as TWEEN from "@tweenjs/tween.js"
 import eventBus from "../../eventBus/eventBus"
-import { debug } from "console"
 
 /**
  * 楼层状态枚举
@@ -22,7 +21,7 @@ export enum FloorState {
  * 楼层项接口
  */
 export interface FloorItem {
-    group: THREE.Group | THREE.Object3D | THREE.Scene // 楼层组对象
+    group: THREE.Object3D // 楼层组对象
     floorNumber: number // 楼层号
     originalPosition: THREE.Vector3 // 原始位置
     targetPosition: THREE.Vector3 // 目标位置
@@ -39,7 +38,7 @@ export interface FloorItem {
 }
 
 export interface RoomItem {
-    group: THREE.Group | THREE.Object3D | THREE.Scene // 房间组对象
+    group: THREE.Object3D // 房间组对象
     roomNumber: string // 房间号
     floorNumber: number
     originalPosition: THREE.Vector3 // 原始位置
@@ -287,10 +286,6 @@ export class BuildingControlPlugin extends BasePlugin {
         this.debugMode = params.debugMode || false
 
         // this.floorControlConfig.expandDistance = params.userData.expandDistance
-
-        eventBus.on("update", () => {
-            this.activeTweens && this.activeTweens.update()
-        })
     }
 
     public async init(scenePlugin?: any): Promise<void> {
@@ -483,7 +478,7 @@ export class BuildingControlPlugin extends BasePlugin {
                 }
 
                 result.statistics.unrecognizedObjects.push(child)
-                console.warn(`⚠️ 未识别的对象: ${modelName} (${objectName})`)
+                // console.warn(`⚠️ 未识别的对象: ${modelName} (${objectName})`)
             })
 
             // 计算统计信息
@@ -688,7 +683,7 @@ export class BuildingControlPlugin extends BasePlugin {
 
         floor &&
             floor.rooms.push({
-                group: roomObject as THREE.Group,
+                group: roomObject,
                 roomNumber: roomInfo.roomCode,
                 originalPosition: roomObject.position.clone(),
                 targetPosition: roomObject.position.clone(),
@@ -709,6 +704,7 @@ export class BuildingControlPlugin extends BasePlugin {
             associatedEquipment: [],
         })
 
+        this.reextractAllRoomBoundings()
     }
 
     /**
@@ -1134,7 +1130,7 @@ export class BuildingControlPlugin extends BasePlugin {
         try {
             // 提取顶面轮廓（用于常规用途）
             const topBoundingVertices = this.extractTopFaceVertices(floorMesh)
-            
+
             // 提取底面轮廓（用于水体标注）
             const bottomBoundingVertices = this.extractBottomFaceVertices(floorMesh)
 
@@ -1204,8 +1200,8 @@ export class BuildingControlPlugin extends BasePlugin {
      * @param roomCode 房间代码（如 "R101" 或 "1F_R101"）
      * @returns 房间对象，如果不存在返回null
      */
-    public getRoomObject(roomCode: string): THREE.Object3D | null {
-        return this.rooms.get(roomCode)?.group || null
+    public getRoomObject(roomCode: string){
+        return this.rooms.get(roomCode)?.group
     }
 
     /**
@@ -1548,7 +1544,7 @@ export class BuildingControlPlugin extends BasePlugin {
                                 if (that.facadeGroup.userData.originalY === undefined) {
                                     that.facadeGroup.userData.originalY = that.facadeGroup.position.y
                                 }
-                                that.facadeGroup.position.y = 
+                                that.facadeGroup.position.y =
                                     that.facadeGroup.userData.originalY + floor.group.position.y - floor.originalPosition.y
                             }
                         })
@@ -1723,7 +1719,7 @@ export class BuildingControlPlugin extends BasePlugin {
      */
     private setFloorOpacity(floor: FloorItem, opacity: number): void {
         // floor.group.visible = opacity ? true : false
-        floor.group.traverse((item)=>{
+        floor.group.traverse((item) => {
             item.visible = opacity ? true : false
         })
 
@@ -1749,7 +1745,7 @@ export class BuildingControlPlugin extends BasePlugin {
         // })
         // equipment.visible = opacity ? true : false
 
-        equipment.traverse((item)=>{
+        equipment.traverse((item) => {
             item.visible = opacity ? true : false
         })
     }
@@ -1763,9 +1759,9 @@ export class BuildingControlPlugin extends BasePlugin {
         if (!this.config.enableEquipmentDisplayControl) {
             return // 如果未启用设备显示控制，则不进行任何操作
         }
-        
+
         equipment.visible = visible
-        
+
         if (this.debugMode) {
             console.log(`🔧 设备显示状态: ${this.getModelName(equipment)} → ${visible ? '显示' : '隐藏'}`)
         }
@@ -1826,18 +1822,18 @@ export class BuildingControlPlugin extends BasePlugin {
 
         // 获取最大楼层号
         const maxFloor = Math.max(...Array.from(this.floors.keys()))
-        
+
         // 设置设备显示状态
         this.allDevices.forEach(device => {
             const info = device.userData.equipmentInfo
             if (!info) return
-            
+
             // 判断是否为顶楼设备
             const isTopFloorDevice = info.floorNumber === maxFloor
-            
+
             // 设置设备显示状态（直接操作visible属性）
             device.visible = isTopFloorDevice
-            
+
             // 调试模式下输出日志
             if (this.debugMode) {
                 console.log(`🔧 设备 ${device.name} 初始状态: ${isTopFloorDevice ? '显示' : '隐藏'}`)
@@ -1931,7 +1927,7 @@ export class BuildingControlPlugin extends BasePlugin {
         // })
         // room.visible = opacity ? true : false
 
-        room.traverse((item)=>{
+        room.traverse((item) => {
             item.visible = opacity ? true : false
         })
     }
@@ -1988,7 +1984,7 @@ export class BuildingControlPlugin extends BasePlugin {
         // })
 
         // target.visible = true
-        target.traverse((item)=>{
+        target.traverse((item) => {
             item.visible = true
         })
     }
@@ -2065,7 +2061,7 @@ export class BuildingControlPlugin extends BasePlugin {
         //     facade.visible = true
         // })
         // this.facadeGroup.visible = true
-        this.facadeGroup.traverse((item)=>{
+        this.facadeGroup.traverse((item) => {
             item.visible = true
         })
     }
@@ -2485,7 +2481,7 @@ export class BuildingControlPlugin extends BasePlugin {
                 child.userData.equipmentInfo = equipmentInfo
                 this.allDevices.push(child)
 
-                console.log(`🔧 发现设备: ${equipmentName} (楼层:${floorNumber}F, 房间:${roomCode || "无"})`)
+                // console.log(`🔧 发现设备: ${equipmentName} (楼层:${floorNumber}F, 房间:${roomCode || "无"})`)
             }
         })
 
@@ -2771,11 +2767,17 @@ export class BuildingControlPlugin extends BasePlugin {
         meshName: string
     } | null {
         const roomObject = this.getRoomObject(roomCode)
-        
+
         if (!roomObject || !roomObject.userData || !roomObject.userData.bounding) {
             return null
         }
-        return roomObject.userData.bounding
+
+        if (roomObject instanceof THREE.Mesh) {
+            return roomObject.geometry.boundingSphere
+        }else{
+            return roomObject.userData.bounding
+        }
+
     }
 
     /**
@@ -2814,20 +2816,20 @@ export class BuildingControlPlugin extends BasePlugin {
         if (!roomObject) {
             console.warn(`⚠️ 房间 ${roomCode} 不存在`)
             return {
-                result:false
+                result: false
             }
         }
 
         try {
             this.extractAndSaveRoomBounding(roomObject, roomCode)
             return {
-                userdata:roomObject.userData,
-                result:true
+                userdata: roomObject.userData,
+                result: true
             }
         } catch (error) {
             console.error(`❌ 重新提取房间 ${roomCode} 轮廓失败:`, error)
             return {
-                result:false
+                result: false
             }
         }
     }
@@ -2848,7 +2850,7 @@ export class BuildingControlPlugin extends BasePlugin {
             }
         })
 
-        console.log(`✅ 重新提取完成，成功处理 ${successCount}/${this.rooms.size} 个房间`)
+        // console.log(`✅ 重新提取完成，成功处理 ${successCount}/${this.rooms.size} 个房间`)
         return successCount
     }
 
@@ -2973,7 +2975,7 @@ export class BuildingControlPlugin extends BasePlugin {
     public toggleEquipmentDisplayControl(enable: boolean): void {
         this.config.enableEquipmentDisplayControl = enable
         console.log(`🔧 设备显示控制开关: ${enable ? '启用' : '禁用'}`)
-        
+
         if (enable) {
             // 启用时，根据当前状态管理设备显示
             this.manageEquipmentDisplayForFocus(this.focusedFloor)
@@ -3010,7 +3012,7 @@ export class BuildingControlPlugin extends BasePlugin {
         const equipmentByFloor = Array.from(this.floors.entries()).map(([floorNumber, floor]) => {
             let floorVisible = 0
             let floorHidden = 0
-            
+
             floor.associatedEquipment.forEach(equipmentInfo => {
                 if (equipmentInfo.equipment.visible) {
                     floorVisible++
@@ -3093,7 +3095,7 @@ export class BuildingControlPlugin extends BasePlugin {
         meshName: string
     } | null {
         const roomObject = this.getRoomObject(roomCode)
-        
+
         if (!roomObject || !roomObject.userData || !roomObject.userData.waterBounding) {
             return null
         }
@@ -3135,7 +3137,7 @@ export class BuildingControlPlugin extends BasePlugin {
     public addObjectToRoom(roomNumber: string, object3D: THREE.Object3D): void {
         // 查找对应的房间
         const room = this.rooms.get(roomNumber)
-        
+
         if (!room) {
             console.warn(`⚠️ 未找到房间号: ${roomNumber}，无法添加对象`)
             return
@@ -3143,30 +3145,28 @@ export class BuildingControlPlugin extends BasePlugin {
 
         try {
             // 将对象添加到房间的children集合中
+            // let position = room.group.geometry.boundingSphere
+
+            let bounding = this.getRoomBounding(roomNumber)
+            if (bounding && bounding.center) {
+                object3D.position.set(bounding?.center.x, bounding?.center.y + 1, bounding?.center.z) // 高度 + 1
+            }
+
             room.group.add(object3D)
-            
-            // 更新对象的父级关系
-            object3D.parent = room.group
-            // console.log(room.group, "room.group")
-            // room.group.updateMatrixWorld()
-            object3D.position.copy(
-                object3D.position.add(room.group.position)
-            )
-            
             console.log(`✅ 成功将对象添加到房间 ${roomNumber}`)
-            
+
             // 如果房间当前不可见，设置对象也不可见
             if (!room.isVisible) {
                 object3D.visible = false
             }
-            
+
             // 触发房间内容更新事件
             eventBus.emit('roomContentUpdated', {
                 roomNumber: roomNumber,
                 action: 'addObject',
                 object: object3D
             })
-            
+
         } catch (error) {
             console.error(`❌ 添加对象到房间 ${roomNumber} 时发生错误:`, error)
         }
@@ -3182,7 +3182,7 @@ export class BuildingControlPlugin extends BasePlugin {
             // 在所有设备中查找匹配的设备
             let targetDevice: THREE.Object3D | undefined
 
-            
+
             // 优先在allDevices中查找，这是最直接的方式
             targetDevice = this.allDevices.find(device => {
                 const info = device.userData.equipmentInfo
@@ -3192,7 +3192,7 @@ export class BuildingControlPlugin extends BasePlugin {
                     device.uuid === deviceNumber
                 )
             })
-            
+
             if (!targetDevice) {
                 console.warn(`⚠️ 未找到设备号: ${deviceNumber}，无法添加对象`)
                 return
@@ -3200,21 +3200,21 @@ export class BuildingControlPlugin extends BasePlugin {
 
             // 将对象添加到设备的children集合中
             targetDevice.add(object3D)
-            
+
             console.log(`✅ 成功将对象添加到设备 ${deviceNumber}`)
-            
+
             // 如果设备当前不可见，设置对象也不可见
             if (!targetDevice.visible) {
                 object3D.visible = false
             }
-            
+
             // 触发设备内容更新事件
             eventBus.emit('deviceContentUpdated', {
                 deviceNumber: deviceNumber,
                 action: 'addObject',
                 object: object3D
             })
-            
+
         } catch (error) {
             console.error(`❌ 添加对象到设备 ${deviceNumber} 时发生错误:`, error)
         }

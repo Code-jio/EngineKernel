@@ -1,5 +1,12 @@
 import * as THREE from "three"
 
+interface UpdateParams {
+    deltaTime: number;
+    elapsedTime: number;
+    frameTime: number;
+    fps:number;
+}
+
 /**
  * 电火花粒子系统类
  * 用于创建和管理电弧和电火花粒子效果
@@ -80,6 +87,7 @@ export class SparkParticleSystem {
         this.clock = new THREE.Clock()
 
         this.rootGroup.position.set(config.position.x, config.position.y, config.position.z)
+        this.visible = false // 默认不显示
 
         // 显示控制相关属性
         this.isVisible = true
@@ -91,6 +99,14 @@ export class SparkParticleSystem {
         this.activeFlashes = [] // 活跃的闪烁光源
 
         this.init()
+    }
+
+    get visible() {
+        return this.isVisible
+    }
+
+    set visible(value){
+        this.isVisible = value 
     }
 
     /**
@@ -358,7 +374,7 @@ export class SparkParticleSystem {
      * 更新电弧系统
      * @param {number} deltaTime - 时间增量
      */
-    update(deltaTime: number) {
+    update({ deltaTime, elapsedTime, frameTime, fps }: UpdateParams) {
         if (this.isPaused) {
             return
         }

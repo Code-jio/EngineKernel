@@ -21,6 +21,14 @@ interface FireMarkerOptions {
     windForce: THREE.Vector3
 }
 
+interface UpdateParams {
+    deltaTime: number;
+    elapsedTime: number;
+    frameTime: number;
+    fps:number;
+}
+
+
 /**
  * 火焰粒子系统类
  * 创建逼真的火焰燃烧效果，包含火焰源、烟雾和倒锥形扩散
@@ -127,6 +135,14 @@ export class FireParticleSystem {
         this.initSmokeSystem()
     }
 
+    get visible() {
+        return this.fireSystem.visible
+    }
+
+    set visible(value) {
+        this.fireSystem.visible = value
+    }
+
     initFireSystem() {
         // 创建火焰粒子几何体
         this.fireGeometry = new THREE.BufferGeometry()
@@ -197,7 +213,7 @@ export class FireParticleSystem {
                     gl_FragColor = vec4(finalColor, finalAlpha);
 
                     #include <fog_fragment>	
-                    #include <logdepthbuf_fragment>     
+                    #include <logdepthbuf_fragment> 
                 }
             `,
             blending: THREE.AdditiveBlending,
@@ -210,6 +226,7 @@ export class FireParticleSystem {
         this.fireSystem = new THREE.Points(this.fireGeometry, this.fireMaterial)
         this.fireSystem.renderOrder = 0
         this.fireSystem.name = "fireParticles"
+        this.visible = false // 默认不显示
         this.scene.add(this.fireSystem)
 
         // 初始化火焰粒子池
@@ -400,7 +417,7 @@ export class FireParticleSystem {
         this.activeSmokeParticles.push(particle)
     }
 
-    update(deltaTime: number) {
+    update({ deltaTime, elapsedTime, frameTime, fps }:UpdateParams) {
         const currentTime = this.clock.getElapsedTime()
 
         // 更新着色器时间
@@ -786,7 +803,7 @@ export class FireEffectManager {
     public effects: Array<{
         type: string
         effect: FireParticleSystem
-        update: (deltaTime: number) => void
+        update: (updateParams: UpdateParams) => void
     }>
 
     constructor(scene: THREE.Scene) {
@@ -821,7 +838,7 @@ export class FireEffectManager {
         this.effects.push({
             type: "fire",
             effect: fireEffect,
-            update: (deltaTime: number) => fireEffect.update(deltaTime),
+            update: ({ deltaTime, elapsedTime, frameTime, fps }: UpdateParams) => fireEffect.update({ deltaTime, elapsedTime, frameTime, fps }),
         })
 
         return fireEffect
@@ -835,10 +852,10 @@ export class FireEffectManager {
         }
     }
 
-    update(deltaTime: number) {
+    update({ deltaTime, elapsedTime, frameTime, fps }:UpdateParams) {
         this.effects.forEach(({ effect }) => {
             if (effect && effect.update) {
-                effect.update(deltaTime)
+                effect.update({ deltaTime, elapsedTime, frameTime, fps })
             }
         })
     }
