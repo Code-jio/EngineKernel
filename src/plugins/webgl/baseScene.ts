@@ -477,7 +477,7 @@ interface CameraState {
 
 // 保持向后兼容的接口
 interface CameraFlyToOptions {
-    position: { x: number; y: number; z: number }
+    position?: { x: number; y: number; z: number }
     lookAt?: { x: number; y: number; z: number }
     duration?: number
     enableLookAt?: boolean
@@ -2204,7 +2204,7 @@ export class BaseScene extends BasePlugin {
         // 检查是否为 CameraState 格式（包含 mode 属性）
         if ('mode' in options) {
             const cameraState = options as CameraState
-            // 注意：如果是 CameraState 格式，在这里不会携带rotation参数
+            // CameraState 格式：支持 rotation 参数
             finalOptions = {
                 position: new THREE.Vector3(
                     cameraState.position.x,
@@ -2217,6 +2217,13 @@ export class BaseScene extends BasePlugin {
                     cameraState.position,
                 duration: cameraState.duration || 2000,
                 enableLookAt: true, // 默认启用注视
+                rotation: cameraState.rotation
+                    ? {
+                          pitch: radiansToDegrees(cameraState.rotation instanceof THREE.Euler ? cameraState.rotation.x : 0),
+                          yaw: radiansToDegrees(cameraState.rotation instanceof THREE.Euler ? cameraState.rotation.y : 0),
+                          roll: radiansToDegrees(cameraState.rotation instanceof THREE.Euler ? cameraState.rotation.z : 0),
+                      }
+                    : undefined,
                 easing: cameraState.easing || TWEEN.Easing.Quadratic.InOut,
                 onUpdate: cameraState.onUpdate,
                 onComplete: cameraState.onComplete,
@@ -2237,16 +2244,15 @@ export class BaseScene extends BasePlugin {
             }
         }
 
-        // 参数验证
-        if (!finalOptions.position || isNaN(finalOptions.position.x)) {
-            console.error('cameraFlyTo: 无效的目标位置');
-            return;
-        }
-
         // 检查相机是否初始化
         if (!this.camera) {
             console.error('cameraFlyTo: Camera is not initialized.')
             return
+        }
+
+        // 参数验证
+        if (!finalOptions.position || isNaN(finalOptions.position.x)) {
+            finalOptions.position = this.camera.position
         }
 
         // 保存当前控制器状态并禁用控制器
@@ -2264,19 +2270,28 @@ export class BaseScene extends BasePlugin {
             finalOptions.position.z
         )
 
-        // 利用方位角计算出目标姿态(yaw,pitch/roll角度值先转为弧度,再转四元数)
-        const targetRotation = new THREE.Euler(
-            degreesToRadians(finalOptions.rotation?.pitch || 0),  // pitch -> 绕X轴旋转
-            degreesToRadians(finalOptions.rotation?.yaw || 0),    // yaw -> 绕Y轴旋转  
-            degreesToRadians(finalOptions.rotation?.roll || 0),   // roll -> 绕Z轴旋转
-            'YXZ'
-        )
-        const targetQuaternion = new THREE.Quaternion().setFromEuler(targetRotation)
-
         // 当前相机位置
         const currentPosition = this.camera.position.clone()
-        // 当前相机姿态
-        const currentQuaternion = new THREE.Quaternion().setFromEuler(this.camera.rotation)
+        
+        // 检查是否使用旋转模式（非注视模式）
+        const useRotationMode = finalOptions.rotation && !finalOptions.enableLookAt
+        
+        let currentQuaternion: THREE.Quaternion = new THREE.Quaternion()
+        let targetQuaternion: THREE.Quaternion = new THREE.Quaternion()
+        
+        if (useRotationMode) {
+            // 利用方位角计算出目标姿态(yaw,pitch/roll角度值先转为弧度,再转四元数)
+            const targetRotation = new THREE.Euler(
+                degreesToRadians(finalOptions.rotation?.pitch ?? 0),  // pitch -> 绕X轴旋转
+                degreesToRadians(finalOptions.rotation?.yaw ?? 0),    // yaw -> 绕Y轴旋转  
+                degreesToRadians(finalOptions.rotation?.roll ?? 0),   // roll -> 绕Z轴旋转
+                'YXZ'
+            )
+            targetQuaternion = new THREE.Quaternion().setFromEuler(targetRotation)
+            
+            // 当前相机姿态
+            currentQuaternion = new THREE.Quaternion().setFromEuler(this.camera.rotation)
+        }
 
         const currentTarget = control?.target.clone() // 现在的注视目标
 
@@ -2286,26 +2301,35 @@ export class BaseScene extends BasePlugin {
             finalOptions.lookAt?.z ?? 0
         )
 
-        // 如果需要一直注视某个位置的话（enableLookAt为true）在动画执行过程中就不能针对姿态进行改变，
-        // 如果需要改变姿态的话就不能注视某个位置（enableLookAt为false）
-
         // 创建TWEEN动画
-        const tween = new TWEEN.Tween({
-            position: currentPosition.clone(),
-            quaternion: currentQuaternion.clone(),
-            target: currentTarget ? currentTarget.clone() : new THREE.Vector3()
-        })
-            .to({
-                position: targetPosition.clone(),
-                quaternion: targetQuaternion.clone(),
-                target: endTarget.clone()
-            }, finalOptions.duration)
+        const tweenData: any = {
+            position: currentPosition.clone()
+        }
+        
+        const tweenTarget: any = {
+            position: targetPosition.clone()
+        }
+        
+        if (useRotationMode) {
+            tweenData.quaternion = currentQuaternion.clone()
+            tweenTarget.quaternion = targetQuaternion.clone()
+        } else {
+            tweenData.target = currentTarget ? currentTarget.clone() : new THREE.Vector3()
+            tweenTarget.target = endTarget.clone()
+        }
+
+        const tween = new TWEEN.Tween(tweenData)
+            .to(tweenTarget, finalOptions.duration)
             .easing(finalOptions.easing)
             .onUpdate((obj) => {
                 // 更新相机位置
                 this.camera.position.copy(obj.position)
-                if (finalOptions.enableLookAt) {
-                    // 启用注视模式：相机始终看向目标点
+                
+                if (useRotationMode) {
+                    // 旋转模式
+                    this.camera.quaternion.copy(obj.quaternion)
+                } else {
+                    // 注视模式
                     if (control) {
                         control.target.copy(obj.target)
                         control.update()
@@ -2314,19 +2338,23 @@ export class BaseScene extends BasePlugin {
                         this.camera.lookAt(obj.target)
                     }
                 }
-                // 手动触发渲染更新
-                // this.renderer.render(this.scene, this.camera)
+                
+                // 触发更新回调
+                if (finalOptions.onUpdate) {
+                    finalOptions.onUpdate()
+                }
             })
             .onComplete((obj) => {
                 // 恢复控制器状态
                 if (control) {
                     control.enabled = true
                     // 确保最终状态正确
-                    if (finalOptions.enableLookAt) {
-                        control.target.copy(endTarget)
-                    }else{
-                        // 禁用注视模式：使用四元数直接设置相机姿态
+                    if (useRotationMode) {
+                        // 旋转模式：设置最终四元数
                         this.camera.quaternion.copy(obj.quaternion)
+                    } else {
+                        // 注视模式：设置最终注视目标
+                        control.target.copy(endTarget)
                     }
                 }
 
@@ -2892,51 +2920,7 @@ export class BaseScene extends BasePlugin {
             target: currentTarget,
         })
     }
-
-    /**
-     * 俯视
-     * 保持相机位置不变，平滑地将视角转向正下方
-     * @param duration 动画时长（毫秒），默认1500ms
-     * @param onComplete 动画完成回调
-     */
-    public overLook(duration: number = 1500, onComplete?: () => void): void {
-        // 获取当前相机位置
-        const currentPosition = this.camera.position.clone()
-
-        // 计算俯视目标点（相机正下方，但保持相机高度不变）
-        const lookAtTarget = new THREE.Vector3(
-            currentPosition.x,
-            currentPosition.y - 100, // 保持相对高度差，确保向下看
-            currentPosition.z
-        )
-
-        // 新增目标四元数姿态
-
-
-        console.log('👁️ 开始俯视动画', {
-            相机位置: `(${currentPosition.x.toFixed(2)}, ${currentPosition.y.toFixed(2)}, ${currentPosition.z.toFixed(2)})`,
-            目标点: `(${lookAtTarget.x.toFixed(2)}, ${lookAtTarget.y.toFixed(2)}, ${lookAtTarget.z.toFixed(2)})`,
-        })
-
-        // 使用 cameraFlyTo 实现平滑转向
-        this.cameraFlyTo({
-            position: currentPosition, // 位置保持不变
-            lookAt: lookAtTarget, // 朝向正下方
-            duration: duration, // 动画时长
-            easing: TWEEN.Easing.Quadratic.InOut, // 平滑缓动
-            onUpdate: () => {
-                // 可选：在动画过程中执行的回调
-            },
-            onComplete: () => {
-                console.log('✅ 俯视动画完成')
-                // 执行用户提供的完成回调
-                if (onComplete) {
-                    onComplete()
-                }
-            },
-        })
-    }
-
+    
     /**
      * 切换相机模式
      * @param mode 相机模式：“2D” | “3D”
@@ -2980,29 +2964,28 @@ export class BaseScene extends BasePlugin {
             // 3D → 2D: 先俯视，再切换到正交相机
             return new Promise((resolve, reject) => {
                 try {
-                    // this.overLook(1500, () => {
-                    //     try {
-                    //         // 俯视完成后，切换到正交相机
-                    //         this.switchCamera()
-                    //         console.log('✅ 3D → 2D 切换完成')
-                    //         resolve('switched_to_2D')
-                    //     } catch (error) {
-                    //         console.error('❌ 相机切换失败:', error)
-                    //         reject(error)
-                    //     }
-                    // })
                     this.cameraFlyTo({
-                        position: { x: 0, y: 100, z: 0 },
-                        enableLookAt: false,
+                        // position: { x: 0, y: 100, z: 0 },
+                        enableLookAt: false,  // 使用旋转模式，禁用注视
                         rotation: {
-                            pitch: -90,
-                            yaw: 0,
-                            roll: 0
+                            pitch: -90,  // 俯视角度
+                            yaw: 0,      // 朝向正北
+                            roll: 0      // 无翻滚
+                        },
+                        duration: 1500,  // 1.5秒动画时间
+                        easing: TWEEN.Easing.Quadratic.InOut,  // 平滑缓动
+                        onUpdate: () => {
+                            // 动画更新过程中的额外处理
+                            // 可以在这里添加过渡效果或状态更新
                         },
                         onComplete: () => {
                             try {
-                                // 俯视完成后，切换到正交相机
+                                // 动画完成后切换到正交相机
                                 this.switchCamera()
+                                
+                                // 调整正交相机缩放以适应2D视图
+                                this.adjustOrthographicZoom(1.0)
+                                
                                 console.log('✅ 3D → 2D 切换完成')
                                 resolve('switched_to_2D')
                             } catch (error) {
@@ -3016,22 +2999,54 @@ export class BaseScene extends BasePlugin {
                     // 降级处理：直接切换相机
                     try {
                         this.switchCamera()
+                        this.adjustOrthographicZoom(1.0)
+                        console.log('⚠️ 使用降级模式完成 3D → 2D 切换')
                         resolve('switched_to_2D_fallback')
                     } catch (fallbackError) {
+                        console.error('❌ 降级切换也失败了:', fallbackError)
                         reject(fallbackError)
                     }
                 }
             })
         } else {
-            // 切换到3D模式
+            // 2D → 3D: 先切换到透视相机，再调整到合适的3D视角
             return new Promise((resolve, reject) => {
                 try {
+                    // 先切换到透视相机
                     this.switchCamera()
-                    console.log('✅ 2D → 3D 切换完成')
-                    resolve('switched_to_3D')
+                    
+                    // 然后调整到合适的3D视角
+                    this.cameraFlyTo({
+                        position: { x: 20, y: 15, z: 20 },  // 3D视角位置
+                        lookAt: { x: 0, y: 0, z: 0 },      // 看向原点
+                        enableLookAt: true,  // 使用注视模式
+                        duration: 1500,      // 1.5秒动画时间
+                        easing: TWEEN.Easing.Quadratic.InOut,
+                        onUpdate: () => {
+                            // 动画更新过程中的额外处理
+                        },
+                        onComplete: () => {
+                            console.log('✅ 2D → 3D 切换完成')
+                            resolve('switched_to_3D')
+                        }
+                    })
                 } catch (error) {
-                    console.error('❌ 相机切换失败:', error)
-                    reject(error)
+                    console.error('❌ 3D视角调整失败:', error)
+                    // 降级处理：使用默认3D视角
+                    try {
+                        this.camera.position.set(20, 15, 20)
+                        this.camera.lookAt(0, 0, 0)
+                        let control = this.controls?.getControl()
+                        if (control) {
+                          control.target.set(0, 0, 0)
+                          control.update()
+                        }
+                        console.log('⚠️ 使用降级模式完成 2D → 3D 切换')
+                        resolve('switched_to_3D_fallback')
+                    } catch (fallbackError) {
+                        console.error('❌ 降级切换也失败了:', fallbackError)
+                        reject(fallbackError)
+                    }
                 }
             })
         }
