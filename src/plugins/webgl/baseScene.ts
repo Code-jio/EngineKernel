@@ -1717,6 +1717,9 @@ export class BaseScene extends BasePlugin {
             }
         }
 
+        // 更新 TWEEN 动画组 - 确保相机姿态动画能够正确更新
+        tween_group.update()
+
         // 渲染场景（使用当前激活的相机）
         this.renderer.render(this.scene, this.camera)
     }
@@ -2289,8 +2292,8 @@ export class BaseScene extends BasePlugin {
             )
             targetQuaternion = new THREE.Quaternion().setFromEuler(targetRotation)
             
-            // 当前相机姿态
-            currentQuaternion = new THREE.Quaternion().setFromEuler(this.camera.rotation)
+            // 当前相机姿态 - 修复：使用正确的四元数
+            currentQuaternion = this.camera.quaternion.clone()
         }
 
         const currentTarget = control?.target.clone() // 现在的注视目标
@@ -2322,8 +2325,10 @@ export class BaseScene extends BasePlugin {
             .to(tweenTarget, finalOptions.duration)
             .easing(finalOptions.easing)
             .onUpdate((obj) => {
-                // 更新相机位置
-                this.camera.position.copy(obj.position)
+                // 只在位置真正改变时才更新位置
+                if (!targetPosition.equals(currentPosition)) {
+                    this.camera.position.copy(obj.position)
+                }
                 
                 if (useRotationMode) {
                     // 旋转模式
@@ -2352,6 +2357,10 @@ export class BaseScene extends BasePlugin {
                     if (useRotationMode) {
                         // 旋转模式：设置最终四元数
                         this.camera.quaternion.copy(obj.quaternion)
+                        // 重要：禁用控制器的旋转同步，避免覆盖我们的姿态
+                        if (control.saveState) {
+                            control.saveState()
+                        }
                     } else {
                         // 注视模式：设置最终注视目标
                         control.target.copy(endTarget)
@@ -2966,7 +2975,7 @@ export class BaseScene extends BasePlugin {
                 try {
                     this.cameraFlyTo({
                         // position: { x: 0, y: 100, z: 0 },
-                        enableLookAt: false,  // 使用旋转模式，禁用注视
+                        enableLookAt: false, 
                         rotation: {
                             pitch: -90,  // 俯视角度
                             yaw: 0,      // 朝向正北
