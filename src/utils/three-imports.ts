@@ -24,6 +24,18 @@ import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass"
 import { FXAAShader } from "three/examples/jsm/shaders/FXAAShader"
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass"
 
+// 导入更多后处理效果
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
+import { SSAOPass } from 'three/examples/jsm/postprocessing/SSAOPass.js'
+import { SSAARenderPass } from 'three/examples/jsm/postprocessing/SSAARenderPass.js'
+import { ShaderPass as ShaderPassImport } from 'three/examples/jsm/postprocessing/ShaderPass.js'
+import { CopyShader } from 'three/examples/jsm/shaders/CopyShader.js'
+import { GammaCorrectionShader } from 'three/examples/jsm/shaders/GammaCorrectionShader.js'
+import { VignetteShader } from 'three/examples/jsm/shaders/VignetteShader.js'
+import { ColorCorrectionShader } from 'three/examples/jsm/shaders/ColorCorrectionShader.js'
+import { SSRPass } from 'three/examples/jsm/postprocessing/SSRPass.js'
+import { ReflectorForSSRPass } from 'three/examples/jsm/objects/ReflectorForSSRPass.js'
+
 // import { OutlinePass } from "three/examples/jsm/postprocessing/OutlinePass"
 
 
@@ -55,6 +67,19 @@ export {
     FXAAShader,
     OutputPass,
     OutlinePass,
+
+    UnrealBloomPass,
+    SSAOPass,
+    SSAARenderPass,
+    ShaderPassImport,
+    CopyShader,
+    GammaCorrectionShader,
+    VignetteShader,
+    ColorCorrectionShader,
+    SSRPass,
+    ReflectorForSSRPass,
+
+
     clock,
     CSS2DRenderer,
     CSS2DObject,
