@@ -36,5 +36,9 @@ export { EffectComposer, RenderPass, OutlinePass, ShaderPass, FXAAShader, Output
 export { CSS2DRenderer, CSS2DObject, CSS3DRenderer, CSS3DObject } from '../utils/three-imports';
 export { OutLinePlugin } from "./webgl/OutLinePlugin"
 
+export { DataRainEffect } from "./effects/DataRainEffect"
+export { TechRingEffect } from "./effects/TechRingEffect"
+export { PostProcessingPlugin } from "./PostProcessing/index"
+
 
 // export { BaseModel } from './webgl/baseModel';
