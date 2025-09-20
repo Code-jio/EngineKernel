@@ -62,7 +62,7 @@ export class PostProcessingPlugin extends BasePlugin {
             ssao: true, // 环境光遮蔽（性能开销较大）
             ssaa: true, // 抗锯齿（性能开销较大）
             fxaa: true, // FXAA抗锯齿（默认启用）
-            ssr: true, // 屏幕空间反射（性能开销较大，默认禁用）
+            ssr: false, // 屏幕空间反射（性能开销较大，默认禁用）
         }
 
         this.init()
@@ -85,6 +85,8 @@ export class PostProcessingPlugin extends BasePlugin {
         // 添加输出通道
         this.outputPass = new OutputPass()
         this.composer.addPass(this.outputPass)
+
+        console.log(this,"composer")
     }
 
     // 初始化辉光效果
@@ -94,9 +96,9 @@ export class PostProcessingPlugin extends BasePlugin {
         // 创建辉光效果
         this.bloomPass = new UnrealBloomPass(
             new THREE.Vector2(window.innerWidth, window.innerHeight),
-            1.5, // 强度
-            0.4, // 半径
-            0.85, // 阈值
+            1.0, // 强度
+            0.4, // 半径 
+            1.0, // 阈值
         )
         this.composer?.addPass(this.bloomPass)
     }
@@ -108,7 +110,7 @@ export class PostProcessingPlugin extends BasePlugin {
         // 创建环境光遮蔽效果
         this.ssaoPass = new SSAOPass(this.scene, this.camera, window.innerWidth, window.innerHeight)
         this.ssaoPass.kernelRadius = 16
-        this.ssaoPass.minDistance = 0.005
+        this.ssaoPass.minDistance = 0.05
         this.ssaoPass.maxDistance = 0.1
         this.ssaoPass.output = SSAOPass.OUTPUT.Default
         this.composer?.addPass(this.ssaoPass)
