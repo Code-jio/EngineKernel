@@ -198,87 +198,6 @@ export class BuildingControlPlugin extends BasePlugin {
         return usageCount > 1
     }
 
-    // 新增：统一的材质透明度处理方法
-    private applyOpacityWithMaterialCloning(
-        mesh: THREE.Mesh,
-        opacity: number,
-        objectType: "floor" | "room" | "equipment",
-        identifier: string | number,
-    ): void {
-        const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
-
-        materials.forEach((material, index) => {
-            if (
-                !(
-                    material instanceof THREE.MeshBasicMaterial ||
-                    material instanceof THREE.MeshLambertMaterial ||
-                    material instanceof THREE.MeshPhongMaterial ||
-                    material instanceof THREE.MeshStandardMaterial ||
-                    material instanceof THREE.MeshPhysicalMaterial
-                )
-            ) {
-                return // 跳过不支持的材质类型
-            }
-
-            const key = this.generateMaterialKey(objectType, identifier, mesh.uuid, index)
-
-            // 检查是否需要克隆材质
-            if (!this.materialsMap.has(key)) {
-                if (this.isSharedMaterial(material)) {
-                    // 共享材质需要克隆
-                    const clonedMaterial = material.clone()
-                    clonedMaterial.userData.originalMaterial = material
-                    clonedMaterial.userData.isClonedByPlugin = true
-                    this.materialsMap.set(key, clonedMaterial)
-
-                    // 替换材质
-                    if (Array.isArray(mesh.material)) {
-                        mesh.material[index] = clonedMaterial
-                    } else {
-                        mesh.material = clonedMaterial
-                    }
-                } else {
-                    // 非共享材质，直接使用但记录原始状态
-                    if (material.userData.originalOpacity === undefined) {
-                        material.userData.originalOpacity = material.opacity
-                        material.userData.originalTransparent = material.transparent
-                        material.userData.isModifiedByPlugin = true
-                    }
-                }
-            }
-
-            // 设置透明度
-            const targetMaterial = this.materialsMap.get(key) || material
-            targetMaterial.transparent = opacity < 1.0
-            targetMaterial.opacity = opacity
-            targetMaterial.needsUpdate = true
-        })
-    }
-
-    // 新增：替换克隆材质为原始材质的辅助方法
-    private replaceClonedMaterialWithOriginal(
-        target: THREE.Object3D,
-        clonedMaterial: THREE.Material,
-        originalMaterial: THREE.Material,
-    ): void {
-        target.traverse(child => {
-            if (child instanceof THREE.Mesh && child.material) {
-                if (Array.isArray(child.material)) {
-                    child.material.forEach((mat, index) => {
-                        if (mat === clonedMaterial) {
-                            child.material[index] = originalMaterial
-                        }
-                    })
-                } else {
-                    if (child.material === clonedMaterial) {
-                        child.material = originalMaterial
-                    }
-                }
-            }
-        })
-        originalMaterial.needsUpdate = true
-    }
-
     constructor(params: any = {}) {
         super(params)
         this.updateConfig(params.floorControlConfig || {})
@@ -631,7 +550,6 @@ export class BuildingControlPlugin extends BasePlugin {
                 rooms: [],
                 equipments: [],
             })
-            console.log(`🏢 发现楼层: ${floorNumber}F - ${this.getModelName(floorObject)}`)
         } else {
             // result.errors.push(`发现重复的楼层: ${floorNumber}F`)
             // 如果有楼层重复，要么联系建模进行处理，要么就是虚拟楼层，虚拟楼层直接在这里覆盖就行
@@ -875,7 +793,7 @@ export class BuildingControlPlugin extends BasePlugin {
 
             this.floors.set(floorNumber, floorItem)
 
-            console.log(`🔗 链接楼层: ${floorNumber}F (${floorData.rooms.length}个房间)`)
+            // console.log(`🔗 链接楼层: ${floorNumber}F (${floorData.rooms.length}个房间)`)
         })
     }
 
@@ -1397,7 +1315,7 @@ export class BuildingControlPlugin extends BasePlugin {
         // 设置楼层透明度
         this.setFloorsOpacityForFocus(floorNumber)
 
-        // 新增：根据配置管理设备显示状态
+        // 根据配置管理设备显示状态
         this.manageEquipmentDisplayForFocus(floorNumber)
 
         // 如果启用了相机动画，则移动相机到聚焦楼层
@@ -1448,7 +1366,7 @@ export class BuildingControlPlugin extends BasePlugin {
         this.currentState = FloorState.EXPANDED
         this.focusedFloor = null
 
-        // 新增：根据配置管理设备显示状态（取消聚焦）
+        // 根据配置管理设备显示状态（取消聚焦）
         this.manageEquipmentDisplayForFocus(null)
 
         // 如果启用了相机恢复，则恢复相机位置

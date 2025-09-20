@@ -195,7 +195,7 @@ export class BaseControls {
         })
 
         // 监听窗口大小变化
-        window.addEventListener("resize", () => {
+        eventBus.on("resize", () => {
             // 窗口大小变化时可能需要更新控制器
             this.control.update()
             this.controlLayer.style.width = window.innerWidth + 'px';

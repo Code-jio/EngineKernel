@@ -56,7 +56,6 @@ export class CSS3DRenderPlugin extends BasePlugin {
     private camera: THREE.Camera
     private domElement: HTMLElement | null = null
     private needsRender: boolean = false
-    private resizeHandler: (() => void) | null = null
     // 添加渲染模式配置
     private renderMode: "continuous" | "onDemand" = "continuous" // 连续渲染或按需渲染
     private enableBillboarding: boolean = true // 是否启用billboarding效果（永远朝向镜头）
@@ -345,15 +344,12 @@ export class CSS3DRenderPlugin extends BasePlugin {
      * @description 设置窗口大小变化监听
      */
     private setupResizeListener(): void {
-        const handleResize = () => {
+        eventBus.on("resize", ()=>{
             if (this.css3Drenderer) {
                 this.css3Drenderer.setSize(window.innerWidth, window.innerHeight)
                 this.markNeedsRender()
             }
-        }
-
-        window.addEventListener("resize", handleResize)
-        this.resizeHandler = handleResize
+        })
     }
 
     /**
@@ -727,11 +723,6 @@ export class CSS3DRenderPlugin extends BasePlugin {
             // 清理所有CSS3D对象
             this.clearAll()
 
-            // 移除事件监听器
-            if (this.resizeHandler) {
-                window.removeEventListener("resize", this.resizeHandler)
-                this.resizeHandler = null
-            }
 
             // 移除eventBus监听器
             if (this.updateHandler) {
