@@ -28,246 +28,16 @@ interface PerformanceStats {
     programs: number
 }
 
-// 抗锯齿配置接口
-interface AntialiasConfig {
-    enabled: boolean
-    type: 'msaa' | 'fxaa' | 'smaa' | 'taa' | 'none'
-    // MSAA配置
-    msaaConfig?: {
-        samples: number // 采样数 (2, 4, 8, 16)
-    }
-    // FXAA配置
-    fxaaConfig?: {
-        intensity: number // 强度 (0.0 - 1.0)
-        quality: 'low' | 'medium' | 'high'
-    }
-    // SMAA配置
-    smaaConfig?: {
-        threshold: number // 边缘检测阈值
-        maxSearchSteps: number // 最大搜索步数
-    }
-    // TAA配置
-    taaConfig?: {
-        accumulation: number // 累积因子
-        jitterPattern: 'halton' | 'random'
-    }
-}
-
-// 深度管理配置接口
-interface DepthConfig {
-    enabled: boolean
-    // 深度缓冲区优化
-    depthBufferConfig: {
-        enableLogDepth: boolean // 对数深度缓冲区
-        depthBits: 16 | 24 | 32 // 深度位数
-        stencilBits: 0 | 8 // 模板位数
-    }
-    // 多边形偏移配置
-    polygonOffsetConfig: {
-        enabled: boolean
-        factor: number // 多边形偏移因子
-        units: number // 多边形偏移单位
-    }
-    // 相机深度范围优化
-    depthRangeConfig: {
-        autoOptimize: boolean // 自动优化near/far
-        nearFarRatio: number // near/far比例 (推荐 1/10000)
-        minNear: number // 最小near值
-        maxFar: number // 最大far值
-    }
-    // 深度冲突检测
-    conflictDetection: {
-        enabled: boolean
-        threshold: number // 深度差异阈值
-        autoFix: boolean // 自动修复
-    }
-    // 深度排序
-    depthSortConfig: {
-        enabled: boolean
-        transparent: boolean // 透明对象排序
-        opaque: boolean // 不透明对象排序
-    }
-}
-
 // 增强的渲染统计
 interface EnhancedPerformanceStats extends PerformanceStats {
-    // 抗锯齿相关
-    antialiasType: string
-    antialiasQuality: string
     // 深度相关
     depthConflicts: number
     depthOptimizationLevel: string
-    nearFarRatio: number
 }
 
 // 默认配置预设
 const DEFAULT_CONFIGS = {
-    // 高性能配置（适用于移动端和低端设备）
-    highPerformance: {
-        cameraConfig: {
-            type: 'perspective',
-            fov: 45,
-            near: 0.1,
-            far: 50000,
-            position: [100, 100, 100],
-            lookAt: [0, 0, 0],
-        },
-        rendererConfig: {
-            alpha: true,
-            precision: 'highp',
-            powerPreference: 'high-performance',
-            physicallyCorrectLights: true,
-            shadowMapEnabled: false,
-            toneMapping: THREE.LinearToneMapping,
-            toneMappingExposure: 1.0,
-            pixelRatio: 1,
-        },
-        antialiasConfig: {
-            enabled: true,
-            type: 'none' as const,
-        },
-        depthConfig: {
-            enabled: true,
-            depthBufferConfig: {
-                enableLogDepth: false,
-                depthBits: 16,
-                stencilBits: 0,
-            },
-            polygonOffsetConfig: {
-                enabled: false,
-                factor: 1.0,
-                units: 1.0,
-            },
-            depthRangeConfig: {
-                autoOptimize: true,
-                nearFarRatio: 1 / 1000,
-                minNear: 0.1,
-                maxFar: 100000,
-            },
-            conflictDetection: {
-                enabled: false,
-                threshold: 0.001,
-                autoFix: false,
-            },
-            depthSortConfig: {
-                enabled: false,
-                transparent: true,
-                opaque: false,
-            },
-        },
-        performanceConfig: {
-            enabled: true,
-        },
-        debugConfig: {
-            enabled: false,
-            gridHelper: false,
-            axesHelper: false,
-            gridSize: 10000,
-            gridDivisions: 100,
-            axesSize: 1000,
-        },
-        floorConfig: {
-            enabled: true,
-            type: 'static' as const,
-            size: 10000,
-            position: [0, 0, 0] as [number, number, number],
-            staticConfig: {
-                color: 0x808080, // 基础颜色
-                opacity: 1.0, // 不透明度
-                roughness: 0.9, // 粗糙度
-                metalness: 0.1, // 金属度
-                tiling: [50, 50] as [number, number], // 贴图平铺
-                texture: './textures/floor.png',
-            },
-        },
-    },
 
-    // 平衡配置（默认推荐）
-    balanced: {
-        cameraConfig: {
-            type: 'perspective',
-            fov: 45,
-            near: 0.01,
-            far: 50000,
-            position: [300, 300, 300],
-            lookAt: [0, 0, 0],
-        },
-        rendererConfig: {
-            alpha: true,
-            precision: 'highp',
-            powerPreference: 'high-performance',
-            physicallyCorrectLights: true,
-            shadowMapEnabled: false, // 默认关闭阴影提升性能
-            toneMapping: THREE.ACESFilmicToneMapping,
-            toneMappingExposure: 1.0,
-            outputColorSpace: 'srgb',
-        },
-        antialiasConfig: {
-            enabled: true,
-            type: 'msaa' as const,
-            msaaConfig: {
-                samples: 4,
-            },
-        },
-        depthConfig: {
-            enabled: true,
-            depthBufferConfig: {
-                enableLogDepth: false,
-                depthBits: 24,
-                stencilBits: 8,
-            },
-            polygonOffsetConfig: {
-                enabled: true,
-                factor: 1.0,
-                units: 1.0,
-            },
-            depthRangeConfig: {
-                autoOptimize: true,
-                nearFarRatio: 1 / 5000,
-                minNear: 0.01,
-                maxFar: 50000,
-            },
-            conflictDetection: {
-                enabled: true,
-                threshold: 0.0001,
-                autoFix: true,
-            },
-            depthSortConfig: {
-                enabled: true,
-                transparent: true,
-                opaque: false,
-            },
-        },
-        performanceConfig: {
-            enabled: true,
-        },
-        debugConfig: {
-            enabled: false,
-            gridHelper: true,
-            axesHelper: true,
-            gridSize: 10000,
-            gridDivisions: 100,
-            axesSize: 1000,
-        },
-        floorConfig: {
-            enabled: true,
-            type: 'water' as const,
-            size: 20000,
-            position: [0, 0, 0] as [number, number, number],
-            waterConfig: {
-                color: 0x001e0f,
-                sunColor: 0xffffff,
-                distortionScale: 3.7,
-                textureWidth: 512,
-                textureHeight: 512,
-                alpha: 1.0,
-                time: 0,
-            },
-        },
-    },
-
-    // 高质量配置（适用于桌面端和高端设备）
-    highQuality: {
         cameraConfig: {
             type: 'perspective',
             fov: 45,
@@ -284,8 +54,10 @@ const DEFAULT_CONFIGS = {
             shadowMapEnabled: true,
             shadowMapType: THREE.PCFSoftShadowMap,
             toneMapping: THREE.ACESFilmicToneMapping,
-            toneMappingExposure: 1.2,
-            outputColorSpace: 'srgb',
+            toneMappingExposure: 1.0,
+            // outputColorSpace: THREE.DisplayP3ColorSpace,
+            // outputColorSpace: THREE.LinearDisplayP3ColorSpace,
+            outputColorSpace: THREE.SRGBColorSpace,
         },
         antialiasConfig: {
             enabled: true,
@@ -351,90 +123,8 @@ const DEFAULT_CONFIGS = {
                 mixStrength: 0.7,
             },
         },
-    },
+    
 
-    // 开发调试配置
-    development: {
-        cameraConfig: {
-            type: 'perspective',
-            fov: 45,
-            near: 0.01,
-            far: 50000,
-            position: [100, 100, 100],
-            lookAt: [0, 0, 0],
-        },
-        rendererConfig: {
-            alpha: true,
-            precision: 'highp',
-            powerPreference: 'high-performance',
-            physicallyCorrectLights: true,
-            shadowMapEnabled: true,
-            toneMapping: THREE.ACESFilmicToneMapping,
-            toneMappingExposure: 1.0,
-        },
-        antialiasConfig: {
-            enabled: true,
-            type: 'fxaa' as const,
-            fxaaConfig: {
-                intensity: 1.0,
-                quality: 'medium',
-            },
-        },
-        depthConfig: {
-            enabled: true,
-            depthBufferConfig: {
-                enableLogDepth: false,
-                depthBits: 24,
-                stencilBits: 8,
-            },
-            polygonOffsetConfig: {
-                enabled: true,
-                factor: 1.0,
-                units: 1.0,
-            },
-            depthRangeConfig: {
-                autoOptimize: true,
-                nearFarRatio: 1 / 5000,
-                minNear: 0.01,
-                maxFar: 50000,
-            },
-            conflictDetection: {
-                enabled: true,
-                threshold: 0.0001,
-                autoFix: true,
-            },
-            depthSortConfig: {
-                enabled: true,
-                transparent: true,
-                opaque: false,
-            },
-        },
-        performanceConfig: {
-            enabled: true,
-        },
-        debugConfig: {
-            enabled: true,
-            gridHelper: true,
-            axesHelper: true,
-            gridSize: 10000,
-            gridDivisions: 100,
-            axesSize: 1000,
-        },
-        floorConfig: {
-            enabled: true,
-            type: 'grid' as const,
-            size: 10000,
-            position: [0, 0, 0] as [number, number, number],
-            gridConfig: {
-                gridSize: 100,
-                lineWidth: 0.1,
-                primaryColor: 0x444444,
-                secondaryColor: 0x888888,
-                opacity: 0.8,
-                divisions: 10,
-            },
-        },
-    },
 }
 
 // 统一的相机状态接口
@@ -502,10 +192,10 @@ export class BaseScene extends BasePlugin {
     public camera: THREE.PerspectiveCamera | THREE.OrthographicCamera // 默认透视相机
     public aspectRatio = window.innerWidth / window.innerHeight
     public scene: THREE.Scene
-    public ambientLight: THREE.AmbientLight
+    // public ambientLight: THREE.AmbientLight
+    // public directionalLight: THREE.DirectionalLight
     public renderer: THREE.WebGLRenderer
     public pipelineManager: PipelineManager
-    public directionalLight: THREE.DirectionalLight
     public controls: BaseControls | null = null
 
     // 相机管理相关
@@ -565,18 +255,8 @@ export class BaseScene extends BasePlugin {
         gridHelper: THREE.GridHelper | null
         axesHelper: THREE.AxesHelper | null
     }
-
-    // 抗锯齿配置
-    public antialiasConfig: AntialiasConfig
-
-    // 深度管理配置
-    public depthConfig: DepthConfig
-
     // 增强的性能统计
     public enhancedStats: EnhancedPerformanceStats
-
-    // 深度冲突计数器
-    public depthConflictCounter: number = 0
 
     public _flyTween: any = null
 
@@ -600,10 +280,7 @@ export class BaseScene extends BasePlugin {
             }
 
             // 获取配置预设
-            const preset = meta.userData.preset || 'highQuality' //
-            const defaultConfig =
-                DEFAULT_CONFIGS[preset as keyof typeof DEFAULT_CONFIGS] ||
-                DEFAULT_CONFIGS.highQuality
+            const defaultConfig = DEFAULT_CONFIGS
 
             // 合并用户配置与默认配置
             const finalConfig = this.mergeConfigs(defaultConfig, meta.userData)
@@ -670,43 +347,6 @@ export class BaseScene extends BasePlugin {
                 axesHelper: null,
             }
 
-            // 初始化抗锯齿配置
-            this.antialiasConfig = finalConfig.antialiasConfig || {
-                enabled: false,
-                type: 'none',
-            }
-
-            // 初始化深度管理配置
-            this.depthConfig = finalConfig.depthConfig || {
-                enabled: true,
-                depthBufferConfig: {
-                    enableLogDepth: false,
-                    depthBits: 24,
-                    stencilBits: 8,
-                },
-                polygonOffsetConfig: {
-                    enabled: false,
-                    factor: 1.0,
-                    units: 1.0,
-                },
-                depthRangeConfig: {
-                    autoOptimize: false,
-                    nearFarRatio: 1 / 1000,
-                    minNear: 0.1,
-                    maxFar: 100000,
-                },
-                conflictDetection: {
-                    enabled: false,
-                    threshold: 0.001,
-                    autoFix: false,
-                },
-                depthSortConfig: {
-                    enabled: false,
-                    transparent: true,
-                    opaque: false,
-                },
-            }
-
             // 初始化增强的性能统计
             this.enhancedStats = {
                 // 基础统计
@@ -724,12 +364,8 @@ export class BaseScene extends BasePlugin {
                 textures: 0,
                 geometries: 0,
                 programs: 0,
-                // 增强统计
-                antialiasType: this.antialiasConfig.type,
-                antialiasQuality: 'medium',
                 depthConflicts: 0,
                 depthOptimizationLevel: 'basic',
-                nearFarRatio: this.depthConfig.depthRangeConfig.nearFarRatio,
             }
 
             this.cameraOption = finalConfig.cameraConfig
@@ -750,7 +386,6 @@ export class BaseScene extends BasePlugin {
             }
 
             this.scene = new THREE.Scene()
-            this.scene.background = new THREE.Color(0xffffff)
 
             // 初始化地板管理器和配置
             this.floorManager = new FloorManager(this.scene)
@@ -763,18 +398,18 @@ export class BaseScene extends BasePlugin {
 
             // 适应Three.js r155+物理正确光照系统的光照强度
             // 环境光强度需要降低，因为新的光照系统更加真实
-            this.ambientLight = new THREE.AmbientLight(0xffffff, 1.2)
+            // this.ambientLight = new THREE.AmbientLight(0xffffff, 1.2)
 
-            // 平行光强度也需要调整
-            this.directionalLight = new THREE.DirectionalLight(0xffffff, 1.2) // 从1降低到0.8
-            this.directionalLight.position.set(60, 1800, -50000) // 设置平行光位置
+            // // 平行光强度也需要调整
+            // this.directionalLight = new THREE.DirectionalLight(0xffffff, 1.2) // 从1降低到0.8
+            // this.directionalLight.position.set(60, 1800, -50000) // 设置平行光位置
 
-            // 根据配置决定是否启用阴影
-            this.directionalLight.castShadow =
-                this.rendererAdvancedConfig.shadowMapEnabled
+            // // 根据配置决定是否启用阴影
+            // this.directionalLight.castShadow =
+            //     this.rendererAdvancedConfig.shadowMapEnabled
 
-            this.scene.add(this.directionalLight)
-            this.scene.add(this.ambientLight)
+            // this.scene.add(this.directionalLight)
+            // this.scene.add(this.ambientLight)
 
             this.renderer = new THREE.WebGLRenderer({
                 alpha: rendererOption.alpha || true, // 透明
@@ -800,11 +435,7 @@ export class BaseScene extends BasePlugin {
             // 应用渲染器高级配置
             this.applyRendererAdvancedConfig()
 
-            // 应用抗锯齿配置
-            this.applyAntialiasConfig()
 
-            // 应用深度配置
-            this.applyDepthConfig()
 
             // 将renderer实例存入meta供其他插件使用
             meta.userData.renderer = this.renderer
@@ -824,10 +455,6 @@ export class BaseScene extends BasePlugin {
                 阴影系统: this.rendererAdvancedConfig.shadowMapEnabled
                     ? '启用'
                     : '禁用',
-                抗锯齿: this.antialiasConfig.enabled
-                    ? `启用(${this.antialiasConfig.type})`
-                    : '禁用',
-                深度管理: this.depthConfig.enabled ? '启用' : '禁用',
                 性能监控: this.performanceMonitor.enabled ? '启用' : '禁用',
                 Debug模式: this.debugConfig.enabled ? '启用' : '禁用',
                 地板系统: this.floorConfig.enabled
@@ -1088,15 +715,12 @@ export class BaseScene extends BasePlugin {
     private applyRendererAdvancedConfig(): void {
         const config = this.rendererAdvancedConfig
 
-        // Three.js r155+ 移除了 useLegacyLights 属性
-        // 新版本默认使用物理正确的光照，无需手动设置
-        console.log('🔧 使用Three.js r155+物理正确光照系统')
-
         // 输出颜色空间
         this.renderer.outputColorSpace = config.outputColorSpace as any
+        this.renderer.autoClear = true
 
         // 色调映射
-        this.renderer.toneMapping = config.toneMapping
+        this.renderer.toneMapping = config.toneMapping || THREE.NoToneMapping
         this.renderer.toneMappingExposure = config.toneMappingExposure
         // this.renderer.useLogDepthBuffer = true; // 启用对数深度缓冲区
 
@@ -1133,270 +757,6 @@ export class BaseScene extends BasePlugin {
             [THREE.ACESFilmicToneMapping]: 'ACESFilmicToneMapping',
         }
         return names[toneMapping] || 'Unknown'
-    }
-
-    /**
-     * 应用抗锯齿配置
-     */
-    private applyAntialiasConfig(): void {
-        const config = this.antialiasConfig
-
-        if (!config.enabled) {
-            console.log('🚫 抗锯齿已禁用')
-            return
-        }
-
-        console.log(`🔧 应用抗锯齿配置: ${config.type}`)
-
-        switch (config.type) {
-            case 'msaa':
-                this.applyMSAAConfig(config.msaaConfig)
-                break
-            case 'fxaa':
-                console.log('📝 FXAA需要在后处理管道中实现')
-                break
-            case 'smaa':
-                console.log('📝 SMAA需要在后处理管道中实现')
-                break
-            case 'taa':
-                console.log('📝 TAA需要在后处理管道中实现')
-                break
-            case 'none':
-            default:
-                console.log('🚫 抗锯齿类型为none，跳过配置')
-                break
-        }
-    }
-
-    /**
-     * 应用MSAA配置
-     */
-    private applyMSAAConfig(msaaConfig?: AntialiasConfig['msaaConfig']): void {
-        if (!msaaConfig) {
-            console.log('⚠️ MSAA配置为空，使用默认值')
-            return
-        }
-
-        // MSAA主要通过WebGLRenderer的antialias参数控制
-        // 采样数需要在创建renderer时设置，这里只能记录配置
-        console.log(`✅ MSAA配置: ${msaaConfig.samples}x采样`)
-
-        // 更新增强统计
-        this.enhancedStats.antialiasType = 'msaa'
-        this.enhancedStats.antialiasQuality = this.getMSAAQualityLevel(
-            msaaConfig.samples
-        )
-    }
-
-    /**
-     * 获取MSAA质量等级
-     */
-    private getMSAAQualityLevel(samples: number): string {
-        if (samples >= 8) return 'high'
-        if (samples >= 4) return 'medium'
-        if (samples >= 2) return 'low'
-        return 'none'
-    }
-
-    /**
-     * 应用深度配置
-     */
-    private applyDepthConfig(): void {
-        const config = this.depthConfig
-
-        if (!config.enabled) {
-            console.log('🚫 深度管理已禁用')
-            return
-        }
-
-        console.log('🔧 应用深度管理配置')
-
-        // 应用深度缓冲区配置
-        this.applyDepthBufferConfig(config.depthBufferConfig)
-
-        // 应用多边形偏移配置
-        this.applyPolygonOffsetConfig(config.polygonOffsetConfig)
-
-        // 应用深度范围配置
-        this.applyDepthRangeConfig(config.depthRangeConfig)
-
-        // 启用深度冲突检测
-        if (config.conflictDetection.enabled) {
-            this.enableDepthConflictDetection(config.conflictDetection)
-        }
-
-        console.log('✅ 深度管理配置已应用')
-    }
-
-    /**
-     * 应用深度缓冲区配置
-     */
-    private applyDepthBufferConfig(
-        depthBufferConfig: DepthConfig['depthBufferConfig']
-    ): void {
-        // 对数深度缓冲区需要着色器支持，这里只记录配置
-        if (depthBufferConfig.enableLogDepth) {
-            console.log('📝 对数深度缓冲区需要自定义着色器支持')
-        }
-
-        console.log(
-            `🔧 深度缓冲区配置: ${depthBufferConfig.depthBits}位深度, ${depthBufferConfig.stencilBits}位模板`
-        )
-    }
-
-    /**
-     * 应用多边形偏移配置
-     */
-    private applyPolygonOffsetConfig(
-        polygonOffsetConfig: DepthConfig['polygonOffsetConfig']
-    ): void {
-        if (!polygonOffsetConfig.enabled) {
-            console.log('🚫 多边形偏移已禁用')
-            return
-        }
-
-        // 多边形偏移主要在材质级别设置
-        console.log(
-            `✅ 多边形偏移配置: factor=${polygonOffsetConfig.factor}, units=${polygonOffsetConfig.units}`
-        )
-
-        // 为现有材质应用多边形偏移（示例）
-        this.scene.traverse((object) => {
-            if (object instanceof THREE.Mesh && object.material) {
-                const materials = Array.isArray(object.material)
-                    ? object.material
-                    : [object.material]
-                materials.forEach((material) => {
-                    if (material instanceof THREE.Material) {
-                        material.polygonOffset = true
-                        material.polygonOffsetFactor =
-                            polygonOffsetConfig.factor
-                        material.polygonOffsetUnits = polygonOffsetConfig.units
-                        material.needsUpdate = true
-                    }
-                })
-            }
-        })
-    }
-
-    /**
-     * 应用深度范围配置
-     */
-    private applyDepthRangeConfig(
-        depthRangeConfig: DepthConfig['depthRangeConfig']
-    ): void {
-        if (!depthRangeConfig.autoOptimize) {
-            console.log('🚫 深度范围自动优化已禁用')
-            return
-        }
-
-        this.optimizeCameraDepthRange(depthRangeConfig)
-    }
-
-    /**
-     * 优化相机深度范围
-     */
-    private optimizeCameraDepthRange(
-        config: DepthConfig['depthRangeConfig']
-    ): void {
-        const camera = this.camera
-
-        // 计算场景边界
-        const boundingBox = new THREE.Box3()
-        this.scene.traverse((object) => {
-            if (object instanceof THREE.Mesh && object.geometry) {
-                const objectBoundingBox = new THREE.Box3().setFromObject(object)
-                boundingBox.union(objectBoundingBox)
-            }
-        })
-
-        if (boundingBox.isEmpty()) {
-            console.log('⚠️ 场景为空，无法优化深度范围')
-            return
-        }
-
-        // 计算相机到场景的距离
-        const center = new THREE.Vector3()
-        boundingBox.getCenter(center)
-        const size = new THREE.Vector3()
-        boundingBox.getSize(size)
-
-        const maxSize = Math.max(size.x, size.y, size.z)
-        const distance = camera.position.distanceTo(center)
-
-        // 计算优化的near和far值
-        let newNear = Math.max(distance - maxSize, config.minNear)
-        let newFar = Math.min(distance + maxSize * 2, config.maxFar)
-
-        // 确保near/far比例合理
-        if (newFar / newNear < 1 / config.nearFarRatio) {
-            newNear = newFar * config.nearFarRatio
-        }
-
-        // 应用到相机
-        if (camera instanceof THREE.PerspectiveCamera) {
-            camera.near = newNear
-            camera.far = newFar
-            camera.updateProjectionMatrix()
-        } else if (camera instanceof THREE.OrthographicCamera) {
-            camera.near = newNear
-            camera.far = newFar
-            camera.updateProjectionMatrix()
-        }
-
-        // 更新统计
-        this.enhancedStats.nearFarRatio = newNear / newFar
-        this.enhancedStats.depthOptimizationLevel = 'optimized'
-
-        console.log(
-            `✅ 深度范围已优化: near=${newNear.toFixed(3)}, far=${newFar.toFixed(3)}, ratio=${(newNear / newFar).toFixed(6)}`
-        )
-    }
-
-    /**
-     * 启用深度冲突检测
-     */
-    private enableDepthConflictDetection(
-        conflictConfig: DepthConfig['conflictDetection']
-    ): void {
-        console.log(`✅ 深度冲突检测已启用: 阈值=${conflictConfig.threshold}`)
-
-        // 这里可以添加深度冲突检测逻辑
-        // 例如检测重叠的几何体、相近的Z值等
-    }
-
-    /**
-     * 检测深度冲突
-     */
-    private detectDepthConflicts(): number {
-        let conflicts = 0
-        const threshold = this.depthConfig.conflictDetection.threshold
-
-        // 简单的深度冲突检测示例
-        const meshes: THREE.Mesh[] = []
-        this.scene.traverse((object) => {
-            if (object instanceof THREE.Mesh) {
-                meshes.push(object)
-            }
-        })
-
-        // 检测相近的Z位置
-        for (let i = 0; i < meshes.length; i++) {
-            for (let j = i + 1; j < meshes.length; j++) {
-                const mesh1 = meshes[i]
-                const mesh2 = meshes[j]
-
-                const zDiff = Math.abs(mesh1.position.z - mesh2.position.z)
-                if (zDiff < threshold) {
-                    conflicts++
-                }
-            }
-        }
-
-        this.depthConflictCounter = conflicts
-        this.enhancedStats.depthConflicts = conflicts
-
-        return conflicts
     }
 
     /**
@@ -1528,9 +888,7 @@ export class BaseScene extends BasePlugin {
     ): void {
         // 设置渲染器尺寸
         this.renderer.setSize(width, height)
-        // this.renderer.setPixelRatio(window.devicePixelRatio * 1.5) // 这里一般不×2，目前×2是为了抵消实际项目中使用的v-scale-screen缩放后造成的渲染模糊问题
         this.renderer.setPixelRatio(window.devicePixelRatio) // 这里一般不×2，目前×2是为了抵消实际项目中使用的v-scale-screen缩放后造成的渲染模糊问题
-        console.log(width, height, 'width,height')
     }
 
     /**
@@ -1539,6 +897,7 @@ export class BaseScene extends BasePlugin {
      * @param height 窗口高度
      */
     public handleResize(width = window.innerWidth, height = window.innerHeight) {
+        eventBus.emit("resize")
         this.updateRendererSize(width, height)
 
         // 更新两个相机的宽高比和投影矩阵
@@ -1558,7 +917,8 @@ export class BaseScene extends BasePlugin {
         orthoCam.bottom = frustumSize / -2
         orthoCam.updateProjectionMatrix()
 
-        // 注意：this.orthographicCamera 与 cameraConfig.orthographicCamera 是同一个对象，无需重复更新
+
+        this.renderer.render(this.scene, this.camera)
     }
 
     /**
@@ -1639,34 +999,8 @@ export class BaseScene extends BasePlugin {
     get isPerformanceMonitorEnabled(): boolean {
         return this.performanceMonitor.enabled
     }
-    get antialiasConfigInstance(): AntialiasConfig {
-        return this.antialiasConfig
-    }
-    get depthConfigInstance(): DepthConfig {
-        return this.depthConfig
-    }
     get enhancedStatsInstance(): EnhancedPerformanceStats {
         return this.enhancedStats
-    }
-    get isAntialiasEnabled(): boolean {
-        return this.antialiasConfig.enabled
-    }
-    get isDepthManagementEnabled(): boolean {
-        return this.depthConfig.enabled
-    }
-
-    /**
-     * 获取所有可用的配置预设
-     */
-    static getAvailablePresets(): string[] {
-        return Object.keys(DEFAULT_CONFIGS)
-    }
-
-    /**
-     * 获取指定预设的详细配置
-     */
-    static getPresetConfig(preset: string): any {
-        return DEFAULT_CONFIGS[preset as keyof typeof DEFAULT_CONFIGS] || null
     }
 
     destroy() {
@@ -1685,8 +1019,8 @@ export class BaseScene extends BasePlugin {
         // window.removeEventListener("resize", this.handleResize)
         this.renderer.dispose()
         this.scene.clear()
-        this.ambientLight.dispose()
-        this.directionalLight.dispose()
+        // this.ambientLight.dispose()
+        // this.directionalLight.dispose()
         this.pipelineManager.destroy()
 
         console.log('🧹 BaseScene已销毁')
@@ -2203,6 +1537,7 @@ export class BaseScene extends BasePlugin {
         // 处理不同的输入格式
         let finalOptions: CameraFlyToOptions
         let control: any
+        let that = this
 
         // 检查是否为 CameraState 格式（包含 mode 属性）
         if ('mode' in options) {
@@ -2216,8 +1551,7 @@ export class BaseScene extends BasePlugin {
                 ),
                 lookAt:
                     cameraState.lookAt ||
-                    cameraState.target ||
-                    cameraState.position,
+                    cameraState.target,
                 duration: cameraState.duration || 2000,
                 enableLookAt: true, // 默认启用注视
                 rotation: cameraState.rotation
@@ -2236,7 +1570,7 @@ export class BaseScene extends BasePlugin {
             const flyToOptions = options as CameraFlyToOptions
             finalOptions = {
                 position: flyToOptions.position,
-                lookAt: flyToOptions.lookAt || flyToOptions.position,
+                lookAt: flyToOptions.lookAt,
                 duration: flyToOptions.duration || 2000,
                 enableLookAt: flyToOptions.enableLookAt ?? true, // 默认启用注视
                 rotation: flyToOptions.rotation, // 可选的旋转参数
@@ -2332,7 +1666,7 @@ export class BaseScene extends BasePlugin {
                 
                 if (useRotationMode) {
                     // 旋转模式
-                    this.camera.quaternion.copy(obj.quaternion)
+                    that.camera.quaternion.copy(obj.quaternion)
                 } else {
                     // 注视模式
                     if (control) {
@@ -2340,7 +1674,7 @@ export class BaseScene extends BasePlugin {
                         control.update()
                     } else {
                         // 如果没有控制器，直接设置相机朝向
-                        this.camera.lookAt(obj.target)
+                        that.camera.lookAt(obj.target)
                     }
                 }
                 
@@ -2353,18 +1687,14 @@ export class BaseScene extends BasePlugin {
                 // 恢复控制器状态
                 if (control) {
                     control.enabled = true
-                    // 确保最终状态正确
-                    if (useRotationMode) {
-                        // 旋转模式：设置最终四元数
-                        this.camera.quaternion.copy(obj.quaternion)
-                        // 重要：禁用控制器的旋转同步，避免覆盖我们的姿态
-                        if (control.saveState) {
-                            control.saveState()
-                        }
-                    } else {
-                        // 注视模式：设置最终注视目标
-                        control.target.copy(endTarget)
-                    }
+                    // // 确保最终状态正确
+                    // if (useRotationMode) {
+                    //     // 旋转模式：设置最终四元数
+                    //     that.camera.quaternion.copy(tweenTarget.quaternion)
+                    // } else {
+                    //     // 注视模式：设置最终注视目标
+                    //     control.target.copy(endTarget)
+                    // }
                 }
 
                 // 触发完成回调
@@ -2974,7 +2304,7 @@ export class BaseScene extends BasePlugin {
             return new Promise((resolve, reject) => {
                 try {
                     this.cameraFlyTo({
-                        // position: { x: 0, y: 100, z: 0 },
+                        position: { x: 20, y: 100, z: -12 },
                         enableLookAt: false, 
                         rotation: {
                             pitch: -90,  // 俯视角度
@@ -2983,19 +2313,11 @@ export class BaseScene extends BasePlugin {
                         },
                         duration: 1500,  // 1.5秒动画时间
                         easing: TWEEN.Easing.Quadratic.InOut,  // 平滑缓动
-                        onUpdate: () => {
-                            // 动画更新过程中的额外处理
-                            // 可以在这里添加过渡效果或状态更新
-                        },
+                        onUpdate: () => { },
                         onComplete: () => {
                             try {
                                 // 动画完成后切换到正交相机
                                 this.switchCamera()
-                                
-                                // 调整正交相机缩放以适应2D视图
-                                this.adjustOrthographicZoom(1.0)
-                                
-                                console.log('✅ 3D → 2D 切换完成')
                                 resolve('switched_to_2D')
                             } catch (error) {
                                 console.error('❌ 相机切换失败:', error)
