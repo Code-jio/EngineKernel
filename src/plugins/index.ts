@@ -38,7 +38,7 @@ export { OutLinePlugin } from "./webgl/OutLinePlugin"
 
 export { DataRainEffect } from "./effects/DataRainEffect"
 export { TechRingEffect } from "./effects/TechRingEffect"
-export { PostProcessingPlugin } from "./PostProcessing/index"
+export { PostProcessingPlugin } from "./postProcessing/index"
 
 
 // export { BaseModel } from './webgl/baseModel';

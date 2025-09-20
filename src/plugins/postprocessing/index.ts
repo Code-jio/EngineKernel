@@ -60,10 +60,12 @@ export class PostProcessingPlugin extends BasePlugin {
         this.options = {
             bloom: true, // 辉光效果
             ssao: true, // 环境光遮蔽（性能开销较大）
-            ssaa: false, // 抗锯齿（性能开销较大）
+            ssaa: true, // 抗锯齿（性能开销较大）
             fxaa: true, // FXAA抗锯齿（默认启用）
-            ssr: false, // 屏幕空间反射（性能开销较大，默认禁用）
+            ssr: true, // 屏幕空间反射（性能开销较大，默认禁用）
         }
+
+        this.init()
     }
 
     // 初始化后处理
