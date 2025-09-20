@@ -161,19 +161,8 @@ export class TextMarkerPlugin extends BasePlugin {
     /**
      * 插件初始化
      */
-    async init(coreInterface: any): Promise<void> {
+    async init(): Promise<void> {
         console.log("🚀 TextMarker插件初始化开始")
-
-        // 获取核心组件引用
-        if (this.scene == null) {
-            this.scene = coreInterface.scene || null
-        }
-        if (this.camera == null) {
-            this.camera = coreInterface.camera || null
-        }
-        if (this.renderer == null) {
-            this.renderer = coreInterface.renderer || null
-        }
 
         if (!this.scene) {
             throw new Error("TextMarker: 无法获取场景引用")

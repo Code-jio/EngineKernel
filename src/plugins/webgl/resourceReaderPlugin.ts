@@ -10,7 +10,7 @@ import {
     TaskResult,
     AsyncTask,
     QueueConfig,
-} from "./asyncTaskScheduler"
+} from "../../tools/asyncTaskScheduler"
 
 /**
  * 预期功能要求：
@@ -448,9 +448,7 @@ export class ResourceReaderPlugin extends BasePlugin {
     /**
      * 插件初始化
      */
-    async init(renderer: any): Promise<void> {
-        console.log("🚀 ResourceReaderPlugin初始化开始")
-        this.renderer = renderer;
+    async init(): Promise<void> {
         // 异步初始化KTX2Loader（需要renderer支持检测）
         await this.initializeKTX2LoaderAsync()
 

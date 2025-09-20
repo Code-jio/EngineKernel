@@ -22,7 +22,7 @@ class BasePlugin {
     }
 
     // 添加方法参数类型
-    async init(coreInterface: any): Promise<void> {}
+    async init(): Promise<void> {}
     // 加载
     async load(): Promise<void> {}
     // 暂停

@@ -27,10 +27,10 @@ export class OutLinePlugin extends BasePlugin {
         this.renderer = meta.userData.renderer // 获取相机
         this._selectArray = meta.userData.selectArray
 
-        this.init(null)
+        this.init()
     }
     
-    async init(coreInterface: any): Promise<void> {
+    async init(): Promise<void> {
         const that = this
 
         return new Promise((resolve, reject) => {
