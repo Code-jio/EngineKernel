@@ -22,8 +22,6 @@ export { ParticleEmitter } from "./effects/ParticleEmitter"
 
 export { BuildingControlPlugin } from './webgl/BuildingControlPlugin';
 
-export { WaterMarker } from './webgl/waterMarker';
-export { WaterMarkerPlugin } from './webgl/WaterMakerPlugin';
 export { FireParticleSystem, FireEffectManager } from './effects/fireMarker';
 export { CloudMarkerPlugin } from './effects/cloudMarkerPlugin';
 export { SmokeEffectManager, SmokeParticleSystem } from "./effects/SmokeMarker";

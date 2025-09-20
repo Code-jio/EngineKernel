@@ -54,24 +54,12 @@ export class SimpleTrajectoryPlugin extends BasePlugin {
     /**
      * 插件初始化
      */
-    async init(coreInterface: any): Promise<void> {
-        console.log("🚀 SimpleTrajectoryPlugin初始化开始");
-
-        this.scene = coreInterface.scene || null;
-        if (!this.scene) {
-            throw new Error("SimpleTrajectoryPlugin: 无法获取场景引用");
-        }
-
-        // 获取ModelMarker插件引用
-        this.modelMarkerPlugin = coreInterface.getPlugin?.("ModelMarker");
+    async init(){
         if (!this.modelMarkerPlugin) {
             console.warn("⚠️ SimpleTrajectoryPlugin: 未找到ModelMarker插件");
         }
-
         // 启动更新循环
         this.startUpdateLoop();
-
-        console.log("✅ SimpleTrajectoryPlugin初始化完成");
     }
 
     async load(): Promise<void> {
