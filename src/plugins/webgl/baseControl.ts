@@ -17,17 +17,6 @@ export type OrbitControlOptions = {
     boundaryRadius?: number // 移动边界半径
 }
 
-interface CameraFlyToOptions {
-    position: THREE.Vector3,
-    lookAt?: THREE.Vector3,
-    duration?: number,
-    delay?: number,
-    autoLookAt?: boolean,
-    easing?: (amount: number) => number,
-    onUpdate?: () => void,
-    onComplete?: () => void
-}
-
 export class BaseControls {
     public control: OrbitControls
     public camera: THREE.PerspectiveCamera | THREE.OrthographicCamera
@@ -87,7 +76,6 @@ export class BaseControls {
         // 恢复初始相机位置（确保用户设置的位置生效）
         this.camera.position.copy(initialCameraPosition)
         this.control.target.copy(initialTargetPosition)
-        this.control.update()
     }
 
     private setupDefaultLimits() {
@@ -123,32 +111,13 @@ export class BaseControls {
     }
 
     /**
-     * 恢复3D模式的控制限制
-     */
-    private apply3DLimits(): void {
-        if (this.saved3DLimits) {
-            this.control.minPolarAngle = this.saved3DLimits.minPolarAngle
-            this.control.maxPolarAngle = this.saved3DLimits.maxPolarAngle
-            this.control.minAzimuthAngle = this.saved3DLimits.minAzimuthAngle
-            this.control.maxAzimuthAngle = this.saved3DLimits.maxAzimuthAngle
-            this.control.enableRotate = this.saved3DLimits.enableRotate
-        }
-
-        // 启用所有控制
-        this.control.enableZoom = true
-        this.control.enablePan = true
-        this.control.enableRotate = true
-
-        console.log('🎥 已恢复3D控制限制（透视模式）')
-    }
-
-    /**
      * 获取控制器图层元素
      */
     public getControlLayer(): HTMLElement {
         return this.controlLayer
     }
 
+    // 限制移动范围
     private enforceMovementBounds() {
         const position = this.camera.position
         const distanceFromCenter = position.length()
@@ -160,8 +129,6 @@ export class BaseControls {
 
             // 更新控制器状态
             this.control.target.copy(new THREE.Vector3(0, 0, 0))
-            this.control.update()
-
             console.warn(`相机位置被限制在边界内，距离: ${distanceFromCenter.toFixed(2)}`)
         }
 
@@ -178,31 +145,20 @@ export class BaseControls {
         }
     }
 
-    public update() {
-        if (!this.control) return
-        eventBus.on("update", () => {
-            this.control.update()
-        })
-    }
-
     /**
      * 初始化事件监听器
      */
     public initializeEventListeners() {
         // 监听场景就绪事件
         eventBus.on("scene-ready", (data: any) => {
-            // console.log("OrbitControls: 场景就绪事件接收")
+            console.log("OrbitControls: 场景就绪事件接收")
         })
 
         // 监听窗口大小变化
         eventBus.on("resize", () => {
-            // 窗口大小变化时可能需要更新控制器
-            this.control.update()
             this.controlLayer.style.width = window.innerWidth + 'px';
             this.controlLayer.style.height = window.innerHeight + 'px';
         })
-
-        // console.log("✅ OrbitControls事件监听器已初始化")
     }
 
     /**
@@ -223,43 +179,6 @@ export class BaseControls {
         return !!(this.control && this.camera && this.controlLayer)
     }
 
-    /**
-     * 获取控制器详细状态信息
-     */
-    public getControlStatus(): any {
-        if (!this.control) {
-            return {
-                ready: false,
-                error: "OrbitControls实例不存在"
-            }
-        }
-
-        return {
-            ready: true,
-            enabled: this.control.enabled,
-            enableZoom: this.control.enableZoom,
-            enableRotate: this.control.enableRotate,
-            enablePan: this.control.enablePan,
-            enableDamping: this.control.enableDamping,
-            dampingFactor: this.control.dampingFactor,
-            minDistance: this.control.minDistance,
-            maxDistance: this.control.maxDistance,
-            domElement: this.control.domElement && 'tagName' in this.control.domElement ? this.control.domElement.tagName : null,
-            cameraPosition: {
-                x: this.camera.position.x,
-                y: this.camera.position.y,
-                z: this.camera.position.z
-            },
-            target: {
-                x: this.control.target.x,
-                y: this.control.target.y,
-                z: this.control.target.z
-            },
-            distanceFromCenter: this.getDistanceFromCenter(),
-            boundaryRadius: this.boundaryRadius
-        }
-    }
-
     // 设置边界半径
     public setBoundaryRadius(radius: number) {
         this.boundaryRadius = radius
@@ -277,14 +196,12 @@ export class BaseControls {
         const safeDistance = this.boundaryRadius * 0.3
         this.camera.position.set(safeDistance, safeDistance, safeDistance)
         this.control.target.set(0, 0, 0)
-        this.control.update()
     }
 
     // 强制设置相机位置
     public setCameraPosition(x: number, y: number, z: number, targetX: number = 0, targetY: number = 0, targetZ: number = 0) {
         this.camera.position.set(x, y, z)
         this.control.target.set(targetX, targetY, targetZ)
-        this.control.update()
     }
 
     public configure(options: OrbitControlOptions) {
@@ -317,10 +234,6 @@ export class BaseControls {
             // 更新最大距离以匹配新的边界
             this.control.maxDistance = this.boundaryRadius * 0.8
         }
-    }
-
-    public addEventListener(event: "change", callback: () => void) {
-        this.control.addEventListener(event, callback)
     }
 
     public destroy() {

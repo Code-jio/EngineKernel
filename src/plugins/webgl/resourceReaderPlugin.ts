@@ -14,7 +14,7 @@ import {
 
 /**
  * 预期功能要求：
- * 1.后端请求到的模型资源文件自动加载到场景中，维护一个资源文件的缓存池
+ * 1.后端请求到的模型资源文件自动加载到场景中，维护一个资源文件的缓存池 X
  * 2.每一个模型的加载都形成一个异步任务，维护这个任务队列，加载完成后，通过eventBus进行发布，在主文件中进行订阅，进行资源的加载
  * 3.目前只需要加载gltf、glb模型的加载工作
  * 4.自动注册draco解压插件，对glb/gltf模型进行解压
@@ -95,44 +95,6 @@ export class ResourceReaderPlugin extends BasePlugin {
         autoDispose: true, // 自动释放过期资源
     }
 
-    /**
-     * 创建带有默认配置的ResourceReaderPlugin实例
-     * @param config 可选的配置参数
-     * @returns ResourceReaderPlugin实例
-     */
-    static create(config: Partial<ResourceReaderConfig> = {}): ResourceReaderPlugin {
-        return new ResourceReaderPlugin(config)
-    }
-
-    /**
-     * 创建禁用高级压缩的ResourceReaderPlugin实例
-     * @param config 可选的配置参数
-     * @returns ResourceReaderPlugin实例
-     */
-    static createBasic(config: Partial<ResourceReaderConfig> = {}): ResourceReaderPlugin {
-        return new ResourceReaderPlugin({
-            ...config,
-            enableDraco: false,
-            enableKTX2: false,
-            enableMeshopt: false,
-        })
-    }
-
-    /**
-     * 创建高性能配置的ResourceReaderPlugin实例
-     * @param config 可选的配置参数
-     * @returns ResourceReaderPlugin实例
-     */
-    static createHighPerformance(config: Partial<ResourceReaderConfig> = {}): ResourceReaderPlugin {
-        return new ResourceReaderPlugin({
-            ...config,
-            maxCacheSize: 500 * 1024 * 1024, // 500MB缓存
-            maxConcurrentLoads: 6, // 更高并发
-            enableDraco: true,
-            autoDispose: false, // 禁用自动释放
-        })
-    }
-
     constructor(userData: any = {}) {
         super(userData)
 
@@ -141,9 +103,6 @@ export class ResourceReaderPlugin extends BasePlugin {
             ...ResourceReaderPlugin.DEFAULT_CONFIG,
             ...userData,
         }
-
-        // 验证和修正配置
-        // this.validateAndNormalizeConfig()
 
         // 应用配置到实例变量
         this.baseUrl = this.config.url || ""
@@ -164,66 +123,24 @@ export class ResourceReaderPlugin extends BasePlugin {
             autoDispose: this.config.autoDispose,
         })
 
-        this.initializeLoaders(this.config)
+        this.initialize(this.config)
+    }
+    
+    /**
+     * 初始化
+    */
+   private initialize(config: ResourceReaderConfig): void {
         this.initializeTaskScheduler()
-    }
-
-    /**
-     * 验证和标准化配置参数
-     */
-    private validateAndNormalizeConfig(): void {
-        // 验证缓存大小
-        if (this.config.maxCacheSize! < 10 * 1024 * 1024) {
-            console.warn("⚠️ 缓存大小过小，建议至少10MB，已调整为10MB")
-            this.config.maxCacheSize = 10 * 1024 * 1024
-        }
-        if (this.config.maxCacheSize! > 2 * 1024 * 1024 * 1024) {
-            console.warn("⚠️ 缓存大小过大，建议不超过2GB，已调整为2GB")
-            this.config.maxCacheSize = 2 * 1024 * 1024 * 1024
-        }
-
-        // 验证并发数
-        if (this.config.maxConcurrentLoads! < 1) {
-            console.warn("⚠️ 并发数不能小于1，已调整为1")
-            this.config.maxConcurrentLoads = 1
-        }
-        if (this.config.maxConcurrentLoads! > 10) {
-            console.warn("⚠️ 并发数过大可能影响性能，建议不超过10")
-        }
-
-        // 标准化DRACO路径
-        if (this.config.dracoPath && !this.config.dracoPath.endsWith("/")) {
-            this.config.dracoPath += "/"
-        }
-
-        // 验证支持的格式
-        if (!this.config.supportedFormats || this.config.supportedFormats.length === 0) {
-            console.warn("⚠️ 未指定支持的格式，使用默认格式")
-            this.config.supportedFormats = ["gltf", "glb"]
-        }
-    }
-
-    /**
-     * 初始化加载器
-     */
-    private initializeLoaders(config: ResourceReaderConfig): void {
-        // 初始化GLTF加载器
-        this.gltfLoader = new GLTFLoader()
-
-        // 初始化DRACO解压器
-        this.initializeDracoLoader(config)
-
-        // 初始化KTX2纹理加载器
-        this.initializeKTX2Loader(config)
-
-        // 初始化Meshopt量化解码器
-        this.initializeMeshoptDecoder(config)
+        this.initializeDracoLoader(config) // 初始化DRACO解压器
+        this.initializeKTX2Loader(config) // 初始化KTX2纹理加载器
+        this.initializeMeshoptDecoder(config) // 初始化Meshopt量化解码器
     }
 
     /**
      * 初始化DRACO解压器
      */
     private initializeDracoLoader(config: ResourceReaderConfig): void {
+        this.gltfLoader = new GLTFLoader()
         const enableDraco = config.enableDraco !== false
         if (enableDraco) {
             console.log("🔧 初始化DRACO解压器")
@@ -412,39 +329,7 @@ export class ResourceReaderPlugin extends BasePlugin {
 
         console.log("🚀 异步任务调度器已初始化并启动")
     }
-
-    /**
-     * 验证DRACO解码器文件是否存在
-     */
-    private async verifyDracoDecoder(dracoPath: string): Promise<void> {
-        try {
-            const testUrls = [
-                `${dracoPath}draco_decoder.wasm`,
-                `${dracoPath}draco_decoder.js`,
-                `${dracoPath}draco_wasm_wrapper.js`,
-            ]
-
-            // 检查关键文件是否存在（仅在开发环境）
-            if (process.env.NODE_ENV === "development") {
-                console.log("🔍 验证DRACO解码器文件...")
-                for (const url of testUrls) {
-                    try {
-                        const response = await fetch(url, { method: "HEAD" })
-                        if (response.ok) {
-                            console.log(`✅ DRACO文件存在: ${url}`)
-                        } else {
-                            console.warn(`⚠️ DRACO文件不存在: ${url}`)
-                        }
-                    } catch (error) {
-                        console.warn(`⚠️ 无法验证DRACO文件: ${url}`, error)
-                    }
-                }
-            }
-        } catch (error) {
-            console.warn("⚠️ DRACO解码器验证失败:", error)
-        }
-    }
-
+    
     /**
      * 插件初始化
      */
@@ -776,7 +661,7 @@ export class ResourceReaderPlugin extends BasePlugin {
             // onError
             (error: any) => {
                 console.error(`❌ 模型加载失败: ${task.url}`, error)
-                // this.onLoadError(task, error as Error)
+                this.onLoadError(task, error as Error)
             },
         )
     }
@@ -873,17 +758,6 @@ export class ResourceReaderPlugin extends BasePlugin {
         console.error(`💡 建议: ${suggestion}`)
         console.error(`📋 错误详情:`, error)
 
-        // 如果是DRACO相关错误，提供额外信息
-        if (errorCategory === "draco") {
-            console.error("🔧 DRACO故障排除:")
-            console.error("   1. 检查 /draco/ 目录是否存在")
-            console.error("   2. 确认以下文件存在:")
-            console.error("      - draco_decoder.wasm")
-            console.error("      - draco_decoder.js")
-            console.error("      - draco_wasm_wrapper.js")
-            console.error("   3. 检查服务器是否正确提供WASM文件")
-        }
-
         if (task.onError) {
             // 创建增强的错误对象
             const enhancedError = new Error(`${errorMessage} (类型: ${errorCategory})`)
@@ -963,85 +837,6 @@ export class ResourceReaderPlugin extends BasePlugin {
         return null
     }
 
-    /**
-     * 确保缓存空间足够
-     */
-    private ensureCacheSpace(requiredSize: number): void {
-        // const currentSize = this.getCurrentCacheSize()
-
-        // if (currentSize + requiredSize <= this.maxCacheSize) {
-        //   return
-        // }
-
-        // 按最后访问时间排序，移除最旧的
-        const entries: [string, CacheItem][] = []
-        this.resourceCache.forEach((value, key) => {
-            entries.push([key, value])
-        })
-        entries.sort(([, a], [, b]) => a.lastAccessed - b.lastAccessed)
-
-        let freedSpace = 0
-        for (const [url, item] of entries) {
-            this.resourceCache.delete(url)
-            item.model.traverse(child => {
-                if (child instanceof THREE.Mesh) {
-                    child.geometry?.dispose()
-                    if (Array.isArray(child.material)) {
-                        child.material.forEach(mat => mat.dispose())
-                    } else {
-                        child.material?.dispose()
-                    }
-                }
-            })
-
-            //   freedSpace += item.size
-            console.log(`🗑️ 清理缓存: ${url}`)
-
-            if (freedSpace >= requiredSize) {
-                break
-            }
-        }
-    }
-
-    /**
-     * 估算模型大小
-     */
-    private estimateModelSize(model: THREE.Group | THREE.Scene | THREE.Object3D): number {
-        let size = 0
-
-        model.traverse(child => {
-            if (child instanceof THREE.Mesh) {
-                // 估算几何体大小
-                const geometry = child.geometry
-                if (geometry.attributes.position) {
-                    size += geometry.attributes.position.array.length * 4 // float32
-                }
-                if (geometry.attributes.normal) {
-                    size += geometry.attributes.normal.array.length * 4
-                }
-                if (geometry.attributes.uv) {
-                    size += geometry.attributes.uv.array.length * 4
-                }
-                if (geometry.index) {
-                    size += geometry.index.array.length * 4
-                }
-            }
-        })
-
-        return size
-    }
-
-    /**
-     * 获取当前缓存大小
-     */
-    //   private getCurrentCacheSize(): number {
-    //     let total = 0
-    //     this.resourceCache.forEach((item) => {
-    //       total += item.size
-    //     })
-    //     return total
-    //   }
-    
     /**
      * 清理特定资源
      */
@@ -1247,84 +1042,6 @@ export class ResourceReaderPlugin extends BasePlugin {
     }
 
     /**
-     * 调试KTX2配置和状态
-     */
-    public debugKTX2Status(): void {
-        console.log("🔍 KTX2调试信息:")
-        console.log("├── KTX2Loader状态:", this.ktx2Loader ? "已创建" : "未创建")
-        
-        if (this.ktx2Loader) {
-            console.log("├── 转码器路径:", this.config.ktx2Path)
-            console.log("├── Renderer状态:", this.renderer ? "已设置" : "未设置")
-            
-            // 检查GLTFLoader是否已设置KTX2Loader
-            const hasKTX2 = (this.gltfLoader as any).ktx2Loader !== undefined
-            console.log("├── GLTFLoader中的KTX2:", hasKTX2 ? "已设置" : "未设置")
-        }
-        
-        console.log("└── 配置启用状态:", this.config.enableKTX2)
-    }
-
-    /**
-     * 验证KTX2解码器文件
-     */
-    public async verifyKTX2Files(): Promise<void> {
-        const ktx2Path = this.config.ktx2Path || "./ktx2/"
-        const testFiles = [
-            "basis_transcoder.js",
-            "basis_transcoder.wasm"
-        ]
-        
-        console.log("🔍 验证KTX2解码器文件...")
-        
-        for (const file of testFiles) {
-            try {
-                const response = await fetch(`${ktx2Path}${file}`, { method: "HEAD" })
-                if (response.ok) {
-                    console.log(`✅ ${file}: 存在`)
-                } else {
-                    console.error(`❌ ${file}: 不存在 (${response.status})`)
-                }
-            } catch (error) {
-                console.error(`❌ ${file}: 无法访问`, error)
-            }
-        }
-    }
-
-    /**
-     * 调试方法：测试异步加载流程
-     */
-    public async debugLoadFlow(url: string): Promise<void> {
-        console.log("🔍 开始调试加载流程...")
-
-        const fullUrl = this.resolveUrl(url)
-        console.log(`📍 完整URL: ${fullUrl}`)
-
-        // 检查缓存
-        const cached = this.getCachedResource(fullUrl)
-        console.log(`💾 缓存检查结果: ${cached ? "有缓存" : "无缓存"}`)
-
-        if (cached) {
-            console.log("✅ 从缓存返回，流程结束")
-            return
-        }
-
-        // 检查任务调度器状态
-        const schedulerStatus = this.taskScheduler.getStatus()
-        console.log("📊 调度器状态:", schedulerStatus)
-
-        // 检查加载器状态
-        console.log("🔧 GLTFLoader状态:", this.gltfLoader ? "已初始化" : "未初始化")
-        console.log("🔧 DRACOLoader状态:", this.dracoLoader ? "已初始化" : "未初始化")
-        console.log("🔧 KTX2Loader状态:", this.ktx2Loader ? "已初始化" : "未初始化")
-
-        // 调试KTX2状态
-        this.debugKTX2Status()
-
-        console.log("➡️ 准备创建任务配置并调度...")
-    }
-
-    /**
      * 销毁插件
      */
     dispose(): void {
@@ -1357,6 +1074,7 @@ export class ResourceReaderPlugin extends BasePlugin {
         console.log("🧹 ResourceReaderPlugin已销毁")
     }
 
+    // 处理已加载的模型
     private processLoadedModel(
         model: THREE.Group | THREE.Scene | THREE.Object3D,
         url: string,
@@ -1381,9 +1099,7 @@ export class ResourceReaderPlugin extends BasePlugin {
         return model
     }
 
-
-
-    //
+    // 判断是否是建筑模型
     private isBuildingModel(fileName: string): boolean {
         // return fileName === 'MAIN_BUILDING'
         // 建筑模型的文件名必须包含MAIN_BUILDING，而且以MAIN_BUILDING结尾

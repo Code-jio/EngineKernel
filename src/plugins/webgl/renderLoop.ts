@@ -1,36 +1,22 @@
-import { THREE, BasePlugin } from "../basePlugin";
+import { BasePlugin } from "../basePlugin";
 import eventBus from "../../eventBus/eventBus";
 import * as TWEEN from "@tweenjs/tween.js";
+import * as THREE from "three"
 
 interface RenderTask {
     id: string;
-    callback: () => void;
     priority: number; // 优先级，数字越小优先级越高
     enabled: boolean;
+    callback: () => void;
 }
-
-interface PerformanceMetrics {
-    fps: number;
-    frameTime: number;
-    averageFrameTime: number;
-    totalFrames: number;
-    lastFrameTime: number;
-    startTime: number;
-}
-
 export class RenderLoop extends BasePlugin {
     private clock: THREE.Clock;
     private taskList: Map<string, RenderTask> = new Map();
     private animationID: number;
     private isRunning: boolean = false;
-    private lastFrameTime: number = 0;
-    private frameTimeHistory: number[] = [];
-    private performanceMetrics: PerformanceMetrics;
     
     // 帧率控制
     private targetFPS: number = 60;
-    private frameInterval: number = 1000 / 60;
-    private lastRenderTime: number = 0;
     
     // 按需渲染
     private onDemandMode: boolean = false;
@@ -38,64 +24,47 @@ export class RenderLoop extends BasePlugin {
     
     // 错误处理
     private errorCount: number = 0;
-    private maxErrors: number = 10;
+    private maxErrors: number = 5;
 
     constructor(meta: any) {
         super(meta);
         this.clock = new THREE.Clock();
         this.animationID = 0;
-        this.performanceMetrics = {
-            fps: 0,
-            frameTime: 0,
-            averageFrameTime: 0,
-            totalFrames: 0,
-            lastFrameTime: performance.now(),
-            startTime: performance.now()
-        };
+        this.initialize()
     }
 
     initialize() {
-        this.isRunning = true;
-        this.lastRenderTime = performance.now();
-        this.performanceMetrics.startTime = performance.now();
         
-        const render = (currentTime: number) => {
-            if (!this.isRunning) return;
-            
-            try {
-                // 帧率控制
-                if (currentTime - this.lastRenderTime >= this.frameInterval) {
-                    // 更新性能指标
-                    this.updatePerformanceMetrics(currentTime);
+        this.isRunning = true;
+        const that = this
+        const render = () => {
+            if (!that.isRunning) return;
+            // try {
                     
                     // 按需渲染检查
-                    if (this.onDemandMode && !this.needsRender) {
-                        this.animationID = requestAnimationFrame(render);
+                    if (that.onDemandMode && !that.needsRender) {
+                        that.animationID = requestAnimationFrame(render);
                         return;
                     }
                     
                     // 执行任务列表
-                    this.executeTasks();
-                    
+                    that.executeTasks();
                     // 发出更新事件
                     eventBus.emit("update", {
-                        deltaTime: this.clock.getDelta(),
-                        elapsedTime: this.clock.getElapsedTime(),
-                        frameTime: this.performanceMetrics.frameTime,
-                        fps: this.performanceMetrics.fps
+                        deltaTime: that?.clock?.getDelta(),
+                        elapsedTime: that?.clock?.getElapsedTime(),
                     });
                     
                     // 更新 TWEEN 动画
                     TWEEN.update();
                     
-                    this.lastRenderTime = currentTime;
-                    this.needsRender = false;
-                }
+                    that.needsRender = false;
                 
-                this.animationID = requestAnimationFrame(render);
-            } catch (error) {
-                this.handleRenderError(error);
-            }
+                
+                that.animationID = requestAnimationFrame(render);
+            // } catch (error) {
+            //     that.handleRenderError(error);
+            // }
         };
         
         this.animationID = requestAnimationFrame(render);
@@ -118,24 +87,6 @@ export class RenderLoop extends BasePlugin {
                 this.handleTaskError(task.id, error);
             }
         }
-    }
-
-    // 更新性能指标
-    private updatePerformanceMetrics(currentTime: number): void {
-        const deltaTime = currentTime - this.performanceMetrics.lastFrameTime;
-        this.performanceMetrics.frameTime = deltaTime;
-        this.performanceMetrics.lastFrameTime = currentTime;
-        this.performanceMetrics.totalFrames++;
-        
-        // 计算帧率
-        this.frameTimeHistory.push(deltaTime);
-        if (this.frameTimeHistory.length > 60) {
-            this.frameTimeHistory.shift();
-        }
-        
-        const averageFrameTime = this.frameTimeHistory.reduce((sum, time) => sum + time, 0) / this.frameTimeHistory.length;
-        this.performanceMetrics.averageFrameTime = averageFrameTime;
-        this.performanceMetrics.fps = 1000 / averageFrameTime;
     }
 
     private handleRenderError(error: any): void {
@@ -199,13 +150,6 @@ export class RenderLoop extends BasePlugin {
         return false;
     }
 
-    // 帧率控制方法
-    setTargetFPS(fps: number): void {
-        this.targetFPS = Math.max(1, Math.min(120, fps));
-        this.frameInterval = 1000 / this.targetFPS;
-        console.log(`目标帧率设置为: ${this.targetFPS} FPS`);
-    }
-
     getTargetFPS(): number {
         return this.targetFPS;
     }
@@ -256,10 +200,6 @@ export class RenderLoop extends BasePlugin {
         return this.isRunning;
     }
 
-    getPerformanceMetrics(): PerformanceMetrics {
-        return { ...this.performanceMetrics };
-    }
-
     getTaskCount(): number {
         return this.taskList.size;
     }
@@ -281,7 +221,6 @@ export class RenderLoop extends BasePlugin {
             taskCount: this.taskList.size,
             enabledTaskCount: this.getEnabledTaskCount(),
             errorCount: this.errorCount,
-            performanceMetrics: this.performanceMetrics,
             tasks: this.getTaskList()
         };
     }

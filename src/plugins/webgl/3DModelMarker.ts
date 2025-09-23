@@ -1324,9 +1324,9 @@ export class ModelMarker extends BasePlugin {
      * 启动动画循环
      */
     private startAnimationLoop(): void {
-        eventBus.on("update", ({ deltaTime, elapsedTime, frameTime, fps }) => {
-            this.updateAnimations(deltaTime)
-        })
+        // eventBus.on("update", ({ deltaTime, elapsedTime, frameTime, fps }) => {
+        //     this.updateAnimations(deltaTime)
+        // })
     }
 
     /**

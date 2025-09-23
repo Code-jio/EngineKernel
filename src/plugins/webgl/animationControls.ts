@@ -70,7 +70,7 @@ export class AnimationControls extends BasePlugin {
     }
 
     update() {
-        eventBus.on("update", ({ deltaTime, elapsedTime, frameTime, fps }) => {
+        eventBus.on("update", ({ deltaTime }) => {
             this.mixer.update(deltaTime)
         })
     }

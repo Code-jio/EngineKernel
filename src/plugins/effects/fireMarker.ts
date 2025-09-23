@@ -24,8 +24,6 @@ interface FireMarkerOptions {
 interface UpdateParams {
     deltaTime: number;
     elapsedTime: number;
-    frameTime: number;
-    fps:number;
 }
 
 
@@ -417,7 +415,7 @@ export class FireParticleSystem {
         this.activeSmokeParticles.push(particle)
     }
 
-    update({ deltaTime, elapsedTime, frameTime, fps }:UpdateParams) {
+    update({ deltaTime}:UpdateParams) {
         const currentTime = this.clock.getElapsedTime()
 
         // 更新着色器时间
@@ -838,7 +836,7 @@ export class FireEffectManager {
         this.effects.push({
             type: "fire",
             effect: fireEffect,
-            update: ({ deltaTime, elapsedTime, frameTime, fps }: UpdateParams) => fireEffect.update({ deltaTime, elapsedTime, frameTime, fps }),
+            update: ({ deltaTime, elapsedTime,}: UpdateParams) => fireEffect.update({ deltaTime, elapsedTime }),
         })
 
         return fireEffect
@@ -852,10 +850,10 @@ export class FireEffectManager {
         }
     }
 
-    update({ deltaTime, elapsedTime, frameTime, fps }:UpdateParams) {
+    update({ deltaTime, elapsedTime }:UpdateParams) {
         this.effects.forEach(({ effect }) => {
             if (effect && effect.update) {
-                effect.update({ deltaTime, elapsedTime, frameTime, fps })
+                effect.update({ deltaTime, elapsedTime })
             }
         })
     }

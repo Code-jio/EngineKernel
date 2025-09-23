@@ -18,8 +18,6 @@ interface Config {
 interface UpdateParams {
     deltaTime: number;
     elapsedTime: number;
-    frameTime: number;
-    fps:number;
 }
 
 

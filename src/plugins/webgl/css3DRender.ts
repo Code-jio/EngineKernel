@@ -49,31 +49,31 @@ interface CSS3DItem {
 
 // CSS3D渲染插件 - 将HTML元素转为3D对象
 export class CSS3DRenderPlugin extends BasePlugin {
-    private css3Drenderer: CSS3DRenderer | null = null
-    private items: Map<string, CSS3DItem> = new Map()
-    private nextId: number = 1
-    private mainScene: THREE.Scene | null = null
-    private camera: THREE.Camera
-    private domElement: HTMLElement | null = null
-    private needsRender: boolean = false
+    public css3Drenderer: CSS3DRenderer | null = null
+    public items: Map<string, CSS3DItem> = new Map()
+    public nextId: number = 1
+    public mainScene: THREE.Scene | null = null
+    public camera: THREE.Camera
+    public domElement: HTMLElement | null = null
+    public needsRender: boolean = false
     // 添加渲染模式配置
-    private renderMode: "continuous" | "onDemand" = "continuous" // 连续渲染或按需渲染
-    private enableBillboarding: boolean = true // 是否启用billboarding效果（永远朝向镜头）
-    // private lastRenderTime: number = 0
+    public renderMode: "continuous" | "onDemand" = "continuous" // 连续渲染或按需渲染
+    public enableBillboarding: boolean = true // 是否启用billboarding效果（永远朝向镜头）
+    // public lastRenderTime: number = 0
     // 存储update事件处理器引用，便于清理
-    private updateHandler: (() => void) | null = null
+    public updateHandler: (() => void) | null = null
 
     // 动画组
-    private animations: TWEEN.Group = new TWEEN.Group()
+    public animations: TWEEN.Group = new TWEEN.Group()
     
     // 缓存对象，用于优化billboarding计算和屏幕空间坐标转换
-    private _cameraPosition?: THREE.Vector3
-    private _objectPosition?: THREE.Vector3
-    private _lookAtQuaternion?: THREE.Quaternion
-    private _tempMatrix?: THREE.Matrix4
-    private _tempUp?: THREE.Vector3
-    private _vector3?: THREE.Vector3
-    private _screenVector?: THREE.Vector3
+    public _cameraPosition?: THREE.Vector3
+    public _objectPosition?: THREE.Vector3
+    public _lookAtQuaternion?: THREE.Quaternion
+    public _tempMatrix?: THREE.Matrix4
+    public _tempUp?: THREE.Vector3
+    public _vector3?: THREE.Vector3
+    public _screenVector?: THREE.Vector3
 
     constructor(meta: any) {
         super(meta)
@@ -191,9 +191,6 @@ export class CSS3DRenderPlugin extends BasePlugin {
                     ${mergedOptions.gpuAcceleration ? 'transform: translate3d(0, 0, 0);' : ''}
                 `
             }
-
-            // GPU加速样式
-            const baseTransform = "translate3d(0,0,0)"
 
             // 构建完整样式
             const cssText = [

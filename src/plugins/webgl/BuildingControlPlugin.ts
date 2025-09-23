@@ -92,22 +92,6 @@ export interface FloorControlEvents {
     onCameraRestore?: () => void
 }
 
-// 添加userData结构定义
-interface BuildingObjectUserData {
-    // 原有的模型名称信息
-    modelName?: string
-    isBuildingModel?: boolean
-
-    // 新增的解析信息
-    buildingInfo?: {
-        type: "floor" | "room" | "facade" | "equipment" | "unknown"
-        buildingName?: string
-        floorNumber?: number
-        roomCode?: string
-        isFacade?: boolean
-    }
-}
-
 /**
  * 楼层控制插件
  *
@@ -170,34 +154,7 @@ export class BuildingControlPlugin extends BasePlugin {
 
     // 调试模式
     private debugMode: boolean = false
-
-    // 新增：统一的材质键格式生成器
-    private generateMaterialKey(
-        objectType: "floor" | "room" | "equipment",
-        identifier: string | number,
-        meshUuid: string,
-        materialIndex: number,
-    ): string {
-        return `${objectType}_${identifier}_${meshUuid}_${materialIndex}`
-    }
-
-    // 新增：检测是否为共享材质
-    private isSharedMaterial(material: THREE.Material): boolean {
-        if (!this.scene) return false
-
-        let usageCount = 0
-        this.scene.traverse(object => {
-            if (object instanceof THREE.Mesh) {
-                const materials = Array.isArray(object.material) ? object.material : [object.material]
-                if (materials.includes(material)) {
-                    usageCount++
-                    if (usageCount > 1) return true // 提前退出优化
-                }
-            }
-        })
-        return usageCount > 1
-    }
-
+    
     constructor(params: any = {}) {
         super(params)
         this.updateConfig(params.floorControlConfig || {})
@@ -752,19 +709,21 @@ export class BuildingControlPlugin extends BasePlugin {
             // 关联设备到楼层和房间
             this.associateEquipmentToFloorsAndRooms()
 
-            console.log("✅ 建筑结构链接完成", {
-                楼层数: this.floors.size,
-                房间数: this.rooms.size / 2, // 除以2因为每个房间有两个键
-                外立面数: this.facades.length,
-                设备数: this.allDevices.length,
-            })
+            // console.log("✅ 建筑结构链接完成", {
+            //     楼层数: this.floors.size,
+            //     房间数: this.rooms.size / 2, // 除以2因为每个房间有两个键
+            //     外立面数: this.facades.length,
+            //     设备数: this.allDevices.length,
+            // })
 
-            // 输出房间详细信息
-            console.log(
-                "🏠 最终房间列表:",
-                Array.from(this.rooms.keys()).filter(key => !key.includes("F_")),
-            )
-            console.log("🏠 rooms Map 对象:", this.rooms)
+            // // 输出房间详细信息
+            // console.log(
+            //     "🏠 最终房间列表:",
+            //     Array.from(this.rooms.keys()).filter(key => !key.includes("F_")),
+            // )
+            // console.log("🏠 rooms Map 对象:", this.rooms)
+
+            eventBus.emit("buildingComplete") // 完成主建筑数据构建
 
             return true
         } catch (error) {

@@ -31,16 +31,19 @@ export class PipelineManager {
     }
   }
 
+  // 预加载
   private handleLoadStart = (payload: any) => {
     this.executeStage('preload', payload)
       .then(() => eventBus.emit('CACHE_CHECK', payload));
   };
 
+  // 缓存校验
   private handleCacheVerified = (payload: any) => {
     this.executeStage('cache', payload)
       .then(() => eventBus.emit('LOD_PRECOMPUTE', payload));
   };
 
+  // LOD预计算
   private handleLODPrecomputed = (payload: any) => {
     this.executeStage('lod', payload)
       .then(() => eventBus.emit('MODEL_INSTANTIATE', payload));

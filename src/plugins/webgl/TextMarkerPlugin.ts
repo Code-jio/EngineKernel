@@ -1,17 +1,6 @@
 import { THREE, BasePlugin } from "../basePlugin"
 import eventBus from "../../eventBus/eventBus"
 
-// 图片文本标记插件
-// 主要功能：
-// 1. 在3D场景中添加图片文本和标记（将图片和文本转化canvas纹理，然后再渲染成sprite，应用 Sprite and SpriteMaterial）
-// 2. 支持图片文本标记的移动、缩放、旋转等操作
-// 3. 支持图片文本标记的文字、字体、颜色、大小等样式设置
-// 4. 支持图片文本标记的背景、边框等样式设置
-// 5. 支持图片文本标记的点击等交互事件
-// 6. 支持默认参数与自定义参数设置
-
-// 主要目的:在模型上创作标签(Labels)和徽标(Badges),并让它们在3D场景中显示
-
 // 文本样式接口
 interface TextStyle {
     fontSize: number
@@ -225,7 +214,7 @@ export class TextMarkerPlugin extends BasePlugin {
 
         const material = new THREE.SpriteMaterial({
             map: texture,
-            depthTest: false, // 关闭深度检测
+            depthTest: true, // 关闭深度检测
             depthWrite: false, // 关闭深度写入
             transparent: true, // 如果有透明度需要开启
             blending: THREE.NormalBlending, // 避免混合问题

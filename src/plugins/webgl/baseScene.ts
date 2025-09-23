@@ -5,125 +5,100 @@ import { FloorConfig, FloorManager } from './floorManager'
 import { BaseControls, OrbitControlOptions } from './baseControl'
 import * as TWEEN from '@tweenjs/tween.js'
 
-import { degreesToRadians, radiansToDegrees } from "../../utils/tools"
+
+import { degreesToRadians, radiansToDegrees, mergeConfigs } from "../../utils/tools"
 
 const tween_group = new TWEEN.Group()
-interface PerformanceStats {
-    fps: number
-    frameTime: number
-    avgFrameTime: number
-    frameCount: number
-    // 场景统计
-    objects: number
-    vertices: number
-    faces: number
-    // 渲染统计
-    drawCalls: number
-    triangles: number
-    points: number
-    lines: number
-    // 内存统计
-    textures: number
-    geometries: number
-    programs: number
-}
-
-// 增强的渲染统计
-interface EnhancedPerformanceStats extends PerformanceStats {
-    // 深度相关
-    depthConflicts: number
-    depthOptimizationLevel: string
-}
 
 // 默认配置预设
 const DEFAULT_CONFIGS = {
 
-        cameraConfig: {
-            type: 'perspective',
-            fov: 45,
-            near: 0.001,
-            far: 50000,
-            position: [100, 100, 100],
-            lookAt: [0, 0, 0],
+    cameraConfig: {
+        type: 'perspective',
+        fov: 45,
+        near: 0.001,
+        far: 50000,
+        position: [100, 100, 100],
+        lookAt: [0, 0, 0],
+    },
+    rendererConfig: {
+        alpha: true,    
+        precision: 'highp',
+        powerPreference: 'high-performance',
+        physicallyCorrectLights: true,
+        shadowMapEnabled: false,
+        shadowMapType: THREE.BasicShadowMap,
+        toneMapping: THREE.NoToneMapping,
+        toneMappingExposure: 1.0,
+        // outputColorSpace: THREE.DisplayP3ColorSpace,
+        // outputColorSpace: THREE.LinearDisplayP3ColorSpace,
+        outputColorSpace: THREE.SRGBColorSpace,
+    },
+    antialiasConfig: {
+        enabled: true,
+        type: 'msaa' as const,
+        msaaConfig: {
+            samples: 8,
         },
-        rendererConfig: {
-            alpha: true,
-            precision: 'highp',
-            powerPreference: 'high-performance',
-            physicallyCorrectLights: true,
-            shadowMapEnabled: true,
-            shadowMapType: THREE.PCFSoftShadowMap,
-            toneMapping: THREE.ACESFilmicToneMapping,
-            toneMappingExposure: 1.0,
-            // outputColorSpace: THREE.DisplayP3ColorSpace,
-            // outputColorSpace: THREE.LinearDisplayP3ColorSpace,
-            outputColorSpace: THREE.SRGBColorSpace,
+        fxaaConfig: {
+            intensity: 0.75,
+            quality: 'high',
         },
-        antialiasConfig: {
+    },
+    depthConfig: {
+        enabled: true,
+        depthBufferConfig: {
+            enableLogDepth: true,
+            depthBits: 32,
+            stencilBits: 8,
+        },
+        polygonOffsetConfig: {
             enabled: true,
-            type: 'msaa' as const,
-            msaaConfig: {
-                samples: 8,
-            },
-            fxaaConfig: {
-                intensity: 0.75,
-                quality: 'high',
-            },
+            factor: 2.0,
+            units: 2.0,
         },
-        depthConfig: {
+        depthRangeConfig: {
+            autoOptimize: true,
+            nearFarRatio: 1 / 10000,
+            minNear: 0.001,
+            maxFar: 50000,
+        },
+        conflictDetection: {
             enabled: true,
-            depthBufferConfig: {
-                enableLogDepth: true,
-                depthBits: 32,
-                stencilBits: 8,
-            },
-            polygonOffsetConfig: {
-                enabled: true,
-                factor: 2.0,
-                units: 2.0,
-            },
-            depthRangeConfig: {
-                autoOptimize: true,
-                nearFarRatio: 1 / 10000,
-                minNear: 0.001,
-                maxFar: 50000,
-            },
-            conflictDetection: {
-                enabled: true,
-                threshold: 0.00001,
-                autoFix: true,
-            },
-            depthSortConfig: {
-                enabled: true,
-                transparent: true,
-                opaque: true,
-            },
+            threshold: 0.00001,
+            autoFix: true,
         },
-        performanceConfig: {
+        depthSortConfig: {
             enabled: true,
+            transparent: true,
+            opaque: true,
         },
-        debugConfig: {
-            enabled: false,
-            gridHelper: true,
-            axesHelper: true,
-            gridSize: 10000,
-            gridDivisions: 100,
-            axesSize: 1000,
+    },
+    performanceConfig: {
+        enabled: true,
+    },
+    debugConfig: {
+        enabled: false,
+        gridHelper: true,
+        axesHelper: true,
+        gridSize: 10000,
+        gridDivisions: 100,
+        axesSize: 1000,
+    },
+    floorConfig: {
+        enabled: true,
+        type: 'reflection' as const,
+        size: 30000,
+        position: [0, 0, 0] as [number, number, number],
+        reflectionConfig: {
+            reflectivity: 0.8,
+            color: 0x404040,
+            roughness: 0.1,
+            metalness: 0.9,
+            mixStrength: 0.7,
         },
-        floorConfig: {
-            enabled: true,
-            type: 'reflection' as const,
-            size: 30000,
-            position: [0, 0, 0] as [number, number, number],
-            reflectionConfig: {
-                reflectivity: 0.8,
-                color: 0x404040,
-                roughness: 0.1,
-                metalness: 0.9,
-                mixStrength: 0.7,
-            },
-        },
-    
+    },
+
 
 }
 
@@ -184,8 +159,6 @@ interface CameraFlyToOptions {
 interface UpdateParams {
     deltaTime: number;
     elapsedTime: number;
-    frameTime: number;
-    fps: number;
 }
 
 export class BaseScene extends BasePlugin {
@@ -205,6 +178,7 @@ export class BaseScene extends BasePlugin {
         currentMode: '2D' | '3D'
         switchAnimationDuration: number
     }
+
     public cameraOption!: {
         lookAt: number[],
         position: number[],
@@ -217,16 +191,6 @@ export class BaseScene extends BasePlugin {
     // 地板管理器
     public floorManager: FloorManager
     public floorConfig: FloorConfig
-
-    // 性能监控相关
-    public performanceMonitor: {
-        enabled: boolean
-        stats: PerformanceStats
-        lastTime: number
-        frameTimeHistory: number[]
-        updateInterval: number
-        lastUpdateTime: number
-    }
 
     // 渲染器高级配置
     public rendererAdvancedConfig: {
@@ -255,8 +219,6 @@ export class BaseScene extends BasePlugin {
         gridHelper: THREE.GridHelper | null
         axesHelper: THREE.AxesHelper | null
     }
-    // 增强的性能统计
-    public enhancedStats: EnhancedPerformanceStats
 
     public _flyTween: any = null
 
@@ -283,32 +245,7 @@ export class BaseScene extends BasePlugin {
             const defaultConfig = DEFAULT_CONFIGS
 
             // 合并用户配置与默认配置
-            const finalConfig = this.mergeConfigs(defaultConfig, meta.userData)
-
-            // 初始化性能监控
-            this.performanceMonitor = {
-                enabled: finalConfig.performanceConfig?.enabled !== false,
-                stats: {
-                    fps: 0,
-                    frameTime: 0,
-                    avgFrameTime: 0,
-                    frameCount: 0,
-                    objects: 0,
-                    vertices: 0,
-                    faces: 0,
-                    drawCalls: 0,
-                    triangles: 0,
-                    points: 0,
-                    lines: 0,
-                    textures: 0,
-                    geometries: 0,
-                    programs: 0,
-                },
-                lastTime: performance.now(),
-                frameTimeHistory: [],
-                updateInterval: 1000, // 1秒更新一次统计
-                lastUpdateTime: 0,
-            }
+            const finalConfig = mergeConfigs(defaultConfig, meta.userData)
 
             // 初始化渲染器高级配置（简化版）
             this.rendererAdvancedConfig = {
@@ -347,27 +284,6 @@ export class BaseScene extends BasePlugin {
                 axesHelper: null,
             }
 
-            // 初始化增强的性能统计
-            this.enhancedStats = {
-                // 基础统计
-                fps: 0,
-                frameTime: 0,
-                avgFrameTime: 0,
-                frameCount: 0,
-                objects: 0,
-                vertices: 0,
-                faces: 0,
-                drawCalls: 0,
-                triangles: 0,
-                points: 0,
-                lines: 0,
-                textures: 0,
-                geometries: 0,
-                programs: 0,
-                depthConflicts: 0,
-                depthOptimizationLevel: 'basic',
-            }
-
             this.cameraOption = finalConfig.cameraConfig
             const rendererOption = {
                 ...finalConfig.rendererConfig,
@@ -396,23 +312,8 @@ export class BaseScene extends BasePlugin {
                 position: [0, 0, 0],
             }
 
-            // 适应Three.js r155+物理正确光照系统的光照强度
-            // 环境光强度需要降低，因为新的光照系统更加真实
-            // this.ambientLight = new THREE.AmbientLight(0xffffff, 1.2)
-
-            // // 平行光强度也需要调整
-            // this.directionalLight = new THREE.DirectionalLight(0xffffff, 1.2) // 从1降低到0.8
-            // this.directionalLight.position.set(60, 1800, -50000) // 设置平行光位置
-
-            // // 根据配置决定是否启用阴影
-            // this.directionalLight.castShadow =
-            //     this.rendererAdvancedConfig.shadowMapEnabled
-
-            // this.scene.add(this.directionalLight)
-            // this.scene.add(this.ambientLight)
-
             this.renderer = new THREE.WebGLRenderer({
-                alpha: rendererOption.alpha || true, // 透明
+                alpha: true, // 透明
                 precision: rendererOption.precision, // 精度
                 powerPreference: rendererOption.powerPreference, // 性能
                 logarithmicDepthBuffer: true, // 
@@ -435,8 +336,6 @@ export class BaseScene extends BasePlugin {
             // 应用渲染器高级配置
             this.applyRendererAdvancedConfig()
 
-
-
             // 将renderer实例存入meta供其他插件使用
             meta.userData.renderer = this.renderer
 
@@ -446,25 +345,6 @@ export class BaseScene extends BasePlugin {
             this.initializeControls()
 
             this.initialize()
-
-            // 显示初始化信息
-            const usedPreset = meta.userData.preset || 'highQuality'
-            console.log(`✅ BaseScene初始化完成 - 使用预设: ${usedPreset}`, {
-                相机类型: this.cameraOption.type,
-                光照系统: 'Three.js r155+ 物理正确光照',
-                阴影系统: this.rendererAdvancedConfig.shadowMapEnabled
-                    ? '启用'
-                    : '禁用',
-                性能监控: this.performanceMonitor.enabled ? '启用' : '禁用',
-                Debug模式: this.debugConfig.enabled ? '启用' : '禁用',
-                地板系统: this.floorConfig.enabled
-                    ? `启用(${this.floorConfig.type})`
-                    : '禁用',
-                色调映射: this.getToneMappingName(
-                    this.rendererAdvancedConfig.toneMapping
-                ),
-                像素比率: this.rendererAdvancedConfig.pixelRatio,
-            })
 
             // 如果启用了debug模式，则添加辅助器
             if (this.debugConfig.enabled) {
@@ -478,31 +358,6 @@ export class BaseScene extends BasePlugin {
         } catch (error: any) {
             console.error('❌ BaseScene初始化失败:', error)
 
-            // 提供回退处理
-            this.performanceMonitor = {
-                enabled: false,
-                stats: {
-                    fps: 0,
-                    frameTime: 0,
-                    avgFrameTime: 0,
-                    frameCount: 0,
-                    objects: 0,
-                    vertices: 0,
-                    faces: 0,
-                    drawCalls: 0,
-                    triangles: 0,
-                    points: 0,
-                    lines: 0,
-                    textures: 0,
-                    geometries: 0,
-                    programs: 0,
-                },
-                lastTime: performance.now(),
-                frameTimeHistory: [],
-                updateInterval: 1000,
-                lastUpdateTime: 0,
-            }
-
             this.rendererAdvancedConfig = {
                 container: document.body,
                 physicallyCorrectLights: false,
@@ -514,7 +369,6 @@ export class BaseScene extends BasePlugin {
                 pixelRatio: window.devicePixelRatio, //
             }
 
-            // 重新抛出错误，让调用者知道初始化失败
             const errorMessage =
                 error instanceof Error ? error.message : String(error)
             throw new Error(`BaseScene构造失败: ${errorMessage}`)
@@ -535,8 +389,8 @@ export class BaseScene extends BasePlugin {
             // 配置控制器
             this.controls.configure({
                 minDistance: 1,
-                maxDistance: 50000,
-                boundaryRadius: 100000,
+                maxDistance: 10000,
+                boundaryRadius: 5000, // 控制器活动限制范围
             })
 
             if (this.controls.control) {
@@ -619,95 +473,6 @@ export class BaseScene extends BasePlugin {
         })
     }
 
-    /**
-     * 深度合并配置对象（防止循环引用）
-     */
-    private mergeConfigs(defaultConfig: any, userConfig: any): any {
-        // 使用更安全的深拷贝方法
-        const result = this.safeDeepClone(defaultConfig)
-
-        const merge = (
-            target: any,
-            source: any,
-            visited = new WeakSet()
-        ): any => {
-            // 防止循环引用
-            if (visited.has(source)) {
-                console.warn('⚠️ 检测到循环引用，跳过此配置项')
-                return target
-            }
-
-            if (source && typeof source === 'object') {
-                visited.add(source)
-            }
-
-            for (const key in source) {
-                if (source.hasOwnProperty && source.hasOwnProperty(key)) {
-                    const sourceValue = source[key]
-
-                    if (
-                        sourceValue &&
-                        typeof sourceValue === 'object' &&
-                        !Array.isArray(sourceValue)
-                    ) {
-                        target[key] = target[key] || {}
-                        merge(target[key], sourceValue, visited)
-                    } else if (sourceValue !== undefined) {
-                        target[key] = sourceValue
-                    }
-                }
-            }
-
-            if (source && typeof source === 'object') {
-                visited.delete(source)
-            }
-
-            return target
-        }
-
-        return merge(result, userConfig)
-    }
-
-    /**
-     * 安全的深拷贝方法（防止循环引用）
-     */
-    private safeDeepClone(obj: any, visited = new WeakMap()): any {
-        // 处理基本类型
-        if (obj === null || typeof obj !== 'object') {
-            return obj
-        }
-
-        // 检查循环引用
-        if (visited.has(obj)) {
-            return visited.get(obj)
-        }
-
-        // 处理日期
-        if (obj instanceof Date) {
-            return new Date(obj.getTime())
-        }
-
-        // 处理数组
-        if (Array.isArray(obj)) {
-            const arrCopy: any[] = []
-            visited.set(obj, arrCopy)
-            for (let i = 0; i < obj.length; i++) {
-                arrCopy[i] = this.safeDeepClone(obj[i], visited)
-            }
-            return arrCopy
-        }
-
-        // 处理对象
-        const objCopy: any = {}
-        visited.set(obj, objCopy)
-        for (const key in obj) {
-            if (obj.hasOwnProperty && obj.hasOwnProperty(key)) {
-                objCopy[key] = this.safeDeepClone(obj[key], visited)
-            }
-        }
-
-        return objCopy
-    }
 
     /**
      * 应用渲染器高级配置
@@ -735,124 +500,6 @@ export class BaseScene extends BasePlugin {
 
         // 像素比率
         this.renderer.setPixelRatio(config.pixelRatio)
-
-        console.log('🔧 渲染器高级配置已应用:', {
-            physicallyCorrectLights: config.physicallyCorrectLights,
-            outputColorSpace: config.outputColorSpace,
-            toneMapping: this.getToneMappingName(config.toneMapping),
-            shadowMapEnabled: config.shadowMapEnabled,
-            pixelRatio: config.pixelRatio,
-        })
-    }
-
-    /**
-     * 获取色调映射名称
-     */
-    private getToneMappingName(toneMapping: THREE.ToneMapping): string {
-        const names: { [key: number]: string } = {
-            [THREE.NoToneMapping]: 'NoToneMapping',
-            [THREE.LinearToneMapping]: 'LinearToneMapping',
-            [THREE.ReinhardToneMapping]: 'ReinhardToneMapping',
-            [THREE.CineonToneMapping]: 'CineonToneMapping',
-            [THREE.ACESFilmicToneMapping]: 'ACESFilmicToneMapping',
-        }
-        return names[toneMapping] || 'Unknown'
-    }
-
-    /**
-     * 更新性能统计
-     */
-    private updatePerformanceStats(): void {
-        if (!this.performanceMonitor.enabled) return
-
-        const now = performance.now()
-        const frameTime = now - this.performanceMonitor.lastTime
-        this.performanceMonitor.lastTime = now
-
-        // 记录帧时间历史
-        this.performanceMonitor.frameTimeHistory.push(frameTime)
-        if (this.performanceMonitor.frameTimeHistory.length > 60) {
-            this.performanceMonitor.frameTimeHistory.shift()
-        }
-
-        // 更新统计数据
-        this.performanceMonitor.stats.frameTime = frameTime
-        this.performanceMonitor.stats.frameCount++
-
-        // 每秒更新一次统计
-        if (
-            now - this.performanceMonitor.lastUpdateTime >=
-            this.performanceMonitor.updateInterval
-        ) {
-            this.calculatePerformanceStats()
-            this.performanceMonitor.lastUpdateTime = now
-        }
-    }
-
-    /**
-     * 计算性能统计
-     */
-    private calculatePerformanceStats(): void {
-        const stats = this.performanceMonitor.stats
-        const history = this.performanceMonitor.frameTimeHistory
-
-        // 计算平均帧时间和FPS
-        if (history.length > 0) {
-            stats.avgFrameTime =
-                history.reduce((sum, time) => sum + time, 0) / history.length
-            stats.fps = Math.round(1000 / stats.avgFrameTime)
-        }
-
-        // 场景统计
-        this.calculateSceneStats()
-
-        // 渲染统计
-        const renderInfo = this.renderer.info
-        stats.drawCalls = renderInfo.render.calls
-        stats.triangles = renderInfo.render.triangles
-        stats.points = renderInfo.render.points
-        stats.lines = renderInfo.render.lines
-
-        // 内存统计
-        stats.textures = renderInfo.memory.textures
-        stats.geometries = renderInfo.memory.geometries
-        stats.programs = renderInfo.programs?.length || 0
-
-        // 发送性能统计事件
-        eventBus.emit('performance:stats', { ...stats })
-    }
-
-    /**
-     * 计算场景统计（点线面信息）
-     */
-    private calculateSceneStats(): void {
-        let objects = 0
-        let vertices = 0
-        let faces = 0
-
-        this.scene.traverse((object) => {
-            objects++
-
-            if (object instanceof THREE.Mesh && object.geometry) {
-                const geometry = object.geometry
-
-                // 顶点数
-                if (geometry.attributes.position) {
-                    vertices += geometry.attributes.position.count
-                }
-
-                // 面数
-                if (geometry.index) {
-                    faces += geometry.index.count / 3
-                } else if (geometry.attributes.position) {
-                    faces += geometry.attributes.position.count / 3
-                }
-            }
-        })
-
-        this.performanceMonitor.stats.objects = objects
-        this.performanceMonitor.stats.vertices = vertices
-        this.performanceMonitor.stats.faces = Math.floor(faces)
     }
 
     // 初始化设置
@@ -872,8 +519,8 @@ export class BaseScene extends BasePlugin {
             renderer: this.renderer,
         })
 
-        eventBus.on('update', ({ deltaTime, elapsedTime, frameTime, fps }) => {
-            this.update({ deltaTime, elapsedTime, frameTime, fps })
+        eventBus.on('update', ({ deltaTime, elapsedTime }) => {
+            this.update({ deltaTime, elapsedTime })
         })
     }
 
@@ -922,66 +569,6 @@ export class BaseScene extends BasePlugin {
     }
 
     /**
-     * 启用/禁用性能监控
-     */
-    public setPerformanceMonitorEnabled(enabled: boolean): void {
-        this.performanceMonitor.enabled = enabled
-        console.log(`📊 性能监控${enabled ? '已启用' : '已禁用'}`)
-        eventBus.emit('performance:monitor-toggled', { enabled })
-    }
-
-    /**
-     * 获取当前性能统计
-     */
-    public getPerformanceStats(): PerformanceStats {
-        return { ...this.performanceMonitor.stats }
-    }
-
-    /**
-     * 重置性能统计
-     */
-    public resetPerformanceStats(): void {
-        this.performanceMonitor.stats = {
-            fps: 0,
-            frameTime: 0,
-            avgFrameTime: 0,
-            frameCount: 0,
-            objects: 0,
-            vertices: 0,
-            faces: 0,
-            drawCalls: 0,
-            triangles: 0,
-            points: 0,
-            lines: 0,
-            textures: 0,
-            geometries: 0,
-            programs: 0,
-        }
-        this.performanceMonitor.frameTimeHistory = []
-        console.log('🔄 性能统计已重置')
-    }
-
-    /**
-     * 获取场景信息
-     */
-    public getSceneInfo(): any {
-        return {
-            children: this.scene.children.length,
-            lights: this.scene.children.filter(
-                (child) => child instanceof THREE.Light
-            ).length,
-            meshes: this.scene.children.filter(
-                (child) => child instanceof THREE.Mesh
-            ).length,
-            cameras: this.scene.children.filter(
-                (child) => child instanceof THREE.Camera
-            ).length,
-            background: this.scene.background,
-            fog: this.scene.fog !== null,
-        }
-    }
-
-    /**
      * 访问器方法
      */
     get sceneInstance(): THREE.Scene {
@@ -995,12 +582,6 @@ export class BaseScene extends BasePlugin {
     }
     get controlsInstance(): BaseControls | null {
         return this.controls
-    }
-    get isPerformanceMonitorEnabled(): boolean {
-        return this.performanceMonitor.enabled
-    }
-    get enhancedStatsInstance(): EnhancedPerformanceStats {
-        return this.enhancedStats
     }
 
     destroy() {
@@ -1027,10 +608,6 @@ export class BaseScene extends BasePlugin {
     }
 
     update({ deltaTime }: UpdateParams) {
-        // 性能监控
-        if (this.performanceMonitor.enabled) {
-            this.updatePerformanceStats()
-        }
 
         // 更新地板动画
         this.floorManager.updateFloor(deltaTime, this.camera)
@@ -1043,13 +620,7 @@ export class BaseScene extends BasePlugin {
             this.floorManager.updateReflection(this.camera, this.renderer)
         }
 
-        // 添加控制器更新（关键修复）
-        if (this.controls) {
-            const control = this.controls.getControl()
-            if (control && typeof control.update === 'function') {
-                control.update()
-            }
-        }
+        this.controls?.getControl()?.update()
 
         // 更新 TWEEN 动画组 - 确保相机姿态动画能够正确更新
         tween_group.update()
@@ -1074,11 +645,6 @@ export class BaseScene extends BasePlugin {
             this.debugHelpers.axesHelper = new THREE.AxesHelper(config.axesSize)
             this.scene.add(this.debugHelpers.axesHelper)
         }
-
-        console.log('🔧 Debug辅助器已添加:', {
-            gridHelper: !!this.debugHelpers.gridHelper,
-            axesHelper: !!this.debugHelpers.axesHelper,
-        })
     }
 
     /**
@@ -1096,8 +662,6 @@ export class BaseScene extends BasePlugin {
             this.debugHelpers.axesHelper.dispose()
             this.debugHelpers.axesHelper = null
         }
-
-        console.log('🗑️ Debug辅助器已移除')
     }
 
     /**
@@ -1556,10 +1120,10 @@ export class BaseScene extends BasePlugin {
                 enableLookAt: true, // 默认启用注视
                 rotation: cameraState.rotation
                     ? {
-                          pitch: radiansToDegrees(cameraState.rotation instanceof THREE.Euler ? cameraState.rotation.x : 0),
-                          yaw: radiansToDegrees(cameraState.rotation instanceof THREE.Euler ? cameraState.rotation.y : 0),
-                          roll: radiansToDegrees(cameraState.rotation instanceof THREE.Euler ? cameraState.rotation.z : 0),
-                      }
+                        pitch: radiansToDegrees(cameraState.rotation instanceof THREE.Euler ? cameraState.rotation.x : 0),
+                        yaw: radiansToDegrees(cameraState.rotation instanceof THREE.Euler ? cameraState.rotation.y : 0),
+                        roll: radiansToDegrees(cameraState.rotation instanceof THREE.Euler ? cameraState.rotation.z : 0),
+                    }
                     : undefined,
                 easing: cameraState.easing || TWEEN.Easing.Quadratic.InOut,
                 onUpdate: cameraState.onUpdate,
@@ -1609,13 +1173,13 @@ export class BaseScene extends BasePlugin {
 
         // 当前相机位置
         const currentPosition = this.camera.position.clone()
-        
+
         // 检查是否使用旋转模式（非注视模式）
         const useRotationMode = finalOptions.rotation && !finalOptions.enableLookAt
-        
+
         let currentQuaternion: THREE.Quaternion = new THREE.Quaternion()
         let targetQuaternion: THREE.Quaternion = new THREE.Quaternion()
-        
+
         if (useRotationMode) {
             // 利用方位角计算出目标姿态(yaw,pitch/roll角度值先转为弧度,再转四元数)
             const targetRotation = new THREE.Euler(
@@ -1625,7 +1189,7 @@ export class BaseScene extends BasePlugin {
                 'YXZ'
             )
             targetQuaternion = new THREE.Quaternion().setFromEuler(targetRotation)
-            
+
             // 当前相机姿态 - 修复：使用正确的四元数
             currentQuaternion = this.camera.quaternion.clone()
         }
@@ -1642,11 +1206,11 @@ export class BaseScene extends BasePlugin {
         const tweenData: any = {
             position: currentPosition.clone()
         }
-        
+
         const tweenTarget: any = {
             position: targetPosition.clone()
         }
-        
+
         if (useRotationMode) {
             tweenData.quaternion = currentQuaternion.clone()
             tweenTarget.quaternion = targetQuaternion.clone()
@@ -1663,7 +1227,7 @@ export class BaseScene extends BasePlugin {
                 if (!targetPosition.equals(currentPosition)) {
                     this.camera.position.copy(obj.position)
                 }
-                
+
                 if (useRotationMode) {
                     // 旋转模式
                     that.camera.quaternion.copy(obj.quaternion)
@@ -1677,7 +1241,7 @@ export class BaseScene extends BasePlugin {
                         that.camera.lookAt(obj.target)
                     }
                 }
-                
+
                 // 触发更新回调
                 if (finalOptions.onUpdate) {
                     finalOptions.onUpdate()
@@ -2259,7 +1823,7 @@ export class BaseScene extends BasePlugin {
             target: currentTarget,
         })
     }
-    
+
     /**
      * 切换相机模式
      * @param mode 相机模式：“2D” | “3D”
@@ -2305,7 +1869,7 @@ export class BaseScene extends BasePlugin {
                 try {
                     this.cameraFlyTo({
                         position: { x: 20, y: 100, z: -12 },
-                        enableLookAt: false, 
+                        enableLookAt: false,
                         rotation: {
                             pitch: -90,  // 俯视角度
                             yaw: 0,      // 朝向正北
@@ -2345,11 +1909,11 @@ export class BaseScene extends BasePlugin {
                 try {
                     // 先切换到透视相机
                     this.switchCamera()
-                    
+                    // debugger
                     // 然后调整到合适的3D视角
                     this.cameraFlyTo({
-                        position: { x: 20, y: 15, z: 20 },  // 3D视角位置
-                        lookAt: { x: 0, y: 0, z: 0 },      // 看向原点
+                        position: { x: 50, y: 50, z: 50 },  // 3D视角位置
+                        lookAt: { x: 20, y: 0, z: -15 },      // 看向原点
                         enableLookAt: true,  // 使用注视模式
                         duration: 1500,      // 1.5秒动画时间
                         easing: TWEEN.Easing.Quadratic.InOut,
@@ -2357,20 +1921,20 @@ export class BaseScene extends BasePlugin {
                             // 动画更新过程中的额外处理
                         },
                         onComplete: () => {
-                            console.log('✅ 2D → 3D 切换完成')
-                            resolve('switched_to_3D')
+                            // console.log('✅ 2D → 3D 切换完成')
+                            // resolve('switched_to_3D')
                         }
                     })
                 } catch (error) {
                     console.error('❌ 3D视角调整失败:', error)
                     // 降级处理：使用默认3D视角
                     try {
-                        this.camera.position.set(20, 15, 20)
-                        this.camera.lookAt(0, 0, 0)
+                        this.camera.position.set(50, 50, 50)
+                        this.camera.lookAt(20, 0, -15)
                         let control = this.controls?.getControl()
                         if (control) {
-                          control.target.set(0, 0, 0)
-                          control.update()
+                            control.target.set(0, 0, 0)
+                            control.update()
                         }
                         console.log('⚠️ 使用降级模式完成 2D → 3D 切换')
                         resolve('switched_to_3D_fallback')

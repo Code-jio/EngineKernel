@@ -107,6 +107,93 @@ function sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function safeDeepClone(obj: any, visited = new WeakMap()): any {
+    // 处理基本类型
+    if (obj === null || typeof obj !== 'object') {
+        return obj
+    }
+
+    // 检查循环引用
+    if (visited.has(obj)) {
+        return visited.get(obj)
+    }
+
+    // 处理日期
+    if (obj instanceof Date) {
+        return new Date(obj.getTime())
+    }
+
+    // 处理数组
+    if (Array.isArray(obj)) {
+        const arrCopy: any[] = []
+        visited.set(obj, arrCopy)
+        for (let i = 0; i < obj.length; i++) {
+            arrCopy[i] = safeDeepClone(obj[i], visited)
+        }
+        return arrCopy
+    }
+
+    // 处理对象
+    const objCopy: any = {}
+    visited.set(obj, objCopy)
+    for (const key in obj) {
+        if (obj.hasOwnProperty && obj.hasOwnProperty(key)) {
+            objCopy[key] = safeDeepClone(obj[key], visited)
+        }
+    }
+
+    return objCopy
+}
+
+/**
+ * 深度合并配置对象（防止循环引用）
+ */
+function mergeConfigs(defaultConfig: any, userConfig: any): any {
+    // 使用更安全的深拷贝方法
+    const result = safeDeepClone(defaultConfig)
+
+    const merge = (
+        target: any,
+        source: any,
+        visited = new WeakSet()
+    ): any => {
+        // 防止循环引用
+        if (visited.has(source)) {
+            console.warn('⚠️ 检测到循环引用，跳过此配置项')
+            return target
+        }
+
+        if (source && typeof source === 'object') {
+            visited.add(source)
+        }
+
+        for (const key in source) {
+            if (source.hasOwnProperty && source.hasOwnProperty(key)) {
+                const sourceValue = source[key]
+
+                if (
+                    sourceValue &&
+                    typeof sourceValue === 'object' &&
+                    !Array.isArray(sourceValue)
+                ) {
+                    target[key] = target[key] || {}
+                    merge(target[key], sourceValue, visited)
+                } else if (sourceValue !== undefined) {
+                    target[key] = sourceValue
+                }
+            }
+        }
+
+        if (source && typeof source === 'object') {
+            visited.delete(source)
+        }
+
+        return target
+    }
+
+    return merge(result, userConfig)
+}
+
 export {
     degreesToRadians,
     radiansToDegrees,
@@ -122,4 +209,6 @@ export {
     isMobile,
     formatFileSize,
     sleep,
+    safeDeepClone,
+    mergeConfigs
 }

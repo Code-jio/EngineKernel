@@ -3,8 +3,6 @@ import * as THREE from "three"
 interface UpdateParams {
     deltaTime: number;
     elapsedTime: number;
-    frameTime: number;
-    fps:number;
 }
 
 /**
@@ -374,7 +372,7 @@ export class SparkParticleSystem {
      * 更新电弧系统
      * @param {number} deltaTime - 时间增量
      */
-    update({ deltaTime, elapsedTime, frameTime, fps }: UpdateParams) {
+    update({ deltaTime }: UpdateParams) {
         if (this.isPaused) {
             return
         }

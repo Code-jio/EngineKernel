@@ -5,8 +5,6 @@ import * as TWEEN from "@tweenjs/tween.js"
 interface UpdateParams {
     deltaTime: number;
     elapsedTime: number;
-    frameTime: number;
-    fps:number;
 }
 
 /**
@@ -280,7 +278,7 @@ export class SmokeParticleSystem {
         this.activeParticles.push(particle);
     }
 
-    update({ deltaTime, elapsedTime, frameTime, fps }: UpdateParams) {
+    update({ deltaTime }: UpdateParams) {
         const currentTime = this.clock.getElapsedTime();
 
         // 更新着色器时间
@@ -551,11 +549,11 @@ export class SmokeEffectManager {
         }
     }
 
-    update({ deltaTime, elapsedTime, frameTime, fps }: UpdateParams) {
+    update({ deltaTime, elapsedTime }: UpdateParams) {
         if (!this.effects) return;
         this.effects.forEach(({ effect }) => {
             if (effect.update) {
-                effect.update({ deltaTime, elapsedTime, frameTime, fps });
+                effect.update({ deltaTime, elapsedTime });
             }
         });
     }
@@ -577,7 +575,7 @@ declare global {
     interface Window {
         effects: Array<{
             type: string;
-            update: ({ deltaTime, elapsedTime, frameTime, fps }: UpdateParams) => void;
+            update: ({ deltaTime, elapsedTime }: UpdateParams) => void;
             effect?: SmokeParticleSystem;
         }>;
     }

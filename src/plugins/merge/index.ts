@@ -1,7 +1,7 @@
 import { THREE, BasePlugin } from "../basePlugin"
 import eventBus from "../../eventBus/eventBus"
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js'
-import { MeshBVH, SAH } from 'three-mesh-bvh'
+// import { MeshBVH, SAH } from 'three-mesh-bvh'
 
 interface MergeConfig {
     minGeometryCount: number
@@ -52,7 +52,7 @@ export class StaticGeometryMerger extends BasePlugin {
     private mergeConfig: MergeConfig
     private mergedGroups: Map<string, MergeGroup>
     private originalObjects: Map<string, any>
-    private bvhMap: Map<string, MeshBVH>
+    // private bvhMap: Map<string, MeshBVH>
     private isMerged: boolean
     private stats: PerformanceStats
     
@@ -60,11 +60,12 @@ export class StaticGeometryMerger extends BasePlugin {
         super(meta)
         this.name = 'StaticGeometryMerger'
         this.path = 'plugins/merge'
+        this.scene = meta.userData.scene
         
         // 合并配置
         this.mergeConfig = {
             minGeometryCount: 3,             // 最小几何体数量才触发合并
-            maxVerticesPerGeometry: 65536,    // 每个合并几何体的最大顶点数
+            maxVerticesPerGeometry: 655360,    // 每个合并几何体的最大顶点数
             materialGrouping: true,           // 按材质分组合并
             preserveLOD: true,              // 保留LOD层级关系
             buildBVH: true,                 // 构建BVH加速结构
@@ -75,7 +76,7 @@ export class StaticGeometryMerger extends BasePlugin {
         // 存储合并后的数据
         this.mergedGroups = new Map()     // 材质分组映射
         this.originalObjects = new Map()  // 原始对象引用
-        this.bvhMap = new Map()           // BVH加速结构映射
+        // this.bvhMap = new Map()           // BVH加速结构映射
         this.isMerged = false             // 合并状态
         
         // 性能统计
@@ -176,10 +177,10 @@ export class StaticGeometryMerger extends BasePlugin {
             // 创建合并后的网格
             this._createMergedMeshes(materialGroups)
             
-            // 构建BVH加速结构
-            if (this.mergeConfig.buildBVH) {
-                this._buildBVHAcceleration()
-            }
+            // // 构建BVH加速结构
+            // if (this.mergeConfig.buildBVH) {
+            //     this._buildBVHAcceleration()
+            // }
             
             // 更新统计信息
             this.stats.mergeTime = performance.now() - startTime
@@ -191,7 +192,7 @@ export class StaticGeometryMerger extends BasePlugin {
                 : 0
             this.stats.mergeTime = performance.now() - startTime
             
-            console.log('[StaticGeometryMerger] 合并优化完成:', this.getPerformanceStats())
+            // console.log('[StaticGeometryMerger] 合并优化完成:', this.getPerformanceStats())
             
             // 触发合并完成事件
             eventBus.emit('geometry:merged', {
@@ -209,7 +210,7 @@ export class StaticGeometryMerger extends BasePlugin {
      */
     private _findStaticMeshes(): THREE.Mesh[] {
         const staticMeshes: THREE.Mesh[] = []
-        const dynamicKeywords = ['dynamic', 'moving', 'animated', 'player', 'vehicle', 'character']
+        const dynamicKeywords = ['dynamic', 'moving', 'animated', 'player', 'vehicle', 'character',""]
         
         this.scene!.traverse((object) => {
             // 跳过非网格对象
@@ -406,87 +407,87 @@ export class StaticGeometryMerger extends BasePlugin {
         return mergedMeshes
     }
 
-    /**
-     * 构建BVH加速结构
-     */
-    private _buildBVHAcceleration(): void {
-        this.mergedGroups.forEach((group, materialKey) => {
-            if (!group.mesh.geometry) return
+    // /**
+    //  * 构建BVH加速结构
+    //  */
+    // private _buildBVHAcceleration(): void {
+    //     this.mergedGroups.forEach((group, materialKey) => {
+    //         if (!group.mesh.geometry) return
             
-            try {
-                // 构建BVH
-                const bvh = new MeshBVH(group.mesh.geometry, {
-                    strategy: SAH,
-                    maxDepth: 40,
-                    maxLeafTris: 10
-                })
+    //         try {
+    //             // 构建BVH
+    //             const bvh = new MeshBVH(group.mesh.geometry, {
+    //                 strategy: SAH,
+    //                 maxDepth: 40,
+    //                 maxLeafTris: 10
+    //             })
                 
-                // 存储BVH引用
-                this.bvhMap.set(materialKey, bvh)
-                ;(group.mesh.geometry as any).boundsTree = bvh
+    //             // 存储BVH引用
+    //             this.bvhMap.set(materialKey, bvh)
+    //             ;(group.mesh.geometry as any).boundsTree = bvh
                 
-                console.log(`[StaticGeometryMerger] BVH构建完成: ${materialKey}`)
+    //             console.log(`[StaticGeometryMerger] BVH构建完成: ${materialKey}`)
                 
-            } catch (error) {
-                console.error(`[StaticGeometryMerger] BVH构建失败: ${materialKey}`, error)
-            }
-        })
-    }
+    //         } catch (error) {
+    //             console.error(`[StaticGeometryMerger] BVH构建失败: ${materialKey}`, error)
+    //         }
+    //     })
+    // }
 
-    /**
-     * 更新统计信息
-     */
-    private _updateStats(): void {
-        let totalOriginalVertices = 0
-        let totalOriginalFaces = 0
-        let totalMergedVertices = 0
-        let totalMergedFaces = 0
-        let drawCalls = 0
+    // /**
+    //  * 更新统计信息
+    //  */
+    // private _updateStats(): void {
+    //     let totalOriginalVertices = 0
+    //     let totalOriginalFaces = 0
+    //     let totalMergedVertices = 0
+    //     let totalMergedFaces = 0
+    //     let drawCalls = 0
         
-        this.mergedGroups.forEach(group => {
-            totalOriginalVertices += group.objects.reduce((sum, obj) => {
-                return sum + (obj.geometry?.attributes.position?.count || 0)
-            }, 0)
-            totalOriginalFaces += group.objects.reduce((sum, obj) => {
-                return sum + (obj.geometry?.index?.count || obj.geometry?.attributes.position?.count || 0) / 3
-            }, 0)
-            totalMergedVertices += group.vertexCount
-            totalMergedFaces += group.faceCount
-            drawCalls++
-        })
+    //     this.mergedGroups.forEach(group => {
+    //         totalOriginalVertices += group.objects.reduce((sum, obj) => {
+    //             return sum + (obj.geometry?.attributes.position?.count || 0)
+    //         }, 0)
+    //         totalOriginalFaces += group.objects.reduce((sum, obj) => {
+    //             return sum + (obj.geometry?.index?.count || obj.geometry?.attributes.position?.count || 0) / 3
+    //         }, 0)
+    //         totalMergedVertices += group.vertexCount
+    //         totalMergedFaces += group.faceCount
+    //         drawCalls++
+    //     })
         
-        this.stats = {
-            originalDrawCalls: this.mergedGroups.size,
-            mergedDrawCalls: drawCalls,
-            originalVertices: Math.floor(totalOriginalVertices),
-            mergedVertices: Math.floor(totalMergedVertices),
-            originalObjects: this.mergedGroups.size,
-            mergedObjects: drawCalls,
-            mergeTime: performance.now(),
-            performanceGain: 0,
-            originalFaces: Math.floor(totalOriginalFaces),
-            mergedFaces: Math.floor(totalMergedFaces),
-            drawCallReduction: drawCalls > 0 ? Math.round((this.mergedGroups.size - drawCalls) / this.mergedGroups.size * 100) : 0
-        }
+    //     this.stats = {
+    //         originalDrawCalls: this.mergedGroups.size,
+    //         mergedDrawCalls: drawCalls,
+    //         originalVertices: Math.floor(totalOriginalVertices),
+    //         mergedVertices: Math.floor(totalMergedVertices),
+    //         originalObjects: this.mergedGroups.size,
+    //         mergedObjects: drawCalls,
+    //         mergeTime: performance.now(),
+    //         performanceGain: 0,
+    //         originalFaces: Math.floor(totalOriginalFaces),
+    //         mergedFaces: Math.floor(totalMergedFaces),
+    //         drawCallReduction: drawCalls > 0 ? Math.round((this.mergedGroups.size - drawCalls) / this.mergedGroups.size * 100) : 0
+    //     }
         
-        console.log('[StaticGeometryMerger] 统计信息:', this.stats)
-    }
+    //     console.log('[StaticGeometryMerger] 统计信息:', this.stats)
+    // }
 
-    /**
-     * 获取性能统计信息
-     */
-    getPerformanceStats(): PerformanceStats {
-        return {
-            ...this.stats,
-            drawCallReduction: this.stats.drawCallReduction,
-            objectReduction: this.stats.originalObjects > 0 
-                ? Math.round((1 - this.stats.mergedObjects / this.stats.originalObjects) * 100)
-                : 0,
+    // /**
+    //  * 获取性能统计信息
+    //  */
+    // getPerformanceStats(): PerformanceStats {
+    //     return {
+    //         ...this.stats,
+    //         drawCallReduction: this.stats.drawCallReduction,
+    //         objectReduction: this.stats.originalObjects > 0 
+    //             ? Math.round((1 - this.stats.mergedObjects / this.stats.originalObjects) * 100)
+    //             : 0,
 
-            bvhGroups: this.bvhMap.size,
-            mergeTime: Math.round(this.stats.mergeTime || 0)
-        }
-    }
+    //         bvhGroups: this.bvhMap.size,
+    //         mergeTime: Math.round(this.stats.mergeTime || 0)
+    //     }
+    // }
 
     /**
      * 恢复原始对象（用于动态更新）
@@ -515,7 +516,7 @@ export class StaticGeometryMerger extends BasePlugin {
         
         // 清空数据
         this.mergedGroups.clear()
-        this.bvhMap.clear()
+        // this.bvhMap.clear()
         this.isMerged = false
         
         console.log('[StaticGeometryMerger] 原始对象已恢复')
