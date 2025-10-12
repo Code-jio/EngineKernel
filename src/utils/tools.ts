@@ -344,6 +344,290 @@ function restoreOriginalOpacity(object: THREE.Object3D, forceRestore: boolean = 
     });
 }
 
+// ==================== 轮廓提取相关函数 ====================
+
+/**
+ * 判断三点是否构成逆时针转向
+ * @param a 第一个点
+ * @param b 第二个点
+ * @param c 第三个点
+ * @returns 大于0表示逆时针，等于0表示共线，小于0表示顺时针
+ */
+function ccw(a: { x: number, y: number }, b: { x: number, y: number }, c: { x: number, y: number }): number {
+    return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)
+}
+
+/**
+ * 计算点集的凸包
+ * @param points 输入点集
+ * @returns 凸包顶点数组
+ */
+function computeConvexHull(points: THREE.Vector3[]): THREE.Vector3[] {
+    if (points.length < 3) return points
+
+    // 投影到2D平面（忽略Y坐标）
+    const points2D = points.map(p => ({ x: p.x, y: p.z, original: p }))
+
+    // 使用Graham扫描算法计算凸包
+    // 1. 找到最下方的点（y最小，如果相同则x最小）
+    let start = points2D[0]
+    for (const p of points2D) {
+        if (p.y < start.y || (p.y === start.y && p.x < start.x)) {
+            start = p
+        }
+    }
+
+    // 2. 按照相对于起始点的极角排序
+    points2D.sort((a, b) => {
+        if (a === start) return -1
+        if (b === start) return 1
+
+        const angleA = Math.atan2(a.y - start.y, a.x - start.x)
+        const angleB = Math.atan2(b.y - start.y, b.x - start.x)
+
+        if (angleA !== angleB) return angleA - angleB
+
+        // 如果角度相同，选择距离更近的点
+        const distA = Math.sqrt((a.x - start.x) ** 2 + (a.y - start.y) ** 2)
+        const distB = Math.sqrt((b.x - start.x) ** 2 + (b.y - start.y) ** 2)
+        return distA - distB
+    })
+
+    // 3. 使用栈构建凸包
+    const hull: typeof points2D = [points2D[0], points2D[1]]
+
+    for (let i = 2; i < points2D.length; i++) {
+        while (hull.length > 1 && ccw(hull[hull.length - 2], hull[hull.length - 1], points2D[i]) <= 0) {
+            hull.pop()
+        }
+        hull.push(points2D[i])
+    }
+
+    // 返回原始3D点
+    return hull.map(p => p.original)
+}
+
+/**
+ * 提取3D对象的2D平面轮廓（俯视视角）
+ * @param object3D 3D对象，包含所有mesh
+ * @param options 配置选项
+ * @returns 2D平面轮廓顶点数组（世界坐标）
+ */
+function extractObjectContour(
+    object3D: THREE.Object3D, 
+    options: {
+        tolerance?: number,      // 顶点筛选容差值，默认0.05
+        floorRatio?: number,     // 地板高度比例，默认0.3
+        debugMode?: boolean      // 是否启用调试模式，默认false
+    } = {}
+): THREE.Vector3[] {
+    const {
+        tolerance = 0.05,
+        floorRatio = 0.3,
+        debugMode = false
+    } = options
+
+    const meshes: THREE.Mesh[] = []
+
+    // 查找对象中的所有mesh
+    object3D.traverse(child => {
+        if (child instanceof THREE.Mesh) {
+            meshes.push(child)
+        }
+    })
+
+    if (meshes.length === 0) {
+        if (debugMode) console.warn("⚠️ 对象中未找到任何mesh")
+        return []
+    }
+
+    // 计算整个对象的边界框
+    const objectBoundingBox = new THREE.Box3()
+    meshes.forEach(mesh => {
+        const meshBox = new THREE.Box3().setFromObject(mesh)
+        objectBoundingBox.union(meshBox)
+    })
+
+    // 获取边界框的中心点和尺寸
+    const center = new THREE.Vector3()
+    const size = new THREE.Vector3()
+    objectBoundingBox.getCenter(center)
+    objectBoundingBox.getSize(size)
+
+    // 确定地板高度（边界框的底部Y值）
+    const floorY = objectBoundingBox.min.y
+
+    // 收集所有可能构成轮廓的顶点
+    const contourCandidates: THREE.Vector3[] = []
+
+    // 从所有mesh中提取顶点
+    meshes.forEach(mesh => {
+        const geometry = mesh.geometry
+        if (!geometry.attributes.position) return
+
+        const verticesArray = geometry.attributes.position.array
+        const worldMatrix = mesh.matrixWorld
+
+        // 遍历所有顶点
+        for (let i = 0; i < verticesArray.length; i += 3) {
+            const x = verticesArray[i]
+            const y = verticesArray[i + 1]
+            const z = verticesArray[i + 2]
+
+            const vertex = new THREE.Vector3(x, y, z)
+            // 转换到世界坐标
+            vertex.applyMatrix4(worldMatrix)
+
+            // 优先考虑接近地板高度的顶点
+            if (Math.abs(vertex.y - floorY) < size.y * floorRatio) {
+                contourCandidates.push(vertex)
+            }
+        }
+    })
+
+    if (contourCandidates.length === 0) {
+        if (debugMode) console.warn("⚠️ 未找到可用于轮廓提取的顶点")
+        return []
+    }
+
+    // 使用凸包算法提取轮廓
+    const contourVertices = computeConvexHull(contourCandidates)
+
+    if (contourVertices.length < 3) {
+        if (debugMode) console.warn("⚠️ 轮廓顶点数量不足，无法构成有效轮廓")
+        return []
+    }
+
+    // 按照逆时针方向排序顶点（从上方看）
+    const contourCenter = new THREE.Vector3()
+    contourVertices.forEach(v => contourCenter.add(v))
+    contourCenter.divideScalar(contourVertices.length)
+
+    contourVertices.sort((a, b) => {
+        const angleA = Math.atan2(a.z - contourCenter.z, a.x - contourCenter.x)
+        const angleB = Math.atan2(b.z - contourCenter.z, b.x - contourCenter.x)
+        return angleA - angleB
+    })
+
+    return contourVertices
+}
+
+/**
+ * 将轮廓的几何中心移动到原点
+ * @param contour 轮廓顶点数组
+ * @returns 平移后的轮廓顶点数组，几何中心位于原点
+ */
+function centerContourAtOrigin(contour: THREE.Vector3[]): THREE.Vector3[] {
+    if (!contour || contour.length === 0) {
+        console.warn("⚠️ 轮廓顶点数组为空，无法进行中心化处理")
+        return []
+    }
+
+    // 计算轮廓的几何中心
+    const center = new THREE.Vector3()
+    contour.forEach(vertex => {
+        center.add(vertex)
+    })
+    center.divideScalar(contour.length)
+
+    // 创建平移后的轮廓顶点数组
+    const centeredContour: THREE.Vector3[] = []
+    contour.forEach(vertex => {
+        const centeredVertex = vertex.clone()
+        centeredVertex.sub(center) // 从每个顶点减去中心点坐标
+        centeredContour.push(centeredVertex)
+    })
+
+    return centeredContour
+}
+
+/**
+ * 为对象提取并保存轮廓信息到userData
+ * @param object3D 3D对象
+ * @param options 配置选项
+ * @returns 是否成功提取并保存轮廓
+ */
+function extractAndSaveObjectBounding(
+    object3D: THREE.Object3D, 
+    options: {
+        objectName?: string,     // 对象名称，用于日志输出
+        tolerance?: number,      // 顶点筛选容差值，默认0.05
+        floorRatio?: number,     // 地板高度比例，默认0.3
+        debugMode?: boolean,     // 是否启用调试模式，默认false
+        saveToUserData?: boolean, // 是否保存到userData，默认true
+        saveCenteredContour?: boolean // 是否保存中心化后的轮廓，默认false
+    } = {}
+): boolean {
+    const {
+        objectName = "对象",
+        tolerance = 0.05,
+        floorRatio = 0.3,
+        debugMode = false,
+        saveToUserData = true,
+        saveCenteredContour = false
+    } = options
+
+    try {
+        // 提取对象的2D平面轮廓（俯视视角）
+        const contourVertices = extractObjectContour(object3D, {
+            tolerance,
+            floorRatio,
+            debugMode
+        })
+
+        if (contourVertices.length > 0 && saveToUserData) {
+            // 将轮廓信息保存到对象的userData中
+            if (!object3D.userData) {
+                object3D.userData = {}
+            }
+
+            // 计算轮廓中心
+            const contourCenter = new THREE.Vector3()
+            contourVertices.forEach(v => contourCenter.add(v))
+            contourCenter.divideScalar(contourVertices.length)
+
+            // 保存轮廓信息
+            object3D.userData.bounding = {
+                vertices: contourVertices.map(v => ({ x: v.x, y: v.y, z: v.z })),
+                vertexCount: contourVertices.length,
+                center: {
+                    x: contourCenter.x,
+                    y: contourCenter.y,
+                    z: contourCenter.z,
+                },
+                type: "contour", // 标记为2D平面轮廓
+                extractedAt: Date.now(),
+            }
+
+            // 如果需要保存中心化后的轮廓
+            if (saveCenteredContour) {
+                const centeredContour = centerContourAtOrigin(contourVertices)
+                object3D.userData.bounding.centeredVertices = centeredContour.map(v => ({ x: v.x, y: v.y, z: v.z }))
+                
+                if (debugMode) {
+                    console.log(`   - 中心化轮廓顶点数: ${centeredContour.length}`)
+                }
+            }
+
+            if (debugMode) {
+                console.log(`✅ ${objectName} 2D平面轮廓提取完成`)
+                console.log(`   - 轮廓顶点数: ${contourVertices.length}`)
+                console.log(`   - 轮廓中心: (${contourCenter.x.toFixed(2)}, ${contourCenter.y.toFixed(2)}, ${contourCenter.z.toFixed(2)})`)
+            }
+            
+            return true
+        } else if (contourVertices.length === 0) {
+            if (debugMode) console.warn(`⚠️ ${objectName} 轮廓提取失败：没有有效的顶点`)
+            return false
+        }
+        
+        return contourVertices.length > 0
+    } catch (error) {
+        if (debugMode) console.error(`❌ ${objectName} 轮廓提取出错:`, error)
+        return false
+    }
+}
+
 export {
     degreesToRadians,
     radiansToDegrees,
@@ -362,5 +646,11 @@ export {
     safeDeepClone,
     mergeConfigs,
     setObjectOpacity,
-    restoreOriginalOpacity
+    restoreOriginalOpacity,
+    // 轮廓提取相关函数
+    ccw,
+    computeConvexHull,
+    extractObjectContour,
+    extractAndSaveObjectBounding,
+    centerContourAtOrigin
 }

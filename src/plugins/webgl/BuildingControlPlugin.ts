@@ -7,6 +7,10 @@
 import { THREE, BasePlugin } from "../basePlugin"
 import * as TWEEN from "@tweenjs/tween.js"
 import eventBus from "../../eventBus/eventBus"
+import { 
+    extractAndSaveObjectBounding as extractAndSaveObjectBoundingUtil,
+    extractObjectContour as extractObjectContourUtil
+} from "../../utils/tools"
 
 /**
  * 楼层状态枚举
@@ -834,232 +838,22 @@ export class BuildingControlPlugin extends BasePlugin {
         object.traverse(() => count++)
         return count - 1 // 减去对象自身
     }
-
-    /**
-     * 提取mesh顶面轮廓顶点
-     * @param mesh 要提取轮廓的mesh对象
-     * @returns 顶面轮廓顶点数组（世界坐标）
-     */
-    private extractTopFaceVertices(mesh: THREE.Mesh): THREE.Vector3[] {
-        const geometry = mesh.geometry
-        if (!geometry.attributes.position) {
-            console.warn("⚠️ Mesh没有position属性，无法提取顶面轮廓")
-            return []
-        }
-
-        const verticesArray = geometry.attributes.position.array
-        const vertices: THREE.Vector3[] = []
-
-        // 获取所有顶点的Y值，找到最大值
-        let maxY = -Infinity
-        for (let i = 0; i < verticesArray.length; i += 3) {
-            const y = verticesArray[i + 1]
-            if (y > maxY) {
-                maxY = y
-            }
-        }
-
-        // 筛选Y值最大的顶点（顶面顶点）
-        const topVertices: THREE.Vector3[] = []
-        const tolerance = 0.01 // 容差值，处理浮点数精度问题
-
-        for (let i = 0; i < verticesArray.length; i += 3) {
-            const x = verticesArray[i]
-            const y = verticesArray[i + 1]
-            const z = verticesArray[i + 2]
-
-            if (Math.abs(y - maxY) < tolerance) {
-                const vertex = new THREE.Vector3(x, y, z)
-                // 转换到世界坐标
-                vertex.applyMatrix4(mesh.matrixWorld)
-
-                // 检查是否已存在相同的顶点（去重）
-                const isDuplicate = topVertices.some(existing => vertex.distanceTo(existing) < tolerance)
-
-                if (!isDuplicate) {
-                    topVertices.push(vertex)
-                }
-            }
-        }
-
-        if (topVertices.length < 3) {
-            console.warn("⚠️ 顶面顶点数量不足，无法构成有效轮廓")
-            return []
-        }
-
-        // 计算顶点的中心点
-        const center = new THREE.Vector3()
-        topVertices.forEach(v => center.add(v))
-        center.divideScalar(topVertices.length)
-
-        // 按照逆时针方向排序顶点（从上方看）
-        topVertices.sort((a, b) => {
-            const angleA = Math.atan2(a.z - center.z, a.x - center.x)
-            const angleB = Math.atan2(b.z - center.z, b.x - center.x)
-            return angleA - angleB
-        })
-
-        return topVertices
-    }
-
-    /**
-     * 提取mesh底面轮廓顶点（用于水体标注）
-     * @param mesh 要提取轮廓的mesh对象
-     * @returns 底面轮廓顶点数组（世界坐标）
-     */
-    private extractBottomFaceVertices(mesh: THREE.Mesh): THREE.Vector3[] {
-        const geometry = mesh.geometry
-        if (!geometry.attributes.position) {
-            console.warn("⚠️ Mesh没有position属性，无法提取底面轮廓")
-            return []
-        }
-
-        const verticesArray = geometry.attributes.position.array
-        const vertices: THREE.Vector3[] = []
-
-        // 获取所有顶点的Y值，找到最小值（底面）
-        let minY = Infinity
-        for (let i = 0; i < verticesArray.length; i += 3) {
-            const y = verticesArray[i + 1]
-            if (y < minY) {
-                minY = y
-            }
-        }
-
-        // 筛选Y值最小的顶点（底面顶点）
-        const bottomVertices: THREE.Vector3[] = []
-        const tolerance = 0.01 // 容差值，处理浮点数精度问题
-
-        for (let i = 0; i < verticesArray.length; i += 3) {
-            const x = verticesArray[i]
-            const y = verticesArray[i + 1]
-            const z = verticesArray[i + 2]
-
-            if (Math.abs(y - minY) < tolerance) {
-                const vertex = new THREE.Vector3(x, y, z)
-                // 转换到世界坐标
-                vertex.applyMatrix4(mesh.matrixWorld)
-
-                // 检查是否已存在相同的顶点（去重）
-                const isDuplicate = bottomVertices.some(existing => vertex.distanceTo(existing) < tolerance)
-
-                if (!isDuplicate) {
-                    bottomVertices.push(vertex)
-                }
-            }
-        }
-
-        if (bottomVertices.length < 3) {
-            console.warn("⚠️ 底面顶点数量不足，无法构成有效轮廓")
-            return []
-        }
-
-        // 计算顶点的中心点
-        const center = new THREE.Vector3()
-        bottomVertices.forEach(v => center.add(v))
-        center.divideScalar(bottomVertices.length)
-
-        // 按照逆时针方向排序顶点（从上方看）
-        bottomVertices.sort((a, b) => {
-            const angleA = Math.atan2(a.z - center.z, a.x - center.x)
-            const angleB = Math.atan2(b.z - center.z, b.x - center.x)
-            return angleA - angleB
-        })
-
-        return bottomVertices
-    }
-
+    
     /**
      * 为房间对象提取并保存轮廓信息
      * @param roomObject 房间3D对象
      * @param roomCode 房间代码
      */
     private extractAndSaveRoomBounding(roomObject: THREE.Object3D, roomCode: string): void {
-        const meshes: THREE.Mesh[] = []
-
-        // 查找房间中的所有mesh
-        roomObject.traverse(child => {
-            if (child instanceof THREE.Mesh) {
-                meshes.push(child)
-            }
+        // 使用tools.ts中的公共方法提取并保存轮廓
+        extractAndSaveObjectBoundingUtil(roomObject, {
+            objectName: `房间 ${roomCode}`,
+            tolerance: 0.05,
+            floorRatio: 0.3,
+            debugMode: this.debugMode,
+            saveToUserData: true,
+            saveCenteredContour: true // 保存中心化后的轮廓
         })
-
-        if (meshes.length === 0) {
-            console.warn(`⚠️ 房间 ${roomCode} 中未找到任何mesh`)
-            return
-        }
-
-        // 选择面积最大的mesh作为地板
-        let floorMesh = meshes[0]
-        let maxArea = 0
-
-        for (const mesh of meshes) {
-            const box = new THREE.Box3().setFromObject(mesh)
-            const size = box.getSize(new THREE.Vector3())
-            const area = size.x * size.z // X-Z平面的面积（地板面积）
-
-            if (area > maxArea) {
-                maxArea = area
-                floorMesh = mesh
-            }
-        }
-
-        try {
-            // 提取顶面轮廓（用于常规用途）
-            const topBoundingVertices = this.extractTopFaceVertices(floorMesh)
-
-            // 提取底面轮廓（用于水体标注）
-            const bottomBoundingVertices = this.extractBottomFaceVertices(floorMesh)
-
-            if (topBoundingVertices.length > 0 || bottomBoundingVertices.length > 0) {
-                // 将轮廓信息保存到房间的userData中
-                if (!roomObject.userData) {
-                    roomObject.userData = {}
-                }
-
-                // 保存顶面轮廓信息
-                if (topBoundingVertices.length > 0) {
-                    roomObject.userData.bounding = {
-                        vertices: topBoundingVertices.map(v => ({ x: v.x, y: v.y, z: v.z })),
-                        vertexCount: topBoundingVertices.length,
-                        center: {
-                            x: topBoundingVertices.reduce((sum, v) => sum + v.x, 0) / topBoundingVertices.length,
-                            y: topBoundingVertices.reduce((sum, v) => sum + v.y, 0) / topBoundingVertices.length,
-                            z: topBoundingVertices.reduce((sum, v) => sum + v.z, 0) / topBoundingVertices.length,
-                        },
-                        type: "top", // 标记为顶面轮廓
-                        extractedAt: Date.now(),
-                        meshName: floorMesh.name || "unnamed_floor_mesh",
-                    }
-                }
-
-                // 保存底面轮廓信息（用于水体标注）
-                if (bottomBoundingVertices.length > 0) {
-                    roomObject.userData.waterBounding = {
-                        vertices: bottomBoundingVertices.map(v => ({ x: v.x, y: v.y, z: v.z })),
-                        vertexCount: bottomBoundingVertices.length,
-                        center: {
-                            x: bottomBoundingVertices.reduce((sum, v) => sum + v.x, 0) / bottomBoundingVertices.length,
-                            y: bottomBoundingVertices.reduce((sum, v) => sum + v.y, 0) / bottomBoundingVertices.length,
-                            z: bottomBoundingVertices.reduce((sum, v) => sum + v.z, 0) / bottomBoundingVertices.length,
-                        },
-                        type: "bottom", // 标记为底面轮廓
-                        extractedAt: Date.now(),
-                        meshName: floorMesh.name || "unnamed_floor_mesh",
-                    }
-                }
-
-                if (this.debugMode) {
-                    console.log(`✅ 房间 ${roomCode} 轮廓提取完成`)
-                    console.log(`   - 顶面轮廓: ${topBoundingVertices.length} 个顶点`)
-                    console.log(`   - 底面轮廓: ${bottomBoundingVertices.length} 个顶点`)
-                }
-            } else {
-                console.warn(`⚠️ 房间 ${roomCode} 轮廓提取失败：没有有效的顶点`)
-            }
-        } catch (error) {
-            console.error(`❌ 房间 ${roomCode} 轮廓提取出错:`, error)
-        }
     }
 
     /**
