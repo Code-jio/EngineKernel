@@ -199,8 +199,96 @@ export class MousePickPlugin extends BasePlugin {
         eventBus.on("Highlight-Delete",()=>{
             this.clearHighlight()
         })
+    }
 
+    async init(): Promise<void> {
+        console.log("🔧 MousePickPlugin 初始化开始")
+        
+        this.initializeEventListeners()
+        this.createBoxSelectElement()
+
+        // 初始化边框高亮材质
+        this.outlineMaterial = new THREE.LineBasicMaterial({
+            color: 0x00ffff, // 亮蓝色
+            linewidth: 2,
+            transparent: true,
+            opacity: 0.8,
+        })
+
+        eventBus.on("Highlight-Delete",()=>{
+            this.clearHighlight()
+        })
+        
         console.log("✅ MousePickPlugin 初始化完成")
+    }
+
+    async start(): Promise<void> {
+        console.log("🚀 MousePickPlugin 启动")
+        // 这里可以添加启动相关的逻辑
+    }
+
+    async stop(): Promise<void> {
+        console.log("⏹️ MousePickPlugin 停止")
+        this.removeEventListeners()
+    }
+
+    async unload(): Promise<void> {
+        console.log("🗑️ MousePickPlugin 卸载")
+        
+        // 清理选中状态
+        this.clearSelection()
+        this.clearHighlight()
+        
+        // 清理事件监听
+        this.removeEventListeners()
+        eventBus.off("Highlight-Delete")
+        
+        // 清理边框材质
+        if (this.outlineMaterial) {
+            this.outlineMaterial.dispose()
+        }
+        
+        // 清理调试射线
+        if (this.debugRayLine) {
+            if (this.scene) {
+                this.scene.remove(this.debugRayLine)
+            }
+            if (this.debugRayLine.geometry) {
+                this.debugRayLine.geometry.dispose()
+            }
+            if (this.debugRayLine.material) {
+                (this.debugRayLine.material as THREE.Material).dispose()
+            }
+            this.debugRayLine = null
+        }
+        
+        // 清理框选元素
+        if (this.boxSelectElement) {
+            this.boxSelectElement.remove()
+            this.boxSelectElement = null
+        }
+        
+        console.log("✅ MousePickPlugin 卸载完成")
+    }
+
+    /**
+     * 移除事件监听器
+     */
+    private removeEventListeners(): void {
+        const controlLayer = this.controller?.getControlLayer ? this.controller.getControlLayer() : null
+
+        if (!controlLayer) {
+            return
+        }
+
+        const captureOptions = { capture: true, passive: false }
+
+        controlLayer.removeEventListener("mousedown", this.boundMouseDown, captureOptions)
+        controlLayer.removeEventListener("mousemove", this.boundMouseMove, captureOptions)
+        controlLayer.removeEventListener("mouseup", this.boundMouseUp, captureOptions)
+
+        window.removeEventListener("keydown", this.boundKeyDown)
+        window.removeEventListener("keyup", this.boundKeyUp)
     }
 
     /**
@@ -1248,52 +1336,11 @@ export class MousePickPlugin extends BasePlugin {
 
     /**
      * 销毁插件
+     * @deprecated 请使用 unload() 方法替代
      */
     public destroy(): void {
-        // 移除事件监听器
-        const controlLayer = this.controller?.getControlLayer ? this.controller.getControlLayer() : null
-        if (controlLayer) {
-            const captureOptions = { capture: true }
-            controlLayer.removeEventListener("mousedown", this.boundMouseDown, captureOptions)
-            controlLayer.removeEventListener("mousemove", this.boundMouseMove, captureOptions)
-            controlLayer.removeEventListener("mouseup", this.boundMouseUp, captureOptions)
-        }
-
-        window.removeEventListener("keydown", this.boundKeyDown)
-        window.removeEventListener("keyup", this.boundKeyUp)
-
-        // 确保控制器被正确恢复
-        this.enableController()
-
-        // 清理框选元素
-        if (this.boxSelectElement) {
-            document.body.removeChild(this.boxSelectElement)
-            this.boxSelectElement = null
-        }
-
-        // 清理调试射线
-        this.enableDebug(false)
-
-        // 清理高亮状态
-        eventBus.emit("Highlight-Delete")
-
-        // 清理建筑状态
-        if (this.buildingMode) {
-            this.closeBuilding()
-        }
-
-        // 清空状态
-        this.clearSelection()
-        this.selectedObjects.clear()
-        this.hoveredObject = null
-
-        // 清空引用
-        this.camera = null
-        this.scene = null
-        this.renderer = null
-        this.controller = null
-
-        console.log("🧹 MousePickPlugin 已销毁")
+        console.warn("⚠️ destroy() 方法已废弃，请使用 unload() 方法替代")
+        this.unload()
     }
 
     /**

@@ -44,4 +44,98 @@ export class SceneManager extends BasePlugin {
             eventBus.emit("SCENE_READY", { scene: this.activeScene });
         });
     }
+
+    // 初始化插件
+    async init(): Promise<void> {
+        await this.addModelToScene();
+        console.log("🎬 SceneManager 插件初始化完成");
+    }
+
+    // 启动插件
+    async start(): Promise<void> {
+        console.log("🚀 SceneManager 插件启动");
+    }
+
+    // 停止插件
+    async stop(): Promise<void> {
+        // 清理事件监听
+        eventBus.off("GLTF_READY");
+        console.log("⏹️ SceneManager 插件停止");
+    }
+
+    // 卸载插件
+    async unload(): Promise<void> {
+        await this.stop();
+        // 清理场景图
+        this.sceneGraph.clear();
+        this.activeScene = undefined;
+        console.log("🧹 SceneManager 插件卸载完成");
+    }
+
+    // 获取当前活动场景
+    getActiveScene(): THREE.Scene | undefined {
+        return this.activeScene;
+    }
+
+    // 获取场景图
+    getSceneGraph(): Map<string, THREE.Object3D> {
+        return this.sceneGraph;
+    }
+
+    // 获取场景名称列表
+    getSceneNames(): string[] {
+        return Array.from(this.sceneGraph.keys());
+    }
+
+    // 检查场景是否存在
+    hasScene(name: string): boolean {
+        return this.sceneGraph.has(name);
+    }
+
+    // 从场景图中移除场景
+    removeScene(name: string): boolean {
+        if (name === "default") {
+            console.warn("⚠️ 不能移除默认场景");
+            return false;
+        }
+
+        const scene = this.sceneGraph.get(name);
+        if (scene) {
+            // 如果移除的是当前活动场景，切换到默认场景
+            if (scene === this.activeScene) {
+                this.switchScene("default");
+            }
+            
+            // 清理场景中的对象
+            scene.traverse(obj => {
+                if (obj.parent) {
+                    obj.removeFromParent();
+                }
+            });
+            
+            this.sceneGraph.delete(name);
+            console.log(`🗑️ 场景 "${name}" 已移除`);
+            return true;
+        }
+        return false;
+    }
+
+    // 清空所有场景（保留默认场景）
+    clearAllScenes(): void {
+        const namesToRemove = Array.from(this.sceneGraph.keys()).filter(name => name !== "default");
+        namesToRemove.forEach(name => this.removeScene(name));
+        
+        // 清理默认场景
+        const defaultScene = this.sceneGraph.get("default");
+        if (defaultScene) {
+            defaultScene.traverse(obj => {
+                if (obj.parent) {
+                    obj.removeFromParent();
+                }
+            });
+        }
+        
+        this.activeScene = defaultScene instanceof THREE.Scene ? defaultScene : undefined;
+        console.log("🧹 所有场景已清空");
+    }
 }

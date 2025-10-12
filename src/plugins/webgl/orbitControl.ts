@@ -22,7 +22,7 @@ export class orbitControls extends BasePlugin {
     private camera: THREE.PerspectiveCamera
     private dom: HTMLElement
     private boundaryRadius: number = 20000 // 默认边界半径
-
+    private userData: any
     constructor(meta: any) {
         super(meta)
         if (!meta?.userData?.domElement) {
@@ -31,15 +31,20 @@ export class orbitControls extends BasePlugin {
         this.dom = meta.userData.domElement
         this.camera = meta.userData.camera as THREE.PerspectiveCamera
         this.control = new OrbitControls(this.camera, this.dom)
+        this.userData = meta.userData
+    }
 
+    async init(): Promise<void> {
+        console.log("🔧 OrbitControls 初始化开始")
+        
         // 设置默认限制
         this.setupDefaultLimits()
 
         // 保存初始相机位置（在OrbitControls可能修改之前）
         const initialCameraPosition = this.camera.position.clone()
         const initialTargetPosition = new THREE.Vector3()
-        if (meta.userData.cameraConfig?.lookAt) {
-            const lookAt = meta.userData.cameraConfig.lookAt as [number, number, number]
+        if (this.userData.cameraConfig?.lookAt) {
+            const lookAt = this.userData.cameraConfig.lookAt as [number, number, number]
             initialTargetPosition.set(lookAt[0], lookAt[1], lookAt[2])
         }
 
@@ -50,8 +55,8 @@ export class orbitControls extends BasePlugin {
         })
 
         // 应用用户配置
-        if (meta.userData.orbitControlOptions) {
-            this.configure(meta.userData.orbitControlOptions)
+        if (this.userData.orbitControlOptions) {
+            this.configure(this.userData.orbitControlOptions)
         }
 
         // 恢复初始相机位置（确保用户设置的位置生效）
@@ -62,6 +67,26 @@ export class orbitControls extends BasePlugin {
         console.log(
             `相机初始位置设置为: [${initialCameraPosition.x}, ${initialCameraPosition.y}, ${initialCameraPosition.z}]`,
         )
+        
+        console.log("✅ OrbitControls 初始化完成")
+    }
+
+    async start(): Promise<void> {
+        console.log("🚀 OrbitControls 启动")
+        // 这里可以添加启动相关的逻辑
+    }
+
+    async stop(): Promise<void> {
+        console.log("⏹️ OrbitControls 停止")
+        // 这里可以添加停止相关的逻辑
+    }
+
+    async unload(): Promise<void> {
+        console.log("🗑️ OrbitControls 卸载")
+        if (this.control) {
+            this.control.dispose()
+        }
+        console.log("✅ OrbitControls 卸载完成")
     }
 
     private setupDefaultLimits() {
@@ -189,7 +214,12 @@ export class orbitControls extends BasePlugin {
         this.control.addEventListener(event, callback)
     }
 
+    /**
+     * 销毁控制器（已废弃，使用unload方法）
+     * @deprecated 请使用unload()方法
+     */
     public destroy() {
-        this.control.dispose()
+        console.warn("⚠️ destroy()方法已废弃，请使用unload()方法")
+        this.unload()
     }
 }

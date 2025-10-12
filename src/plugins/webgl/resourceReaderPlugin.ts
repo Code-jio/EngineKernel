@@ -122,18 +122,68 @@ export class ResourceReaderPlugin extends BasePlugin {
             supportedFormats: this.config.supportedFormats,
             autoDispose: this.config.autoDispose,
         })
-
-        this.initialize(this.config)
     }
     
     /**
      * 初始化
     */
-   private initialize(config: ResourceReaderConfig): void {
+   async init(): Promise<void> {
+        console.log("🔧 ResourceReaderPlugin 初始化开始")
         this.initializeTaskScheduler()
-        this.initializeDracoLoader(config) // 初始化DRACO解压器
-        this.initializeKTX2Loader(config) // 初始化KTX2纹理加载器
-        this.initializeMeshoptDecoder(config) // 初始化Meshopt量化解码器
+        this.initializeDracoLoader(this.config) // 初始化DRACO解压器
+        this.initializeKTX2Loader(this.config) // 初始化KTX2纹理加载器
+        this.initializeMeshoptDecoder(this.config) // 初始化Meshopt量化解码器
+        console.log("✅ ResourceReaderPlugin 初始化完成")
+    }
+
+    /**
+     * 启动
+     */
+    async start(): Promise<void> {
+        console.log("🚀 ResourceReaderPlugin 启动")
+        // 这里可以添加启动相关的逻辑
+    }
+
+    /**
+     * 停止
+     */
+    async stop(): Promise<void> {
+        console.log("⏹️ ResourceReaderPlugin 停止")
+        // 这里可以添加停止相关的逻辑
+    }
+
+    /**
+     * 卸载
+     */
+    async unload(): Promise<void> {
+        console.log("🗑️ ResourceReaderPlugin 卸载")
+        
+        // 清理资源缓存
+        this.resourceCache.clear()
+        
+        // 清理加载任务
+        this.loadingTasks.clear()
+        this.loadingQueue.length = 0
+        this.activeLoads.clear()
+        
+        // 销毁加载器
+        if (this.dracoLoader) {
+            this.dracoLoader.dispose()
+            this.dracoLoader = null
+        }
+        
+        if (this.ktx2Loader) {
+            this.ktx2Loader.dispose()
+            this.ktx2Loader = null
+        }
+        
+        // 清理任务调度器
+        if (this.taskScheduler) {
+            this.taskScheduler.stop()
+            this.taskScheduler = null as any
+        }
+        
+        console.log("✅ ResourceReaderPlugin 卸载完成")
     }
 
     /**
@@ -333,23 +383,23 @@ export class ResourceReaderPlugin extends BasePlugin {
     /**
      * 插件初始化
      */
-    async init(): Promise<void> {
+// 此 `init` 函数实现重复，原文件中已有一个完整的 `init` 函数实现，此处删除该声明
         // 异步初始化KTX2Loader（需要renderer支持检测）
-        await this.initializeKTX2LoaderAsync()
+    //     await this.initializeKTX2LoaderAsync()
 
-        // 监听资源释放事件
-        eventBus.on("resource:dispose", (url: string) => {
-            this.disposeResource(url)
-        })
+    //     // 监听资源释放事件
+    //     eventBus.on("resource:dispose", (url: string) => {
+    //         this.disposeResource(url)
+    //     })
 
-        // 监听缓存清理事件
-        eventBus.on("resource:clearCache", () => {
-            this.clearCache()
-        })
+    //     // 监听缓存清理事件
+    //     eventBus.on("resource:clearCache", () => {
+    //         this.clearCache()
+    //     })
 
-        // 定时清理过期缓存
-        this.startCacheCleanup()
-    }
+    //     // 定时清理过期缓存
+    //     this.startCacheCleanup()
+    // }
 
     /**
      * 基类要求的load方法
@@ -1042,36 +1092,12 @@ export class ResourceReaderPlugin extends BasePlugin {
     }
 
     /**
-     * 销毁插件
+     * 销毁插件（已废弃，使用unload方法）
+     * @deprecated 请使用unload()方法
      */
     dispose(): void {
-        // 销毁异步任务调度器
-        if (this.taskScheduler) {
-            this.taskScheduler.destroy()
-        }
-
-        // 取消所有加载任务（兼容旧接口）
-        const taskIds = Array.from(this.loadingTasks.keys())
-        for (const taskId of taskIds) {
-            this.cancelLoad(taskId)
-        }
-
-        // 清理缓存
-        this.clearCache()
-
-        // 清理加载器
-        if (this.dracoLoader) {
-            this.dracoLoader.dispose()
-        }
-
-        if (this.ktx2Loader) {
-            this.ktx2Loader.dispose()
-        }
-
-        // Meshopt解码器不需要显式销毁
-        this.meshoptDecoder = null
-
-        console.log("🧹 ResourceReaderPlugin已销毁")
+        console.warn("⚠️ dispose()方法已废弃，请使用unload()方法")
+        this.unload()
     }
 
     // 处理已加载的模型

@@ -30,10 +30,29 @@ export class RenderLoop extends BasePlugin {
         super(meta);
         this.clock = new THREE.Clock();
         this.animationID = 0;
-        this.initialize()
     }
 
-    initialize() {
+    // 初始化插件
+    async init(): Promise<void> {
+        console.log("🎬 RenderLoop 插件初始化");
+    }
+
+    // 启动插件
+    async start(): Promise<void> {
+        this.initialize();
+        console.log("🚀 RenderLoop 插件启动");
+    }
+    
+    // 卸载插件
+    async unload(): Promise<void> {
+        await this.stop();
+        this.taskList.clear();
+        this.clock = null as any;
+        console.log("🧹 RenderLoop 插件卸载完成");
+    }
+
+    private initialize() {
+        if (this.isRunning) return;
         
         this.isRunning = true;
         const that = this
@@ -69,6 +88,14 @@ export class RenderLoop extends BasePlugin {
         
         this.animationID = requestAnimationFrame(render);
         console.log("🎬 渲染循环已启动");
+    }
+
+    private stopRenderLoop(): void {
+        this.isRunning = false;
+        if (this.animationID) {
+            cancelAnimationFrame(this.animationID);
+            this.animationID = 0;
+        }
     }
 
     private executeTasks(): void {
@@ -186,10 +213,7 @@ export class RenderLoop extends BasePlugin {
     }
 
     stop(): void {
-        this.isRunning = false;
-        if (this.animationID) {
-            cancelAnimationFrame(this.animationID);
-        }
+        this.stopRenderLoop();
         this.taskList.clear();
         console.log("⏹️ 渲染循环已停止");
         eventBus.emit("render-loop:stopped");
