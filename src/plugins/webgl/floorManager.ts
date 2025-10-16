@@ -1,12 +1,14 @@
 import { THREE } from "../basePlugin"
 import { Water } from "../../utils/three-imports"
+import { HexagonFloor } from "../effects/HexagonFloor"
+import { AnyTlsaRecord } from "dns"
 
 /**
  * 地板配置接口
  */
 export interface FloorConfig {
     enabled: boolean // 是否启用地板
-    type: "water" | "static" | "reflection" | "grid" | "glow" | "infinite" | "none" // 地板类型
+    type: "water" | "static" | "reflection" | "grid" | "glow" | "infinite" | "Hexgon" | "none" // 地板类型
     size: number // 地板大小
     position: [number, number, number] // 地板位置
 
@@ -93,6 +95,7 @@ export class FloorManager {
     private reflectionCamera: THREE.Camera | null = null
     private lastCameraPosition: THREE.Vector3 = new THREE.Vector3()
     private animationTime: number = 0
+    public hexagonFloor!: any
 
     constructor(scene: THREE.Scene) {
         this.scene = scene
@@ -107,7 +110,6 @@ export class FloorManager {
         if (!config.enabled || config.type === "none") {
             return
         }
-
         switch (config.type) {
             case "water": // 水面
                 this.floor = this.createWaterFloor(config, renderer)
@@ -126,6 +128,9 @@ export class FloorManager {
                 break
             case "infinite": // 无限
                 this.floor = this.createInfiniteFloor(config)
+                break
+            case "Hexgon": // 六边形
+                this.createHexgonFloor()
                 break
             default:
                 console.warn(`未知的地板类型: ${config.type}`)
@@ -331,12 +336,17 @@ export class FloorManager {
         return mesh
     }
 
+    private createHexgonFloor(){
+        // 目前提供默认参数
+        this.hexagonFloor = new HexagonFloor(this.scene,3000,3000)
+        this.floor = this.hexagonFloor.floorMesh
+    }
+
     /**
      * 更新地板动画
      */
-    public updateFloor(deltaTime: number, camera?: THREE.Camera): void {
+    public updateFloor(deltaTime: number, elapsedTime:number,camera?: THREE.Camera): void {
         if (!this.floor) return
-
         // 更新水面动画
         if (this.waterUniforms) {
             // 使用固定的时间增量来保持一致的动画速度
@@ -347,12 +357,17 @@ export class FloorManager {
                 this.waterUniforms.eye.value.setFromMatrixPosition(camera.matrixWorld)
             }
 
+      
+
             // 更新太阳方向
             if (this.waterUniforms.sunDirection) {
                 // 设置一个默认的太阳方向，可以根据需要调整
                 const sunDirection = new THREE.Vector3(1, 1, 0).normalize()
                 this.waterUniforms.sunDirection.value.copy(sunDirection)
             }
+        }
+        if (this.hexagonFloor) {
+            this.hexagonFloor.update(elapsedTime)
         }
     }
 

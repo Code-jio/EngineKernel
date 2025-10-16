@@ -30,72 +30,42 @@ export class RenderLoop extends BasePlugin {
         super(meta);
         this.clock = new THREE.Clock();
         this.animationID = 0;
+        this.initialize()
     }
 
-    // 初始化插件
-    async init(): Promise<void> {
-        console.log("🎬 RenderLoop 插件初始化");
-    }
-
-    // 启动插件
-    async start(): Promise<void> {
-        this.initialize();
-        console.log("🚀 RenderLoop 插件启动");
-    }
-    
-    // 卸载插件
-    async unload(): Promise<void> {
-        await this.stop();
-        this.taskList.clear();
-        this.clock = null as any;
-        console.log("🧹 RenderLoop 插件卸载完成");
-    }
-
-    private initialize() {
-        if (this.isRunning) return;
+    initialize() {
         
         this.isRunning = true;
-        const that = this
         const render = () => {
-            if (!that.isRunning) return;
-            // try {
-                    
-                    // 按需渲染检查
-                    if (that.onDemandMode && !that.needsRender) {
-                        that.animationID = requestAnimationFrame(render);
-                        return;
-                    }
-                    
-                    // 执行任务列表
-                    that.executeTasks();
-                    // 发出更新事件
-                    eventBus.emit("update", {
-                        deltaTime: that?.clock?.getDelta(),
-                        elapsedTime: that?.clock?.getElapsedTime(),
-                    });
-                    
-                    // 更新 TWEEN 动画
-                    TWEEN.update();
-                    
-                    that.needsRender = false;
+            if (!this.isRunning) return;
+            try {
+                // 按需渲染检查
+                if (this.onDemandMode && !this.needsRender) {
+                    this.animationID = requestAnimationFrame(render);
+                    return;
+                }
                 
+                // 执行任务列表
+                this.executeTasks();
+                // 发出更新事件
+                eventBus.emit("update", {
+                    deltaTime: this?.clock?.getDelta() || 0,
+                    elapsedTime: this?.clock?.getElapsedTime() || 0,
+                });
                 
-                that.animationID = requestAnimationFrame(render);
-            // } catch (error) {
-            //     that.handleRenderError(error);
-            // }
+                // 更新 TWEEN 动画
+                TWEEN.update();
+                
+                this.needsRender = false;
+            
+                this.animationID = requestAnimationFrame(render);
+            } catch (error) {
+                this.handleRenderError(error);
+            }
         };
         
         this.animationID = requestAnimationFrame(render);
         console.log("🎬 渲染循环已启动");
-    }
-
-    private stopRenderLoop(): void {
-        this.isRunning = false;
-        if (this.animationID) {
-            cancelAnimationFrame(this.animationID);
-            this.animationID = 0;
-        }
     }
 
     private executeTasks(): void {
@@ -213,7 +183,10 @@ export class RenderLoop extends BasePlugin {
     }
 
     stop(): void {
-        this.stopRenderLoop();
+        this.isRunning = false;
+        if (this.animationID) {
+            cancelAnimationFrame(this.animationID);
+        }
         this.taskList.clear();
         console.log("⏹️ 渲染循环已停止");
         eventBus.emit("render-loop:stopped");

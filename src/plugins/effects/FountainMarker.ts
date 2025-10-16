@@ -15,10 +15,6 @@ interface Config {
     initialPosition?: { x: number; y: number; z: number } | THREE.Vector3
 }
 
-interface UpdateParams {
-    deltaTime: number;
-    elapsedTime: number;
-}
 
 
 /**

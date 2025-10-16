@@ -40,5 +40,7 @@ export { TechRingEffect } from "./effects/TechRingEffect";
 export { PostProcessingPlugin } from "./postProcessing/index";
 export { StaticGeometryMerger } from "./merge/index";
 
+export { FloatPoint } from "./effects/FloatPoint"
+
 
 // export { BaseModel } from './webgl/baseModel';

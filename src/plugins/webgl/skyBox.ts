@@ -9,9 +9,6 @@ enum SkyBoxType {
     PROCEDURAL_SKY = "proceduralSky", // 程序化天空
     ENVIRONMENT_MAP = "environmentMap", // 环境贴图
     HDR_ENVIRONMENT = "hdrEnvironment", // HDR环境贴图
-    // 未来可扩展：
-    // SKY_DOME = 'skyDome',                // 天空穹顶
-    // LAYERED_SKY = 'layeredSky'           // 分层天空
 }
 
 interface SkyBoxConfig {
@@ -195,23 +192,30 @@ export class SkyBox extends BasePlugin {
             return;
         }
 
-        this.cubeTextureLoader.load(
+        let texture = this.cubeTextureLoader.load(
             this.config.texturePaths,
             texture => {
-                const geometry = new THREE.BoxGeometry(30000, 30000, 30000);
-                const material = new THREE.MeshBasicMaterial({
-                    envMap: texture,
-                    side: THREE.BackSide,
-                });
-                this.mesh = new THREE.Mesh(geometry, material);
-                this.mesh.renderOrder = 0; // 设置天空盒渲染顺序为0
-                this.mesh.name = "skyBox";
-                this.mesh.userData.skyBoxType = this.config.type;
+                // const geometry = new THREE.BoxGeometry(10000, 10000, 10000);
+                // const material = new THREE.MeshBasicMaterial({
+                //     envMap: texture,
+                //     side: THREE.FrontSide,
+                //     color: 0xffffff,
+                //     depthWrite: false, 
+                //     depthTest: false 
+                // });
+                // this.mesh = new THREE.Mesh(geometry, material);
+                // this.mesh.renderOrder = 0; // 设置天空盒渲染顺序为0
+                // this.mesh.name = "skyBox";
+                // this.mesh.userData.skyBoxType = this.config.type;
 
+                // eventBus.emit("skybox-ready", { type: SkyBoxType.CUBE_TEXTURE });
+
+                // // 自动添加到场景
+                // this.addToScene();
+
+                this.scene.background = texture;
+                // this.scene.environment = texture; // 用于 PBR 反射
                 eventBus.emit("skybox-ready", { type: SkyBoxType.CUBE_TEXTURE });
-
-                // 自动添加到场景
-                this.addToScene();
             },
             undefined,
             err => {
@@ -219,6 +223,12 @@ export class SkyBox extends BasePlugin {
                 eventBus.emit("skybox-error", err);
             },
         );
+
+        texture.wrapS = texture.wrapT = THREE.ClampToEdgeWrapping;
+        texture.minFilter = THREE.LinearMipMapLinearFilter;
+        texture.magFilter = THREE.LinearFilter;
+
+        this.scene.background = texture
     }
 
     //

@@ -408,7 +408,7 @@ function computeConvexHull(points: THREE.Vector3[]): THREE.Vector3[] {
 }
 
 /**
- * 提取3D对象的2D平面轮廓（俯视视角）
+ * 提取3D对象的2D平面轮廓（俯视视角）,专用于房间
  * @param object3D 3D对象，包含所有mesh
  * @param options 配置选项
  * @returns 2D平面轮廓顶点数组（世界坐标）
@@ -555,7 +555,7 @@ function extractAndSaveObjectBounding(
         floorRatio?: number,     // 地板高度比例，默认0.3
         debugMode?: boolean,     // 是否启用调试模式，默认false
         saveToUserData?: boolean, // 是否保存到userData，默认true
-        saveCenteredContour?: boolean // 是否保存中心化后的轮廓，默认false
+        saveCenteredContour?: boolean // 是否保存中心化后的轮廓，默认true
     } = {}
 ): boolean {
     const {
@@ -564,7 +564,7 @@ function extractAndSaveObjectBounding(
         floorRatio = 0.3,
         debugMode = false,
         saveToUserData = true,
-        saveCenteredContour = false
+        saveCenteredContour = true
     } = options
 
     try {
@@ -628,6 +628,29 @@ function extractAndSaveObjectBounding(
     }
 }
 
+
+/**
+ * 将 THREE.Vector3 转换为 {x, y, z} 对象
+ * @param vec - THREE.Vector3 实例
+ * @returns 包含 x, y, z 属性的普通对象
+ */
+function vector3ToObject(vec: THREE.Vector3): { x: number; y: number; z: number } {
+    return {
+        x: vec.x,
+        y: vec.y,
+        z: vec.z
+    };
+}
+
+/**
+ * 将 { x, y, z } 对象转换为 THREE.Vector3
+ * @param obj - 包含 x, y, z 属性的对象
+ * @returns THREE.Vector3 实例
+ */
+function objectToVector3(obj: { x: number; y: number; z: number }): THREE.Vector3 {
+    return new THREE.Vector3(obj.x, obj.y, obj.z);
+}
+
 export {
     degreesToRadians,
     radiansToDegrees,
@@ -652,5 +675,7 @@ export {
     computeConvexHull,
     extractObjectContour,
     extractAndSaveObjectBounding,
-    centerContourAtOrigin
+    centerContourAtOrigin,
+    objectToVector3,
+    vector3ToObject
 }

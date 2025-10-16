@@ -90,6 +90,8 @@ export class MousePickPlugin extends BasePlugin {
     // private controlLayer: HTMLElement | null = null;
     private controller: any = null
 
+    public highLight:boolean = true
+
     // 拾取配置
     private config: PickConfig = {
         mode: PickMode.SINGLE, // 拾取模式
@@ -199,96 +201,8 @@ export class MousePickPlugin extends BasePlugin {
         eventBus.on("Highlight-Delete",()=>{
             this.clearHighlight()
         })
-    }
 
-    async init(): Promise<void> {
-        console.log("🔧 MousePickPlugin 初始化开始")
-        
-        this.initializeEventListeners()
-        this.createBoxSelectElement()
-
-        // 初始化边框高亮材质
-        this.outlineMaterial = new THREE.LineBasicMaterial({
-            color: 0x00ffff, // 亮蓝色
-            linewidth: 2,
-            transparent: true,
-            opacity: 0.8,
-        })
-
-        eventBus.on("Highlight-Delete",()=>{
-            this.clearHighlight()
-        })
-        
         console.log("✅ MousePickPlugin 初始化完成")
-    }
-
-    async start(): Promise<void> {
-        console.log("🚀 MousePickPlugin 启动")
-        // 这里可以添加启动相关的逻辑
-    }
-
-    async stop(): Promise<void> {
-        console.log("⏹️ MousePickPlugin 停止")
-        this.removeEventListeners()
-    }
-
-    async unload(): Promise<void> {
-        console.log("🗑️ MousePickPlugin 卸载")
-        
-        // 清理选中状态
-        this.clearSelection()
-        this.clearHighlight()
-        
-        // 清理事件监听
-        this.removeEventListeners()
-        eventBus.off("Highlight-Delete")
-        
-        // 清理边框材质
-        if (this.outlineMaterial) {
-            this.outlineMaterial.dispose()
-        }
-        
-        // 清理调试射线
-        if (this.debugRayLine) {
-            if (this.scene) {
-                this.scene.remove(this.debugRayLine)
-            }
-            if (this.debugRayLine.geometry) {
-                this.debugRayLine.geometry.dispose()
-            }
-            if (this.debugRayLine.material) {
-                (this.debugRayLine.material as THREE.Material).dispose()
-            }
-            this.debugRayLine = null
-        }
-        
-        // 清理框选元素
-        if (this.boxSelectElement) {
-            this.boxSelectElement.remove()
-            this.boxSelectElement = null
-        }
-        
-        console.log("✅ MousePickPlugin 卸载完成")
-    }
-
-    /**
-     * 移除事件监听器
-     */
-    private removeEventListeners(): void {
-        const controlLayer = this.controller?.getControlLayer ? this.controller.getControlLayer() : null
-
-        if (!controlLayer) {
-            return
-        }
-
-        const captureOptions = { capture: true, passive: false }
-
-        controlLayer.removeEventListener("mousedown", this.boundMouseDown, captureOptions)
-        controlLayer.removeEventListener("mousemove", this.boundMouseMove, captureOptions)
-        controlLayer.removeEventListener("mouseup", this.boundMouseUp, captureOptions)
-
-        window.removeEventListener("keydown", this.boundKeyDown)
-        window.removeEventListener("keyup", this.boundKeyUp)
     }
 
     /**
@@ -501,92 +415,94 @@ export class MousePickPlugin extends BasePlugin {
         const targets = this.getPickableObjects()
         const intersects = this.raycaster.intersectObjects(targets, this.config.recursive)
 
-        // 过滤结果
-        const filteredResults = this.filterIntersections(intersects)
+        if (intersects.length>0) {
+            // 过滤结果
+            const filteredResults = this.filterIntersections(intersects)
 
-        if (filteredResults.length > 0 && this.debugEnabled) {
-            // 发送拾取事件 - 只包含3D场景信息
-            this.emitPickEvent("object-picked", {
-                results: filteredResults.map(result => ({
-                    objectId: result.object.id,
-                    objectName: this.getModelName(result.object),
-                    objectType: result.objectType,
-                    object: result.object,
-                    worldPosition: result.point,
-                    localPosition: result.localPoint,
-                    distance: result.distance,
-                    normal: result.normal,
-                    uv: result.uv ? [result.uv.x, result.uv.y] : undefined,
-                    materialName: result.materialName,
-                    geometryType: result.geometryType,
-                    faceIndex: result.faceIndex,
-                    instanceId: result.instanceId,
-                    worldMatrix: result.worldMatrix,
-                    boundingBox: result.boundingBox
-                        ? {
-                              min: result.boundingBox.min,
-                              max: result.boundingBox.max,
-                          }
-                        : undefined,
-                    objectList:
-                        result.objectList?.map(obj => ({
-                            id: obj.id,
-                            name: this.getModelName(obj),
-                            type: obj.type,
-                        })) || [], // 添加对象列表信息
-                })),
-                selectedObjectId: filteredResults[0].object.id,
-                selectedObjectName: this.getModelName(filteredResults[0].object),
-                pickMode: this.isCtrlPressed ? "box-select-mode" : this.config.mode,
-                timestamp: Date.now(),
-                objectList: filteredResults.map(result => ({
-                    id: result.object.id,
-                    name: this.getModelName(result.object),
-                    type: result.object.type,
-                })), // 在事件根级别添加对象列表
-                // 点击到的三维场景实际位置：三维场景坐标系
-                mousePosition: {
-                    x: filteredResults[0].point.x,
-                    y: filteredResults[0].point.y,
-                    z: filteredResults[0].point.z,
-                },
-                screenPosition: {
-                    x: event.clientX,
-                    y: event.clientY,
-                },
-            })
-            // debugger
-            // 处理选择和高亮
-            this.handlePickResults(filteredResults, event)
-        } else {
-            if (this.debugEnabled) {
-                console.log("🎯 点击了空白区域")
-            } else {
-                console.log(filteredResults)
-            }
-            // 在非Ctrl状态下清空选择和高亮
-            if (!this.isCtrlPressed) {
-                this.clearSelection()
-                eventBus.emit("Highlight-Delete")
-            }
-        }
-
-        // 如果是点集模式，记录当前拾取点
-        if (this.getPickMode() == PickMode.LINE) {
-            if (filteredResults.length > 0) {
-                const currentPoint = filteredResults[0].point
-                this.linePoints.push(currentPoint)
-
-                // 发送点集更新事件
-                this.emitPickEvent("line-points-updated", {
-                    point: currentPoint,
-                    linePoints: this.linePoints.map(p => ({ x: p.x, y: p.y, z: p.z })),
+            if (filteredResults.length > 0 && this.debugEnabled) {
+                // 发送拾取事件 - 只包含3D场景信息
+                this.emitPickEvent("object-picked", {
+                    results: filteredResults.map(result => ({
+                        objectId: result.object.id,
+                        objectName: this.getModelName(result.object),
+                        objectType: result.objectType,
+                        object: result.object,
+                        worldPosition: result.point,
+                        localPosition: result.localPoint,
+                        distance: result.distance,
+                        normal: result.normal,
+                        uv: result.uv ? [result.uv.x, result.uv.y] : undefined,
+                        materialName: result.materialName,
+                        geometryType: result.geometryType,
+                        faceIndex: result.faceIndex,
+                        instanceId: result.instanceId,
+                        worldMatrix: result.worldMatrix,
+                        boundingBox: result.boundingBox
+                            ? {
+                                min: result.boundingBox.min,
+                                max: result.boundingBox.max,
+                            }
+                            : undefined,
+                        objectList:
+                            result.objectList?.map(obj => ({
+                                id: obj.id,
+                                name: this.getModelName(obj),
+                                type: obj.type,
+                            })) || [], // 添加对象列表信息
+                    })),
+                    selectedObjectId: filteredResults[0].object.id,
+                    selectedObjectName: this.getModelName(filteredResults[0].object),
+                    pickMode: this.isCtrlPressed ? "box-select-mode" : this.config.mode,
                     timestamp: Date.now(),
+                    objectList: filteredResults.map(result => ({
+                        id: result.object.id,
+                        name: this.getModelName(result.object),
+                        type: result.object.type,
+                    })), // 在事件根级别添加对象列表
+                    // 点击到的三维场景实际位置：三维场景坐标系
+                    mousePosition: {
+                        x: filteredResults[0].point.x,
+                        y: filteredResults[0].point.y,
+                        z: filteredResults[0].point.z,
+                    },
+                    screenPosition: {
+                        x: event.clientX,
+                        y: event.clientY,
+                    },
                 })
-                console.log({
-                    point: currentPoint,
-                    linePoints: this.linePoints.map(p => ({ x: p.x, y: p.y, z: p.z })),
-                })
+                // debugger
+                // 处理选择和高亮
+                this.handlePickResults(filteredResults, event)
+            } else {
+                if (this.debugEnabled) {
+                    console.log("🎯 点击了空白区域")
+                } else {
+                    console.log(filteredResults)
+                }
+                // 在非Ctrl状态下清空选择和高亮
+                if (!this.isCtrlPressed) {
+                    this.clearSelection()
+                    eventBus.emit("Highlight-Delete")
+                }
+            }
+
+            // 如果是点集模式，记录当前拾取点
+            if (this.getPickMode() == PickMode.LINE) {
+                if (filteredResults.length > 0) {
+                    const currentPoint = filteredResults[0].point
+                    this.linePoints.push(currentPoint)
+
+                    // 发送点集更新事件
+                    this.emitPickEvent("line-points-updated", {
+                        point: currentPoint,
+                        linePoints: this.linePoints.map(p => ({ x: p.x, y: p.y, z: p.z })),
+                        timestamp: Date.now(),
+                    })
+                    console.log({
+                        point: currentPoint,
+                        linePoints: this.linePoints.map(p => ({ x: p.x, y: p.y, z: p.z })),
+                    })
+                }
             }
         }
     }
@@ -766,7 +682,7 @@ export class MousePickPlugin extends BasePlugin {
                     eventBus.emit("Highlight-Delete")
                 } else {
 
-                    if (this.isPickedDevice(results)) {
+                    if (this.isPickedDevice(results)&&this.highLight) {
                         // 单击事件：正常选中和高亮
                         this.highlightObjectWithOutline(closestResult.object)
                     }
@@ -1336,11 +1252,52 @@ export class MousePickPlugin extends BasePlugin {
 
     /**
      * 销毁插件
-     * @deprecated 请使用 unload() 方法替代
      */
     public destroy(): void {
-        console.warn("⚠️ destroy() 方法已废弃，请使用 unload() 方法替代")
-        this.unload()
+        // 移除事件监听器
+        const controlLayer = this.controller?.getControlLayer ? this.controller.getControlLayer() : null
+        if (controlLayer) {
+            const captureOptions = { capture: true }
+            controlLayer.removeEventListener("mousedown", this.boundMouseDown, captureOptions)
+            controlLayer.removeEventListener("mousemove", this.boundMouseMove, captureOptions)
+            controlLayer.removeEventListener("mouseup", this.boundMouseUp, captureOptions)
+        }
+
+        window.removeEventListener("keydown", this.boundKeyDown)
+        window.removeEventListener("keyup", this.boundKeyUp)
+
+        // 确保控制器被正确恢复
+        this.enableController()
+
+        // 清理框选元素
+        if (this.boxSelectElement) {
+            document.body.removeChild(this.boxSelectElement)
+            this.boxSelectElement = null
+        }
+
+        // 清理调试射线
+        this.enableDebug(false)
+
+        // 清理高亮状态
+        eventBus.emit("Highlight-Delete")
+
+        // 清理建筑状态
+        if (this.buildingMode) {
+            this.closeBuilding()
+        }
+
+        // 清空状态
+        this.clearSelection()
+        this.selectedObjects.clear()
+        this.hoveredObject = null
+
+        // 清空引用
+        this.camera = null
+        this.scene = null
+        this.renderer = null
+        this.controller = null
+
+        console.log("🧹 MousePickPlugin 已销毁")
     }
 
     /**

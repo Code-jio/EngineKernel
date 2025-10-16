@@ -7,9 +7,10 @@
 import { THREE, BasePlugin } from "../basePlugin"
 import * as TWEEN from "@tweenjs/tween.js"
 import eventBus from "../../eventBus/eventBus"
-import { 
+import {
+    setObjectOpacity,
+    restoreOriginalOpacity,
     extractAndSaveObjectBounding as extractAndSaveObjectBoundingUtil,
-    extractObjectContour as extractObjectContourUtil
 } from "../../utils/tools"
 
 /**
@@ -49,6 +50,8 @@ export interface RoomItem {
     targetPosition: THREE.Vector3 // 目标位置
     isVisible: boolean // 是否可见
     opacity: number // 透明度
+    effectMarker: {}[]
+    modelMarker: {}[]
     associatedEquipment: {
         equipment: THREE.Object3D
         equipmentName: string
@@ -158,7 +161,7 @@ export class BuildingControlPlugin extends BasePlugin {
 
     // 调试模式
     private debugMode: boolean = false
-    
+
     constructor(params: any = {}) {
         super(params)
         this.updateConfig(params.floorControlConfig || {})
@@ -236,7 +239,8 @@ export class BuildingControlPlugin extends BasePlugin {
         if (this.currentBuildingModel) {
             return true
         } else {
-            return false
+            this.currentBuildingModel = new THREE.Group()
+            return true
         }
     }
 
@@ -328,7 +332,9 @@ export class BuildingControlPlugin extends BasePlugin {
 
                 // 解析楼层对象
                 const floorInfo = this.parseFloorFromName(modelName)
-                if (floorInfo.isFloor && child instanceof THREE.Group) {
+
+                if (floorInfo.isFloor && (child instanceof THREE.Group || child instanceof THREE.Mesh)) {
+                    console.log(child, floorInfo.floorNumber, result, "modelName")
                     this.processFloorObject(child, floorInfo.floorNumber, result)
                     return
                 }
@@ -471,7 +477,7 @@ export class BuildingControlPlugin extends BasePlugin {
      * 处理楼层对象
      */
     private processFloorObject(
-        floorObject: THREE.Group,
+        floorObject: THREE.Group | THREE.Mesh,
         floorNumber: number,
         result: ReturnType<typeof this.parseBuildingModel>,
     ): void {
@@ -544,6 +550,8 @@ export class BuildingControlPlugin extends BasePlugin {
             roomCode: roomInfo.roomCode,
             isRoom: true,
             equipments: [], // 关联的设备列表
+            effectsMarker: [], // 关联的特效列表
+            modelMarker: [], // 关联的模型标注列表
         }
 
         // 确保楼层存在
@@ -569,6 +577,8 @@ export class BuildingControlPlugin extends BasePlugin {
                 isVisible: true,
                 opacity: 1.0,
                 floorNumber,
+                effectMarker: [], // 关联的特效列表
+                modelMarker: [], // 关联的模型标注列表
                 associatedEquipment: [], // 后续通过设备关联功能填充
             })
 
@@ -581,6 +591,8 @@ export class BuildingControlPlugin extends BasePlugin {
             floorNumber,
             opacity: 1,
             associatedEquipment: [],
+            effectMarker: [], // 关联的特效列表
+            modelMarker: [], // 关联的模型标注列表
         })
 
         this.reextractAllRoomBoundings()
@@ -686,7 +698,6 @@ export class BuildingControlPlugin extends BasePlugin {
     public linkParsedStructure(): boolean {
         // 首先解析建筑模型
         const parseResult = this.parseBuildingModel()
-
         if (!parseResult.success) {
             console.error("❌ 解析建筑模型失败，无法链接结构")
             return false
@@ -778,6 +789,8 @@ export class BuildingControlPlugin extends BasePlugin {
             floorNumber,
             isVisible: true,
             opacity: 1.0,
+            effectMarker: [], // 关联的特效列表
+            modelMarker: [], // 关联的模型标注列表
             associatedEquipment: [], // 后续通过设备关联功能填充
         }))
     }
@@ -838,7 +851,7 @@ export class BuildingControlPlugin extends BasePlugin {
         object.traverse(() => count++)
         return count - 1 // 减去对象自身
     }
-    
+
     /**
      * 为房间对象提取并保存轮廓信息
      * @param roomObject 房间3D对象
@@ -851,8 +864,7 @@ export class BuildingControlPlugin extends BasePlugin {
             tolerance: 0.05,
             floorRatio: 0.3,
             debugMode: this.debugMode,
-            saveToUserData: true,
-            saveCenteredContour: true // 保存中心化后的轮廓
+            saveToUserData: true
         })
     }
 
@@ -871,7 +883,7 @@ export class BuildingControlPlugin extends BasePlugin {
      * @param roomCode 房间代码（如 "R101" 或 "1F_R101"）
      * @returns 房间对象，如果不存在返回null
      */
-    public getRoomObject(roomCode: string){
+    public getRoomObject(roomCode: string) {
         return this.rooms.get(roomCode)?.group
     }
 
@@ -1327,7 +1339,6 @@ export class BuildingControlPlugin extends BasePlugin {
                         })
 
                     this.activeTweens.add(positionTween)
-                    // debugger;
                     positionTween.start()
                 }, delay)
 
@@ -1590,7 +1601,7 @@ export class BuildingControlPlugin extends BasePlugin {
      * @param room 
      * @param opacity 
      */
-    private setRoomOpacity(room: THREE.Object3D | THREE.Scene | THREE.Group, opacity: number): void {
+    public setRoomOpacity(room: THREE.Object3D | THREE.Scene | THREE.Group, opacity: number | boolean): void {
         // room.traverse((child) => {
         //     if (child instanceof THREE.Mesh && child.material) {
         //         this.applyOpacityWithMaterialCloning(child, opacity, 'room', room.name || room.uuid)
@@ -1600,6 +1611,17 @@ export class BuildingControlPlugin extends BasePlugin {
 
         room.traverse((item) => {
             item.visible = opacity ? true : false
+        })
+    }
+
+    /**
+     * 设置物体显隐
+     * @param room 
+     * @param opacity 
+     */
+    public setObjectVisible(object: THREE.Object3D | THREE.Scene | THREE.Group, visible: boolean): void {
+        object.traverse((item) => {
+            item.visible = visible
         })
     }
 
@@ -2262,6 +2284,7 @@ export class BuildingControlPlugin extends BasePlugin {
         } else {
             console.warn(`⚠️ 楼层 ${floorNumber}F 不存在`)
         }
+
     }
 
     /**
@@ -2283,14 +2306,39 @@ export class BuildingControlPlugin extends BasePlugin {
      * @param roomCode 房间代码
      * @param opacity 透明度值 (0-1)
      */
-    public setRoomOpacityPublic(roomCode: string, opacity: number): void {
-        const roomObject = this.getRoomObject(roomCode)
-        if (roomObject) {
-            this.setRoomOpacity(roomObject, opacity)
-            console.log(`🎨 设置房间透明度: ${roomCode} → ${opacity}`)
+    public setRoomOpacityPublic(roomCode: string, opacity: number, hideEquipment:boolean = true): void {
+
+        let room = this.rooms.get(roomCode)
+        let roomObject = room?.group
+        let equipments = room?.associatedEquipment
+        if (roomObject && equipments) {
+            // this.setRoomOpacity(roomObject, opacity)
+            // console.log(`🎨 设置房间透明度: ${roomCode} → ${opacity}`)
+
+            // // 房间内的关联设备也隐藏
+            // equipments.forEach((item) => {
+            //     this.setEquipmentVisibility(item.equipment, opacity ? true : false)
+            // })
+
+            setObjectOpacity(roomObject, opacity)
+            if (hideEquipment) {
+                equipments.forEach((item) => {
+                    setObjectOpacity(item.equipment, opacity)
+                })
+            }
         } else {
             console.warn(`⚠️ 房间 ${roomCode} 不存在`)
         }
+    }
+
+    // 设置对象透明度
+    public setObjectOpacity(object: THREE.Object3D, opacity: number, transparent?: boolean, saveOriginal: boolean = true){
+        setObjectOpacity(object,opacity,saveOriginal)
+    }
+
+    // 恢复原有透明度
+    public restoreOriginalOpacity(object: THREE.Object3D, forceRestore: boolean = false){
+        restoreOriginalOpacity(object, forceRestore)
     }
 
     /**
@@ -2298,10 +2346,18 @@ export class BuildingControlPlugin extends BasePlugin {
      * @param roomCode 房间代码
      */
     public restoreRoomOpacityPublic(roomCode: string): void {
-        const roomObject = this.getRoomObject(roomCode)
-        if (roomObject) {
-            this.restoreRoomOpacity(roomObject)
-            console.log(`🎨 恢复房间透明度: ${roomCode}`)
+        let room = this.rooms.get(roomCode)
+        let roomObject = room?.group
+        let equipments = room?.associatedEquipment
+        if (roomObject && equipments) {
+            // this.restoreRoomOpacity(roomObject)
+            // console.log(`🎨 恢复房间透明度: ${roomCode}`)
+
+            restoreOriginalOpacity(roomObject)
+            equipments.forEach((item) => {
+                restoreOriginalOpacity(item.equipment)
+            })
+
         } else {
             console.warn(`⚠️ 房间 ${roomCode} 不存在`)
         }
@@ -2445,7 +2501,7 @@ export class BuildingControlPlugin extends BasePlugin {
 
         if (roomObject instanceof THREE.Mesh) {
             return roomObject.geometry.boundingSphere
-        }else{
+        } else {
             return roomObject.userData.bounding
         }
 
@@ -2805,7 +2861,7 @@ export class BuildingControlPlugin extends BasePlugin {
      * @param roomNumber 房间号（字符串类型）
      * @param object3D Three.js的Object3D对象
      */
-    public addObjectToRoom(roomNumber: string, object3D: THREE.Object3D): void {
+    public addObjectToRoom(roomNumber: string, object3D: THREE.Object3D,type: string): void {
         // 查找对应的房间
         const room = this.rooms.get(roomNumber)
 
@@ -2818,13 +2874,19 @@ export class BuildingControlPlugin extends BasePlugin {
             // 将对象添加到房间的children集合中
             // let position = room.group.geometry.boundingSphere
 
-            let bounding = this.getRoomBounding(roomNumber)
-            if (bounding && bounding.center) {
-                object3D.position.set(bounding?.center.x, bounding?.center.y + 1, bounding?.center.z) // 高度 + 1
-            }
+            // let bounding = this.getRoomBounding(roomNumber)
+            // if (bounding && bounding.center) {
+            //     object3D.position.set(bounding?.center.x, bounding?.center.y + 1, bounding?.center.z) // 高度 + 1
+            // }
 
             room.group.add(object3D)
+            console.log(room.group)
             console.log(`✅ 成功将对象添加到房间 ${roomNumber}`)
+            if (type == "EFFECT") {
+                room.effectMarker.push(object3D)
+            }else if(type=="MODEL"){
+                room.effectMarker.push(object3D)
+            }
 
             // 如果房间当前不可见，设置对象也不可见
             if (!room.isVisible) {

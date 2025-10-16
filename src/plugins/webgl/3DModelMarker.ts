@@ -144,7 +144,7 @@ export class ModelMarker extends BasePlugin {
             position: new THREE.Vector3(0, 0, 0),
             rotation: new THREE.Euler(0, 0, 0),
             scale: new THREE.Vector3(1, 1, 1),
-            color: null,
+            color: new THREE.Vector3(1, 1, 1),
             ...meta.userData.defaultConfig,
         }
         this.scene = meta.userData.scene
@@ -224,6 +224,7 @@ export class ModelMarker extends BasePlugin {
 
         // 存储实例
         this.modelInstances.set(modelId, instance)
+        
 
         // 1. 优先执行加载模型
         if (finalConfig.autoLoad !== false && finalConfig.modelUrl) {
@@ -260,6 +261,8 @@ export class ModelMarker extends BasePlugin {
         if (this.scene) {
             this.scene.add(instance.model)
         }
+        
+        this.setModelColor(instance.id, finalConfig?.color || [255, 255, 255])
 
         // console.log(`✅ 模型标记已添加: ${modelId}`, instance)
         if (finalConfig.onComplete) {
@@ -1796,12 +1799,11 @@ export class ModelMarker extends BasePlugin {
         try {
             // 转换颜色格式
             const targetColor = this.getColorFromConfig(color)
-
+            console.log(targetColor,"finalConfig")
             if (!targetColor) {
                 return false
             }
 
-            console.log(targetColor)
             // 遍历模型中的所有材质并应用颜色
             let materialCount = 0
             let updatedMaterials = 0

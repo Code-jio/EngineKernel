@@ -214,7 +214,7 @@ export class TextMarkerPlugin extends BasePlugin {
 
         const material = new THREE.SpriteMaterial({
             map: texture,
-            depthTest: true, // 关闭深度检测
+            depthTest: false, // 关闭深度检测
             depthWrite: false, // 关闭深度写入
             transparent: true, // 如果有透明度需要开启
             blending: THREE.NormalBlending, // 避免混合问题

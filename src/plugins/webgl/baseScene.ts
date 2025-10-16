@@ -12,7 +12,6 @@ const tween_group = new TWEEN.Group()
 
 // 默认配置预设
 const DEFAULT_CONFIGS = {
-
     cameraConfig: {
         type: 'perspective',
         fov: 45,
@@ -21,62 +20,7 @@ const DEFAULT_CONFIGS = {
         position: [100, 100, 100],
         lookAt: [0, 0, 0],
     },
-    rendererConfig: {
-        alpha: true,    
-        precision: 'highp',
-        powerPreference: 'high-performance',
-        physicallyCorrectLights: true,
-        shadowMapEnabled: false,
-        shadowMapType: THREE.BasicShadowMap,
-        toneMapping: THREE.NoToneMapping,
-        toneMappingExposure: 1.0,
-        // outputColorSpace: THREE.DisplayP3ColorSpace,
-        // outputColorSpace: THREE.LinearDisplayP3ColorSpace,
-        outputColorSpace: THREE.SRGBColorSpace,
-    },
-    antialiasConfig: {
-        enabled: true,
-        type: 'msaa' as const,
-        msaaConfig: {
-            samples: 8,
-        },
-        fxaaConfig: {
-            intensity: 0.75,
-            quality: 'high',
-        },
-    },
-    depthConfig: {
-        enabled: true,
-        depthBufferConfig: {
-            enableLogDepth: true,
-            depthBits: 32,
-            stencilBits: 8,
-        },
-        polygonOffsetConfig: {
-            enabled: true,
-            factor: 2.0,
-            units: 2.0,
-        },
-        depthRangeConfig: {
-            autoOptimize: true,
-            nearFarRatio: 1 / 10000,
-            minNear: 0.001,
-            maxFar: 50000,
-        },
-        conflictDetection: {
-            enabled: true,
-            threshold: 0.00001,
-            autoFix: true,
-        },
-        depthSortConfig: {
-            enabled: true,
-            transparent: true,
-            opaque: true,
-        },
-    },
-    performanceConfig: {
-        enabled: true,
-    },
+
     debugConfig: {
         enabled: false,
         gridHelper: true,
@@ -88,7 +32,7 @@ const DEFAULT_CONFIGS = {
     floorConfig: {
         enabled: true,
         type: 'reflection' as const,
-        size: 30000,
+        size: 5000,
         position: [0, 0, 0] as [number, number, number],
         reflectionConfig: {
             reflectivity: 0.8,
@@ -192,18 +136,6 @@ export class BaseScene extends BasePlugin {
     public floorManager: FloorManager
     public floorConfig: FloorConfig
 
-    // 渲染器高级配置
-    public rendererAdvancedConfig: {
-        container: HTMLElement | null
-        physicallyCorrectLights: boolean
-        outputColorSpace: string
-        toneMapping: THREE.ToneMapping
-        toneMappingExposure: number
-        shadowMapEnabled: boolean
-        shadowMapType: THREE.ShadowMapType
-        pixelRatio: number
-    }
-
     // Debug模式相关
     public debugConfig: {
         enabled: boolean
@@ -247,27 +179,6 @@ export class BaseScene extends BasePlugin {
             // 合并用户配置与默认配置
             const finalConfig = mergeConfigs(defaultConfig, meta.userData)
 
-            // 初始化渲染器高级配置（简化版）
-            this.rendererAdvancedConfig = {
-                container: document.body, // 直接使用body作为容器
-                physicallyCorrectLights:
-                    finalConfig.rendererConfig.physicallyCorrectLights,
-                outputColorSpace:
-                    finalConfig.rendererConfig.outputColorSpace || 'srgb',
-                toneMapping: finalConfig.rendererConfig.toneMapping,
-                toneMappingExposure:
-                    finalConfig.rendererConfig.toneMappingExposure,
-                shadowMapEnabled: finalConfig.rendererConfig.shadowMapEnabled,
-                shadowMapType:
-                    finalConfig.rendererConfig.shadowMapType ||
-                    THREE.PCFSoftShadowMap,
-                pixelRatio: Math.min(
-                    finalConfig.rendererConfig.pixelRatio ||
-                    window.devicePixelRatio,
-                    2
-                ),
-            }
-
             // 初始化Debug配置
             this.debugConfig = {
                 enabled: finalConfig.debugConfig?.enabled || false,
@@ -285,13 +196,9 @@ export class BaseScene extends BasePlugin {
             }
 
             this.cameraOption = finalConfig.cameraConfig
-            const rendererOption = {
-                ...finalConfig.rendererConfig,
-            }
 
             // 初始化双相机系统
             this.initializeDualCameraSystem(this.cameraOption)
-
             // 设置主相机（根据配置类型）
             if (this.cameraOption.type == 'perspective') {
                 this.camera = this.cameraConfig.perspectiveCamera
@@ -302,6 +209,8 @@ export class BaseScene extends BasePlugin {
             }
 
             this.scene = new THREE.Scene()
+
+            this.scene.background = new THREE.Color(0,0,0)
 
             // 初始化地板管理器和配置
             this.floorManager = new FloorManager(this.scene)
@@ -314,27 +223,26 @@ export class BaseScene extends BasePlugin {
 
             this.renderer = new THREE.WebGLRenderer({
                 alpha: true, // 透明
-                precision: rendererOption.precision, // 精度
-                powerPreference: rendererOption.powerPreference, // 性能
-                logarithmicDepthBuffer: true, // 
-                premultipliedAlpha: true, // 优化透明混合计算
                 antialias: true, // 默认抗锯齿
+                precision: "highp", // 精度
+                powerPreference: "high-performance", // 性能
+                logarithmicDepthBuffer: true, // 对数深度计算
+                premultipliedAlpha: true, // 优化透明混合计算
                 stencil: true, // 
             })
 
-            // 直接将Three.js生成的canvas添加到body
-            // this.renderer.domElement.style.position = 'fixed'
-            // this.renderer.domElement.style.top = '0'
-            // this.renderer.domElement.style.left = '0'
+            this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+            this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            this.renderer.toneMappingExposure = 1.2; // 降低曝光值以减少计算量
+            this.renderer.shadowMap.enabled = false;
+            // this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
             this.renderer.domElement.style.width = '100%'
             this.renderer.domElement.style.height = '100%'
-            // this.renderer.domElement.style.zIndex = '1' // 设置合适的层级
             this.renderer.domElement.style.pointerEvents = 'auto' // 确保能接收事件
 
             document.body.appendChild(this.renderer.domElement)
-
-            // 应用渲染器高级配置
-            this.applyRendererAdvancedConfig()
+            this.setupLight()
 
             // 将renderer实例存入meta供其他插件使用
             meta.userData.renderer = this.renderer
@@ -357,17 +265,6 @@ export class BaseScene extends BasePlugin {
             }
         } catch (error: any) {
             console.error('❌ BaseScene初始化失败:', error)
-
-            this.rendererAdvancedConfig = {
-                container: document.body,
-                physicallyCorrectLights: false,
-                outputColorSpace: 'srgb',
-                toneMapping: THREE.LinearToneMapping,
-                toneMappingExposure: 1.0,
-                shadowMapEnabled: false,
-                shadowMapType: THREE.PCFShadowMap,
-                pixelRatio: window.devicePixelRatio, //
-            }
 
             const errorMessage =
                 error instanceof Error ? error.message : String(error)
@@ -419,18 +316,19 @@ export class BaseScene extends BasePlugin {
             cameraOption.fov || 45,
             this.aspectRatio,
             cameraOption.near || 0.1,
-            cameraOption.far || 100000
+            cameraOption.far || 2000
         )
         perspectiveCamera.name = 'PerspectiveCamera'
         perspectiveCamera.position.set(
             ...(cameraOption.position as [number, number, number])
         )
+
         // perspectiveCamera.lookAt(
         //     cameraOption.lookAt[0],
         //     cameraOption.lookAt[1],
         //     cameraOption.lookAt[2],
         // )
-        console.log(cameraOption.lookAt, "lookAt")
+
         // 创建正交相机（2D）- 专用于俯视视角
         const frustumSize = 1000 // 适中的视锥体大小，便于观察和缩放
         const orthographicCamera = new THREE.OrthographicCamera(
@@ -439,7 +337,7 @@ export class BaseScene extends BasePlugin {
             frustumSize / 2,
             frustumSize / -2,
             cameraOption.near || 0.1,
-            cameraOption.far || 5000
+            cameraOption.far || 2000
         )
 
         // 初始化zoom属性（OrbitControls需要）logarithmicDepthBuffer: Boolean
@@ -473,39 +371,8 @@ export class BaseScene extends BasePlugin {
         })
     }
 
-
-    /**
-     * 应用渲染器高级配置
-     */
-    private applyRendererAdvancedConfig(): void {
-        const config = this.rendererAdvancedConfig
-
-        // 输出颜色空间
-        this.renderer.outputColorSpace = config.outputColorSpace as any
-        this.renderer.autoClear = true
-
-        // 色调映射
-        this.renderer.toneMapping = config.toneMapping || THREE.NoToneMapping
-        this.renderer.toneMappingExposure = config.toneMappingExposure
-        // this.renderer.useLogDepthBuffer = true; // 启用对数深度缓冲区
-
-        // 阴影配置（默认关闭）
-        this.renderer.shadowMap.enabled = config.shadowMapEnabled
-        if (config.shadowMapEnabled) {
-            this.renderer.shadowMap.type = config.shadowMapType
-            console.log('✅ 阴影系统已启用')
-        } else {
-            console.log('🚫 阴影系统已关闭（性能优化）')
-        }
-
-        // 像素比率
-        this.renderer.setPixelRatio(config.pixelRatio)
-    }
-
     // 初始化设置
     public initialize() {
-        this.camera.updateProjectionMatrix()
-
         // 根据容器尺寸设置渲染器大小
         this.updateRendererSize()
 
@@ -607,10 +474,10 @@ export class BaseScene extends BasePlugin {
         console.log('🧹 BaseScene已销毁')
     }
 
-    update({ deltaTime }: UpdateParams) {
+    update({ deltaTime, elapsedTime}: UpdateParams) {
 
         // 更新地板动画
-        this.floorManager.updateFloor(deltaTime, this.camera)
+        this.floorManager.updateFloor(deltaTime, elapsedTime, this.camera)
 
         // 更新反射（如果是反射地板或水面地板）
         if (
@@ -756,6 +623,29 @@ export class BaseScene extends BasePlugin {
                 `🔧 网格辅助器已更新: 大小=${this.debugConfig.gridSize}, 分割=${this.debugConfig.gridDivisions}`
             )
         }
+    }
+
+    // 设置光照
+    public setupLight(){
+        // const light = new THREE.DirectionalLight(0xffffff, 1);
+        // light.position.set(5, 10, 7.5);
+        // this.scene.add(light);
+
+        // const ambientLight = new THREE.AmbientLight(0x404040,20);
+        // this.scene.add(ambientLight);
+
+        // 环境光 - 提供基础照明
+        const ambientLight = new THREE.AmbientLight(0xf0f0f0, 0.7);
+        this.scene.add(ambientLight);
+
+        // 半球光 - 模拟天空和地面的漫反射光
+        const hemisphereLight = new THREE.HemisphereLight(0xffffbb, 0x080820, 1.0);
+        this.scene.add(hemisphereLight);
+
+        // 平行光 - 模拟太阳光
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1.1);
+        directionalLight.position.set(500, 1000, 750);
+        this.scene.add(directionalLight);
     }
 
     /**
