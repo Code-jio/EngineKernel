@@ -38,11 +38,16 @@ export class HexagonFloor {
             vertexShader: `
                 varying vec2 vUv;
                 varying vec3 vPosition;
+
+                #include <common>
+                #include <logdepthbuf_pars_vertex>
                 
                 void main() {
                     vUv = uv;
                     vPosition = position;
                     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+
+                    #include <logdepthbuf_vertex>
                 }
             `,
             fragmentShader: `
@@ -56,6 +61,10 @@ export class HexagonFloor {
                 
                 varying vec2 vUv;
                 varying vec3 vPosition;
+
+                #include <fog_pars_fragment>
+                #include <logdepthbuf_pars_fragment>
+                
                 
                 #define W 0.001
                 
@@ -128,6 +137,9 @@ export class HexagonFloor {
                     float finalAlpha = min(result.a + baseBrightness * 0.3, 1.0);
                     
                     gl_FragColor = vec4(finalColor, finalAlpha);
+
+                    #include <fog_fragment>	
+                    #include <logdepthbuf_fragment> 
                 }
             `,
             transparent: true, // 启用透明度支持

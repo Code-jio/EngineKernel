@@ -87,9 +87,9 @@ export class BaseControls {
         this.control.minPolarAngle = 0 // 允许垂直向下（90度俯仰角）
         this.control.maxPolarAngle = Math.PI / 2 - Math.PI * 5 / 180 // 限制最小俯仰角为15度
 
-        // // 启用阻尼
-        // this.control.enableDamping = false
-        // this.control.dampingFactor = 0.05
+        // 启用阻尼
+        this.control.enableDamping = true
+        this.control.dampingFactor = 0.1
 
         // 启用平移但限制范围
         this.control.enablePan = true

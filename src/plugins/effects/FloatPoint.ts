@@ -102,7 +102,10 @@ export  class FloatPoint {
         attribute float opacity;
         varying vec3 vColor;
         varying float vOpacity;
-        
+
+        #include <common>
+        #include <logdepthbuf_pars_vertex>
+
         void main() {
           vColor = color;
           vOpacity = opacity;
@@ -110,16 +113,24 @@ export  class FloatPoint {
           vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
           gl_PointSize = size * (300.0 / -mvPosition.z);
           gl_Position = projectionMatrix * mvPosition;
+
+          #include <logdepthbuf_vertex>
         }
       `,
       fragmentShader: `
         uniform sampler2D pointTexture;
         varying vec3 vColor;
         varying float vOpacity;
+
+        #include <fog_pars_fragment>
+        #include <logdepthbuf_pars_fragment>
         
         void main() {
           vec4 texColor = texture2D(pointTexture, gl_PointCoord);
           gl_FragColor = vec4(vColor * texColor.rgb, texColor.a * vOpacity);
+
+          #include <fog_fragment>
+          #include <logdepthbuf_fragment>
         }
       `,
       blending: THREE.AdditiveBlending,
