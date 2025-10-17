@@ -1785,15 +1785,35 @@ export class BuildingControlPlugin extends BasePlugin {
         // 触发相机动画开始事件
         this.events.onCameraAnimationStart?.(floorNumber)
 
-        // 计算目标相机位置
-        const floorBoundingBox = new THREE.Box3().setFromObject(floor.group)
-        const floorCenter = floorBoundingBox.getCenter(new THREE.Vector3())
-        const floorSize = floorBoundingBox.getSize(new THREE.Vector3())
+        // 计算目标相机位置 - 基于楼层所有房间的总体包围盒
+        let totalBoundingBox: THREE.Box3 | null = null
 
-        const distance = Math.max(floorSize.x, floorSize.z) * this.config.cameraDistanceMultiplier * 0.5
-        const height = Math.max(this.config.cameraMinHeight, floorCenter.y + distance * 1.5)
+        // 如果有房间，计算所有房间的总体包围盒
+        if (floor.rooms && floor.rooms.length > 0) {
+            floor.rooms.forEach(room => {
+                if (room.group) {
+                    const roomBoundingBox = new THREE.Box3().setFromObject(room.group)
+                    if (totalBoundingBox) {
+                        totalBoundingBox.union(roomBoundingBox)
+                    } else {
+                        totalBoundingBox = roomBoundingBox
+                    }
+                }
+            })
+        }
 
-        const targetCameraPosition = new THREE.Vector3(floorCenter.x + distance, height, floorCenter.z + distance)
+        // 如果没有房间或者无法计算房间包围盒，使用楼层本身的包围盒
+        if (!totalBoundingBox) {
+            totalBoundingBox = new THREE.Box3().setFromObject(floor.group)
+        }
+
+        const totalCenter = totalBoundingBox.getCenter(new THREE.Vector3())
+        const totalSize = totalBoundingBox.getSize(new THREE.Vector3())
+
+        const distance = Math.max(totalSize.x, totalSize.z) * this.config.cameraDistanceMultiplier * 0.5
+        const height = Math.max(this.config.cameraMinHeight, totalCenter.y + distance * 1.5)
+
+        const targetCameraPosition = new THREE.Vector3(totalCenter.x + distance, height, totalCenter.z + distance)
 
         // 创建相机动画
         const startPosition = this.cameraControls.object.position.clone()
@@ -1804,7 +1824,7 @@ export class BuildingControlPlugin extends BasePlugin {
             .easing(this.getEasingFunction())
 
         const cameraTargetTween = new TWEEN.Tween(startTarget)
-            .to(floorCenter, this.config.cameraAnimationDuration)
+            .to(totalCenter, this.config.cameraAnimationDuration)
             .easing(this.getEasingFunction())
 
         cameraPositionTween.onUpdate(() => {
