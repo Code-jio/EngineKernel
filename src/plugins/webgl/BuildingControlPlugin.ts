@@ -323,8 +323,6 @@ export class BuildingControlPlugin extends BasePlugin {
             return result
         }
 
-        console.log("🏗️ 开始解析建筑模型:", this.getModelName(this.currentBuildingModel))
-
         // 预编译正则表达式，避免重复编译
         const floorPattern = /^(.+)_(\d+)F$/i
         const roomPattern = /^(.+)_(\d+)F_([A-Z])(\d+)$/i
@@ -336,16 +334,19 @@ export class BuildingControlPlugin extends BasePlugin {
                 // 跳过建筑模型本身
                 if (child === this.currentBuildingModel) return
 
-                const modelName = this.getModelName(child)
-                const name = modelName.toLowerCase()
+                const modelName = child.name
 
                 // 快速检查外立面 (包含MASK关键词)
                 let isFacade = null
-                if ( name.includes(facadeKeywords)) {
+                if ( modelName.includes(facadeKeywords)) {
                     isFacade = true
                 }else{
                     isFacade = false
                 }
+                // 解析楼层对象
+                const floorMatch = modelName.match(floorPattern)
+                // 解析房间对象
+                const roomMatch = modelName.match(roomPattern)
                 if (isFacade) {
                     // 确保userData存在
                     child.userData = child.userData || {}
@@ -359,16 +360,13 @@ export class BuildingControlPlugin extends BasePlugin {
                     return
                 }
 
-                // 解析楼层对象
-                const floorMatch = modelName.match(floorPattern)
+
                 if (floorMatch && (child instanceof THREE.Group || child instanceof THREE.Mesh)) {
-                    const floorNumber = parseInt(floorMatch[2], 10)
+                    const floorNumber = parseInt(floorMatch[2], 10) 
                     this.processFloorObject(child, floorNumber, result)
                     return
                 }
 
-                // 解析房间对象
-                const roomMatch = modelName.match(roomPattern)
                 if (roomMatch) {
                     const roomInfo = {
                         isRoom: true,
@@ -394,20 +392,20 @@ export class BuildingControlPlugin extends BasePlugin {
                 result.statistics.unrecognizedObjects.push(child)
             })
 
-            // 计算统计信息
-            result.statistics.totalFloors = result.floors.size
-            result.statistics.totalFacades = result.facades.length
-            result.statistics.totalRooms = Array.from(result.floors.values()).reduce(
-                (sum, floor) => sum + floor.rooms.length,
-                0,
-            )
-            result.statistics.totalEquipments = Array.from(result.floors.values()).reduce(
-                (sum, floor) => sum + floor.equipments.length,
-                0,
-            )
+            // // 计算统计信息
+            // result.statistics.totalFloors = result.floors.size
+            // result.statistics.totalFacades = result.facades.length
+            // result.statistics.totalRooms = Array.from(result.floors.values()).reduce(
+            //     (sum, floor) => sum + floor.rooms.length,
+            //     0,
+            // )
+            // result.statistics.totalEquipments = Array.from(result.floors.values()).reduce(
+            //     (sum, floor) => sum + floor.equipments.length,
+            //     0,
+            // )
 
-            // 验证解析结果
-            this.validateParsingResult(result)
+            // // 验证解析结果
+            // this.validateParsingResult(result)
 
             // 如果没有严重错误，标记为成功
             result.success = result.errors.length === 0
