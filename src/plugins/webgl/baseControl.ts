@@ -89,7 +89,7 @@ export class BaseControls {
 
         // 启用阻尼
         this.control.enableDamping = true
-        this.control.dampingFactor = 0.1
+        this.control.dampingFactor = 0.25
 
         // 启用平移但限制范围
         this.control.enablePan = true

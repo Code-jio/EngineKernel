@@ -167,7 +167,7 @@ export class BuildingControlPlugin extends BasePlugin {
 
     public async init(scenePlugin?: any): Promise<void> {
         const initStartTime = performance.now()
-        
+
         // 如果提供了场景对象，自动发现并设置建筑模型
         if (scenePlugin) {
             this.scene = scenePlugin.scene
@@ -179,29 +179,16 @@ export class BuildingControlPlugin extends BasePlugin {
         }
 
         // 设置可交互建筑模型
-        const buildingModelStartTime = performance.now()
         if (this.setBuildingModel()) {
-            const buildingModelEndTime = performance.now()
-            console.log(`📊 建筑模型设置耗时: ${(buildingModelEndTime - buildingModelStartTime).toFixed(2)}ms`)
-            
             // 解析所有设备列表
-            const equipmentParseStartTime = performance.now()
             this.parseAllEquipments()
-            const equipmentParseEndTime = performance.now()
-            console.log(`📊 设备列表解析耗时: ${(equipmentParseEndTime - equipmentParseStartTime).toFixed(2)}ms`)
 
             // 解析并链接建筑结构（非侵入式）
-            const linkStartTime = performance.now()
             const linkSuccess = this.linkParsedStructure()
-            const linkEndTime = performance.now()
-            console.log(`📊 建筑结构链接耗时: ${(linkEndTime - linkStartTime).toFixed(2)}ms`)
-            
+
             if (linkSuccess) {
                 // 根据配置设置设备初始显示状态
-                const displayInitStartTime = performance.now()
                 this.initializeEquipmentDisplayState()
-                const displayInitEndTime = performance.now()
-                console.log(`📊 设备显示状态初始化耗时: ${(displayInitEndTime - displayInitStartTime).toFixed(2)}ms`)
 
                 console.log("🏗️ 建筑控制插件初始化完成")
 
@@ -220,10 +207,10 @@ export class BuildingControlPlugin extends BasePlugin {
         } else {
             console.warn("⚠️ 未找到建筑模型，建筑控制功能不可用")
         }
-        
+
         const initEndTime = performance.now()
         console.log(`✅ 建筑控制插件初始化总耗时: ${(initEndTime - initStartTime).toFixed(2)}ms`)
-        
+
         // 输出性能统计信息
         if (this.debugMode) {
             console.log(`📈 性能统计:
@@ -271,7 +258,7 @@ export class BuildingControlPlugin extends BasePlugin {
      * 内部子节点命名规则：
      * 楼层命名规则是：MAIN_BUILDING_1F、MAIN_BUILDING_2F、MAIN_BUILDING_nF。。。（数字n表示楼层）
      * 房间内部命名规则是：MAIN_BUILDING_1F_R101、MAIN_BUILDING_1F_K102。。。（某个字母+数字表示房间）
-     * 外立面命名规则是：MASK（名称里带有MASK字样）
+     * 外立面命名规则是：MAIN_BUILDING_MASK（名称里带有MASK字样）
      */
     public parseBuildingModel(): {
         success: boolean
@@ -323,10 +310,12 @@ export class BuildingControlPlugin extends BasePlugin {
             return result
         }
 
+        console.log("🏗️ 开始解析建筑模型:", this.getModelName(this.currentBuildingModel))
+
         // 预编译正则表达式，避免重复编译
         const floorPattern = /^(.+)_(\d+)F$/i
         const roomPattern = /^(.+)_(\d+)F_([A-Z])(\d+)$/i
-        const facadeKeywords ="MASK"
+        const facadeKeywords = "MASK"
 
         try {
             // 遍历建筑模型的所有子对象
@@ -334,19 +323,16 @@ export class BuildingControlPlugin extends BasePlugin {
                 // 跳过建筑模型本身
                 if (child === this.currentBuildingModel) return
 
-                const modelName = child.name
+                const modelName = this.getModelName(child)
+                // const name = modelName.toLowerCase()
 
-                // 快速检查外立面 (包含MASK关键词)
-                let isFacade = null
-                if ( modelName.includes(facadeKeywords)) {
+                let isFacade
+                if (modelName.includes(facadeKeywords)) {
                     isFacade = true
-                }else{
+                } else {
                     isFacade = false
                 }
-                // 解析楼层对象
-                const floorMatch = modelName.match(floorPattern)
-                // 解析房间对象
-                const roomMatch = modelName.match(roomPattern)
+
                 if (isFacade) {
                     // 确保userData存在
                     child.userData = child.userData || {}
@@ -360,13 +346,16 @@ export class BuildingControlPlugin extends BasePlugin {
                     return
                 }
 
-
+                // 解析楼层对象
+                const floorMatch = modelName.match(floorPattern)
                 if (floorMatch && (child instanceof THREE.Group || child instanceof THREE.Mesh)) {
-                    const floorNumber = parseInt(floorMatch[2], 10) 
+                    const floorNumber = parseInt(floorMatch[2], 10)
                     this.processFloorObject(child, floorNumber, result)
                     return
                 }
 
+                // 解析房间对象
+                const roomMatch = modelName.match(roomPattern)
                 if (roomMatch) {
                     const roomInfo = {
                         isRoom: true,
@@ -392,20 +381,23 @@ export class BuildingControlPlugin extends BasePlugin {
                 result.statistics.unrecognizedObjects.push(child)
             })
 
-            // // 计算统计信息
-            // result.statistics.totalFloors = result.floors.size
-            // result.statistics.totalFacades = result.facades.length
-            // result.statistics.totalRooms = Array.from(result.floors.values()).reduce(
-            //     (sum, floor) => sum + floor.rooms.length,
-            //     0,
-            // )
-            // result.statistics.totalEquipments = Array.from(result.floors.values()).reduce(
-            //     (sum, floor) => sum + floor.equipments.length,
-            //     0,
-            // )
+            // 计算统计信息
+            result.statistics.totalFloors = result.floors.size
+            result.statistics.totalFacades = result.facades.length
+            result.statistics.totalRooms = Array.from(result.floors.values()).reduce(
+                (sum, floor) => sum + floor.rooms.length,
+                0,
+            )
+            result.statistics.totalEquipments = Array.from(result.floors.values()).reduce(
+                (sum, floor) => sum + floor.equipments.length,
+                0,
+            )
 
-            // // 验证解析结果
-            // this.validateParsingResult(result)
+            // 验证解析结果
+            this.validateParsingResult(result)
+            // 提取所有房间的轮廓
+            this.reextractAllRoomBoundings()
+
 
             // 如果没有严重错误，标记为成功
             result.success = result.errors.length === 0
@@ -530,7 +522,7 @@ export class BuildingControlPlugin extends BasePlugin {
             targetPosition: new THREE.Vector3(),
             isVisible: true,
             opacity: 1,
-            
+
             associatedEquipment: [],
             rooms: [],
         })
@@ -620,7 +612,6 @@ export class BuildingControlPlugin extends BasePlugin {
             modelMarker: [], // 关联的模型标注列表
         })
 
-        this.reextractAllRoomBoundings()
     }
 
     /**
@@ -721,8 +712,7 @@ export class BuildingControlPlugin extends BasePlugin {
      * 将parseBuildingModel的解析结果映射到插件的管理属性中，不修改原始模型结构
      */
     public linkParsedStructure(): boolean {
-        const startTime = performance.now()
-        
+
         // 首先解析建筑模型
         const parseResult = this.parseBuildingModel()
         if (!parseResult.success) {
@@ -751,16 +741,6 @@ export class BuildingControlPlugin extends BasePlugin {
             // 关联设备到楼层和房间
             this.associateEquipmentToFloorsAndRooms()
 
-            const endTime = performance.now()
-            
-            if (this.debugMode) {
-                console.log(`📊 linkParsedStructure性能统计:`)
-                console.log(`   ⏱️ 总耗时: ${(endTime - startTime).toFixed(2)}ms`)
-                console.log(`   🏢 楼层数: ${this.floors.size}`)
-                console.log(`   🏠 房间数: ${this.rooms.size}`)
-                console.log(`   🎭 外立面数: ${this.facades.length}`)
-                console.log(`   ⚙️ 设备数: ${this.allDevices.length}`)
-            }
 
             eventBus.emit("buildingComplete") // 完成主建筑数据构建
 
@@ -779,7 +759,7 @@ export class BuildingControlPlugin extends BasePlugin {
             // 缓存楼层对象的位置，避免多次克隆
             const floorPosition = floorData.floorObject.position
             const clonedPosition = floorPosition.clone()
-            
+
             // 创建楼层管理项（不修改原始对象）
             const floorItem: FloorItem = {
                 group: floorData.floorObject as THREE.Group, // 直接引用原始对象
@@ -814,7 +794,7 @@ export class BuildingControlPlugin extends BasePlugin {
             // 如果提供了楼层位置且房间位置与楼层位置相同，可以复用
             const roomPosition = roomData.roomObject.position
             let originalPosition: THREE.Vector3
-            
+
             if (floorPosition && roomPosition.equals(floorPosition)) {
                 // 位置相同，直接使用楼层位置，避免重复克隆
                 originalPosition = floorPosition
@@ -822,7 +802,7 @@ export class BuildingControlPlugin extends BasePlugin {
                 // 位置不同，需要克隆
                 originalPosition = roomPosition.clone()
             }
-            
+
             return {
                 group: roomData.roomObject as THREE.Group, // 直接引用原始对象
                 roomNumber: roomData.roomCode,
@@ -857,7 +837,7 @@ export class BuildingControlPlugin extends BasePlugin {
     private linkRooms(parseResult: ReturnType<typeof this.parseBuildingModel>): void {
         // 批量处理房间关联，减少Map查找次数
         const floorRoomMap = new Map<number, RoomItem[]>()
-        
+
         // 第一次遍历：按楼层分组房间
         this.rooms.forEach((roomItem) => {
             const floorNumber = roomItem.floorNumber
@@ -866,7 +846,7 @@ export class BuildingControlPlugin extends BasePlugin {
             }
             floorRoomMap.get(floorNumber)!.push(roomItem)
         })
-        
+
         // 第二次遍历：批量添加到对应楼层
         floorRoomMap.forEach((roomItems, floorNumber) => {
             const floor = this.floors.get(floorNumber)
@@ -1524,7 +1504,7 @@ export class BuildingControlPlugin extends BasePlugin {
      */
     private setAllEquipmentInitializeState(): void {
         const startTime = performance.now()
-        
+
         // 检查是否有楼层数据
         if (!this.floors.size) {
             console.warn("⚠️ 无法设置设备初始状态：没有楼层信息")
@@ -1619,7 +1599,7 @@ export class BuildingControlPlugin extends BasePlugin {
      */
     private initializeEquipmentDisplayState(): void {
         const startTime = performance.now()
-        
+
         if (!this.config.enableEquipmentDisplayControl) {
             console.log("🔧 设备显示控制未启用，保持所有设备可见")
             return
@@ -2175,7 +2155,7 @@ export class BuildingControlPlugin extends BasePlugin {
      */
     private associateEquipmentToFloorsAndRooms(): void {
         const startTime = performance.now()
-        
+
         // 使用Map来跟踪已关联的设备，避免重复检查
         const floorEquipmentMap = new Map<number, Set<THREE.Object3D>>()
         const roomEquipmentMap = new Map<string, Set<THREE.Object3D>>()
@@ -2192,7 +2172,7 @@ export class BuildingControlPlugin extends BasePlugin {
                     floorEquipmentMap.set(info.floorNumber, new Set())
                 }
                 const floorDevices = floorEquipmentMap.get(info.floorNumber)!
-                
+
                 // 使用Set快速检查设备是否已存在
                 if (!floorDevices.has(device)) {
                     floor.associatedEquipment.push(info)
@@ -2209,7 +2189,7 @@ export class BuildingControlPlugin extends BasePlugin {
                         roomEquipmentMap.set(info.roomCode, new Set())
                     }
                     const roomDevices = roomEquipmentMap.get(info.roomCode)!
-                    
+
                     // 使用Set快速检查设备是否已存在
                     if (!roomDevices.has(device)) {
                         room.associatedEquipment.push(info)
@@ -2232,8 +2212,6 @@ export class BuildingControlPlugin extends BasePlugin {
     private parseAllEquipments(): void {
         if (!this.scene) return
 
-        const startTime = performance.now()
-        
         // 清空现有设备列表，避免重复
         this.allDevices = []
 
@@ -2241,28 +2219,14 @@ export class BuildingControlPlugin extends BasePlugin {
         const equipmentPattern = /^MAIN_BUILDING_(\d+)F_(.+)$/i
         const roomPattern = /^([A-Z]\d+)_(.+)$/i
 
-        // 使用Map缓存楼层信息，避免重复查询
-        const floorCache = new Map<number, boolean>()
-
         this.scene.children.forEach(child => {
             const modelName = this.getModelName(child)
 
             // 匹配设备命名规则: MAIN_BUILDING_1F_厨具 或 MAIN_BUILDING_1F_R101_厨具
             const match = modelName.match(equipmentPattern)
-
             if (match) {
                 const floorNumber = parseInt(match[1], 10)
                 const remaining = match[2]
-
-                // 检查楼层是否存在，使用缓存避免重复查询
-                if (!floorCache.has(floorNumber)) {
-                    floorCache.set(floorNumber, this.floors.has(floorNumber))
-                }
-                
-                // 如果楼层不存在，跳过此设备
-                if (!floorCache.get(floorNumber)) {
-                    return
-                }
 
                 // 进一步解析房间代码和设备名称
                 const roomMatch = remaining.match(roomPattern)
@@ -2291,8 +2255,7 @@ export class BuildingControlPlugin extends BasePlugin {
             }
         })
 
-        const endTime = performance.now()
-        console.log(`✅ 设备解析完成，共发现 ${this.allDevices.length} 个设备，耗时: ${(endTime - startTime).toFixed(2)}ms`)
+        console.log(`✅ 设备解析完成，共发现 ${this.allDevices.length} 个设备，`)
     }
 
     /**
@@ -2420,7 +2383,7 @@ export class BuildingControlPlugin extends BasePlugin {
      * @param roomCode 房间代码
      * @param opacity 透明度值 (0-1)
      */
-    public setRoomOpacityPublic(roomCode: string, opacity: number, hideEquipment:boolean = true): void {
+    public setRoomOpacityPublic(roomCode: string, opacity: number, hideEquipment: boolean = true): void {
 
         let room = this.rooms.get(roomCode)
         let roomObject = room?.group
@@ -2446,12 +2409,12 @@ export class BuildingControlPlugin extends BasePlugin {
     }
 
     // 设置对象透明度
-    public setObjectOpacity(object: THREE.Object3D, opacity: number, transparent?: boolean, saveOriginal: boolean = true){
-        setObjectOpacity(object,opacity,saveOriginal)
+    public setObjectOpacity(object: THREE.Object3D, opacity: number, transparent?: boolean, saveOriginal: boolean = true) {
+        setObjectOpacity(object, opacity, saveOriginal)
     }
 
     // 恢复原有透明度
-    public restoreOriginalOpacity(object: THREE.Object3D, forceRestore: boolean = false){
+    public restoreOriginalOpacity(object: THREE.Object3D, forceRestore: boolean = false) {
         restoreOriginalOpacity(object, forceRestore)
     }
 
@@ -2975,7 +2938,7 @@ export class BuildingControlPlugin extends BasePlugin {
      * @param roomNumber 房间号（字符串类型）
      * @param object3D Three.js的Object3D对象
      */
-    public addObjectToRoom(roomNumber: string, object3D: THREE.Object3D,type: string): void {
+    public addObjectToRoom(roomNumber: string, object3D: THREE.Object3D, type: string): void {
         // 查找对应的房间
         const room = this.rooms.get(roomNumber)
 
@@ -2998,7 +2961,7 @@ export class BuildingControlPlugin extends BasePlugin {
             console.log(`✅ 成功将对象添加到房间 ${roomNumber}`)
             if (type == "EFFECT") {
                 room.effectMarker.push(object3D)
-            }else if(type=="MODEL"){
+            } else if (type == "MODEL") {
                 room.effectMarker.push(object3D)
             }
 
