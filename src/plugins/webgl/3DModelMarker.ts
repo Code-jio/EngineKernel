@@ -154,23 +154,19 @@ export class ModelMarker extends BasePlugin {
     /**
      * 插件初始化
      */
-    async init(): Promise<void> {
+    async initialize(): Promise<void> {
         // 获取场景引用
         if (!this.scene) {
             throw new Error("ModelMarker: 无法获取场景引用")
         }
-
         // 获取资源加载插件
         if (!this.resourceReaderPlugin) {
             console.warn("⚠️ ModelMarker: 未找到ResourceReaderPlugin，将使用默认加载器")
         }
-
         // 启动动画循环
         this.startAnimationLoop()
         // 监听事件
         this.setupEventListeners()
-
-        console.log("✅ ModelMarker插件初始化完成")
     }
 
     /**
@@ -375,7 +371,6 @@ export class ModelMarker extends BasePlugin {
         dracoLoader.setDecoderPath("/draco/")
         loader.setDRACOLoader(dracoLoader)
 
-        console.log(`🚀 开始直接加载模型 (无缓存): ${modelUrl}`)
 
         loader.load(
             modelUrl,
@@ -460,7 +455,7 @@ export class ModelMarker extends BasePlugin {
     }
 
     /**
-     * 模型加载完成处理（优化版本）
+     * 模型加载完成处理
      */
     private onModelLoaded(modelId: string, gltf: any): void {
         const instance = this.modelInstances.get(modelId)
@@ -526,7 +521,6 @@ export class ModelMarker extends BasePlugin {
         }
 
         instance.isLoaded = true
-        console.log(`🚀 模型加载并优化完成: ${modelId}`)
 
         // 触发加载完成事件（包含丰富的信息）
         eventBus.emit("model:loaded", {
@@ -562,7 +556,6 @@ export class ModelMarker extends BasePlugin {
                 }
             }
         })
-        console.log("⚡ 几何体优化完成")
     }
 
     /**
@@ -579,7 +572,6 @@ export class ModelMarker extends BasePlugin {
                 child.material.needsUpdate = true
             }
         })
-        console.log("🎨 材质覆盖应用完成")
     }
 
     /**
@@ -610,7 +602,6 @@ export class ModelMarker extends BasePlugin {
                 })
             }
         })
-        console.log(`🖼️ 纹理质量调整为: ${quality}`)
     }
 
     /**

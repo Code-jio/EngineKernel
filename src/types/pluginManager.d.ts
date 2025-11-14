@@ -1,5 +1,5 @@
 import { PluginMeta, Plugin } from './Plugin';
-import { CoreType, PluginInstance } from './core';
+import { PluginInstance } from './core';
 
 export interface PluginManagerType {
     fetchPluginCode(plugin: PluginMeta): Promise<string>;

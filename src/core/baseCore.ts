@@ -73,14 +73,6 @@ class BaseCore {
             }
         }
 
-        await this._initPlugins()
-    }
-
-    private async _initPlugins() {
-        let that: CoreType = this as any
-        const plugins = Array.from(this.registry.values())
-        await Promise.all(plugins.map(p => p.instance.initialize?.(that)))
-        this.emit("init-complete")
     }
 
     getPlugin(name: string): any {
@@ -89,7 +81,8 @@ class BaseCore {
     }
 
     // 注册
-    register(pluginMeta: PluginMeta) {
+    private register(pluginMeta: PluginMeta) {
+        let that: CoreType = this as any
         this.emit("beforePluginRegister", pluginMeta)
 
         if (this.hasPlugin(pluginMeta.name)) {
@@ -114,11 +107,11 @@ class BaseCore {
                 throw new Error(`Invalid plugin path: ${pluginMeta.path}`)
             }
 
-            // 记录详细注册日志
-            this.logger.debug(`Registering plugin: ${pluginMeta.name}`, {
-                path: pluginMeta.path,
-                dependencies: pluginMeta.dependencies
-            });
+            // // 记录详细注册日志
+            // this.logger.debug(`Registering plugin: ${pluginMeta.name}`, {
+            //     path: pluginMeta.path,
+            //     dependencies: pluginMeta.dependencies
+            // });
 
             const plugin: PluginInstance = new pluginMeta.pluginClass({
                 name: pluginMeta.name,
@@ -128,7 +121,7 @@ class BaseCore {
                 userData: pluginMeta.userData,
             })
             plugin.status = BaseCore.STATUS.REGISTERED
-
+            plugin?.initialize?.()
             this.registerPlugin(plugin)
             // 添加带校验的注册事件
             this.emit("pluginRegistered", {
@@ -226,7 +219,7 @@ class BaseCore {
     }
 
     // 同步加载策略
-    async _loadSync(plugin: PluginInstance) {
+    private async _loadSync(plugin: PluginInstance) {
         return this._withPerfMonitoring("loadSync", async () => {
             if (!validatePlugin(plugin as PluginMeta)) {
                 console.error("非法插件", { plugin })
@@ -241,7 +234,7 @@ class BaseCore {
     }
 
     // 异步加载策略
-    async _loadAsync(plugin: PluginInstance): Promise<void> {
+    private async _loadAsync(plugin: PluginInstance): Promise<void> {
         if (!validatePlugin(plugin as PluginMeta)) {
             console.error("非法插件", { plugin })
         }
@@ -264,7 +257,7 @@ class BaseCore {
     }
 
     // 卸载插件实例
-    _unload(plugin: PluginInstance) {
+    private _unload(plugin: PluginInstance) {
         // plugin.instance?.uninstall?.()
         // plugin.instance = null
         // plugin.status = Core.STATUS.UNLOADING

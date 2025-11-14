@@ -1,3 +1,6 @@
+import { FontLoader } from "three/examples/jsm/loaders/FontLoader"
+
+export { FontLoader } 
 export { BasePlugin, THREE } from './basePlugin';
 export { OrbitControls } from '../utils/three-imports';
 

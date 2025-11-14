@@ -27,7 +27,7 @@ const DEFAULT_CONFIGS = {
         axesHelper: true,
         gridSize: 10000,
         gridDivisions: 100,
-        axesSize: 1000,
+        axesSize: 10000,
     },
     floorConfig: {
         enabled: true,
@@ -96,6 +96,7 @@ interface CameraFlyToOptions {
         roll: number  // 翻滚角: 角度制
     }
     easing?: (amount: number) => number
+    onStart?: () => void
     onUpdate?: () => void
     onComplete?: () => void
 }
@@ -251,8 +252,6 @@ export class BaseScene extends BasePlugin {
 
             // 初始化控制器
             this.initializeControls()
-
-            this.initialize()
 
             // 如果启用了debug模式，则添加辅助器
             if (this.debugConfig.enabled) {
@@ -1030,6 +1029,7 @@ export class BaseScene extends BasePlugin {
                 rotation: flyToOptions.rotation, // 可选的旋转参数
 
                 easing: flyToOptions.easing || TWEEN.Easing.Quadratic.InOut,
+                onStart:flyToOptions.onStart,
                 onUpdate: flyToOptions.onUpdate,
                 onComplete: flyToOptions.onComplete,
             }
@@ -1053,7 +1053,10 @@ export class BaseScene extends BasePlugin {
                 control.enabled = false
             }
         }
-
+        
+        if (finalOptions.onStart) {
+            finalOptions.onStart()
+        }
         // 将目标位置转换为 THREE.Vector3 类型
         const targetPosition = new THREE.Vector3(
             finalOptions.position.x,
@@ -1659,6 +1662,7 @@ export class BaseScene extends BasePlugin {
                     control.enableZoom = true
                     control.enablePan = true
 
+                    // 俯视图
                     control.minPolarAngle = control.maxPolarAngle = 0
                     control.minAzimuthAngle = control.maxAzimuthAngle = 0
 
@@ -1799,7 +1803,6 @@ export class BaseScene extends BasePlugin {
                 try {
                     // 先切换到透视相机
                     this.switchCamera()
-                    // debugger
                     // 然后调整到合适的3D视角
                     this.cameraFlyTo({
                         position: { x: 50, y: 50, z: 50 },  // 3D视角位置

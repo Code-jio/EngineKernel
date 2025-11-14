@@ -22,13 +22,13 @@ class BasePlugin {
     }
 
     // 添加方法参数类型
-    async init(): Promise<void> {}
+    async init() {}
     // 加载
-    async load(): Promise<void> {}
+    async load() {}
     // 暂停
-    // async stop(): Promise<void> {}
+    // async stop() {}
     // 卸载
-    async unload(): Promise<void> {
+    async unload() {
         this.status = "unloaded";
     }
 }

@@ -97,20 +97,15 @@ export class CSS3DRenderPlugin extends BasePlugin {
 
         // 初始标记需要渲染
         this.markNeedsRender()
-
-        this.initialize()
     }
 
     /**
      * 初始化插件
      * @description 插件初始化方法，集成到渲染循环
      */
-    private initialize() {
+    initialize() {
         this.startRenderLoop()
         // this.addTransitionStyles() //
-
-        console.log("✅ CSS3D插件已通过eventBus集成到渲染循环")
-        console.log(`🎬 当前渲染模式: ${this.renderMode}`)
     }
 
 
@@ -566,7 +561,6 @@ export class CSS3DRenderPlugin extends BasePlugin {
      */
     setBillboardingEnabled(enabled: boolean): void {
         this.enableBillboarding = enabled
-        console.log(`🎯 CSS3D对象billboarding效果已${enabled ? '启用' : '禁用'}`)
         
         // 如果禁用，重置所有对象的旋转
         if (!enabled) {
@@ -673,8 +667,6 @@ export class CSS3DRenderPlugin extends BasePlugin {
      */
     setRenderMode(mode: "continuous" | "onDemand"): void {
         this.renderMode = mode
-        console.log(`🎬 CSS3D渲染模式已设置为: ${mode}`)
-
         if (mode === "continuous") {
             this.markNeedsRender()
         }
@@ -693,8 +685,6 @@ export class CSS3DRenderPlugin extends BasePlugin {
         eventBus.on("update", () => {
             this.update()
         })
-        
-        console.log("🎬 CSS3D渲染循环已启动")
     }
 
     /**

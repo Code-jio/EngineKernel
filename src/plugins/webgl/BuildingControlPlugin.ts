@@ -219,6 +219,8 @@ export class BuildingControlPlugin extends BasePlugin {
                 - 设备数量: ${this.allDevices.length}
                 - 外立面数量: ${this.facades.length}`)
         }
+        // 建筑初始化完成
+        eventBus.emit("buildingInit")
     }
 
     /**
@@ -3027,6 +3029,29 @@ export class BuildingControlPlugin extends BasePlugin {
 
         } catch (error) {
             console.error(`❌ 添加对象到设备 ${deviceNumber} 时发生错误:`, error)
+        }
+    }
+
+    /**
+     * 获取指定楼层的高度（以房间的地板高度为基准计算）
+     * @param floorNumber 楼层号
+     * @returns 
+     */
+    public getFloorHeight(floorNumber:number):number{
+        let floor = this.floors.get(Number(floorNumber))
+        let rooms = floor?.rooms
+        if (rooms) {
+            
+            let totalHeight = 0;
+    
+            for (let item of rooms) {
+                totalHeight += item.group.position.y;
+            }
+        
+            return rooms.length > 0 ? totalHeight / rooms.length : 0;
+        }else{
+            console.warn("无法获取房间高度");
+            return 0
         }
     }
 }

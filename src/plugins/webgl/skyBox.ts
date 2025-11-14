@@ -77,8 +77,6 @@ export class SkyBox extends BasePlugin {
 
         // 解析配置
         this.config = this.parseConfig(meta.userData);
-
-        this.initialize();
     }
 
     private parseConfig(userData: any): SkyBoxConfig {
@@ -155,15 +153,13 @@ export class SkyBox extends BasePlugin {
         return config;
     }
 
-    initialize() {
+    public initialize() {
         // 监听场景就绪事件
         this.sceneReadyHandler = this.sceneReadyHandler.bind(this);
         eventBus.on("scene-ready", this.sceneReadyHandler);
-
+        
         // 根据类型创建天空盒
         this.createSkyBox();
-
-        console.log(`SkyBox插件初始化完成，类型: ${this.config.type}`);
     }
 
     private createSkyBox() {

@@ -26,7 +26,7 @@ interface PluginInstance extends BasePluginInterface {
     strategy: 'sync' | 'async'
     metadata?: PluginMeta['metadata'];
     pluginClass: new (params:{ [key: string]: any }) => PluginInstance;
-    initialize(core: CoreType): void
+    initialize(): void
     getExports?(): Record<string, unknown>
 }
 

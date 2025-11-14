@@ -30,11 +30,9 @@ export class RenderLoop extends BasePlugin {
         super(meta);
         this.clock = new THREE.Clock();
         this.animationID = 0;
-        this.initialize()
     }
 
-    initialize() {
-        
+    private initialize() {
         this.isRunning = true;
         const render = () => {
             if (!this.isRunning) return;

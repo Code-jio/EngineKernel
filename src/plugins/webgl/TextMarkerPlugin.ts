@@ -150,17 +150,12 @@ export class TextMarkerPlugin extends BasePlugin {
     /**
      * 插件初始化
      */
-    async init(): Promise<void> {
-        console.log("🚀 TextMarker插件初始化开始")
-
+    initialize() {
         if (!this.scene) {
             throw new Error("TextMarker: 无法获取场景引用")
         }
-
         // 设置事件监听器
         this.setupEventListeners()
-
-        console.log("✅ TextMarker插件初始化完成")
     }
 
     /**
@@ -346,6 +341,9 @@ export class TextMarkerPlugin extends BasePlugin {
      * 文本换行处理
      */
     private wrapText(text: string, textStyle: TextStyle, maxWidth?: number): string[] {
+        if (!text) {
+            return []
+        }
         if (!maxWidth) {
             return text.split("\n")
         }

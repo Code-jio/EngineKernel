@@ -201,8 +201,6 @@ export class MousePickPlugin extends BasePlugin {
         eventBus.on("Highlight-Delete",()=>{
             this.clearHighlight()
         })
-
-        console.log("✅ MousePickPlugin 初始化完成")
     }
 
     /**
@@ -470,7 +468,6 @@ export class MousePickPlugin extends BasePlugin {
                         y: event.clientY,
                     },
                 })
-                // debugger
                 // 处理选择和高亮
                 this.handlePickResults(filteredResults, event)
             } else {
