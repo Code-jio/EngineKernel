@@ -2,6 +2,7 @@ import { fileURLToPath } from "url"
 import path from "path"
 import { createRequire } from "node:module"
 import webpack from "webpack"
+import fs from "fs"
 const require = createRequire(import.meta.url)
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -19,6 +20,8 @@ export default {
             umdNamedDefine: true,
         },
         globalObject: "this",
+        // 添加静态资源复制配置
+        assetModuleFilename: "public/[name][ext]",
     },
     ignoreWarnings: [/Failed to parse source map/, /Critical dependency/, /Module not found:/],
     module: {
@@ -39,6 +42,17 @@ export default {
                     },
                 ],
                 exclude: [/node_modules/],
+            },
+            {
+                // 处理Service Worker文件
+                test: /\.js$/,
+                include: [
+                    path.resolve(__dirname, "../src/utils/network-interceptor-sw.js")
+                ],
+                type: "asset/resource",
+                generator: {
+                    filename: "public/[name][ext]",
+                },
             },
         ],
     },
@@ -66,5 +80,29 @@ export default {
     plugins: [
         // 模块连接插件，确保同一模块不会被重复实例化
         new webpack.optimize.ModuleConcatenationPlugin(),
+        
+        // 自定义插件：复制Service Worker文件到dist目录
+        {
+            apply: (compiler) => {
+                compiler.hooks.afterEmit.tap('CopyServiceWorkerPlugin', (compilation) => {
+                    const sourcePath = path.resolve(__dirname, '../src/utils/network-interceptor-sw.js');
+                    const destPath = path.resolve(__dirname, '../dist/public/network-interceptor-sw.js');
+                    
+                    // 确保目标目录存在
+                    const destDir = path.dirname(destPath);
+                    if (!fs.existsSync(destDir)) {
+                        fs.mkdirSync(destDir, { recursive: true });
+                    }
+                    
+                    // 复制文件
+                    if (fs.existsSync(sourcePath)) {
+                        fs.copyFileSync(sourcePath, destPath);
+                        console.log('✅ Service Worker文件已复制到:', destPath);
+                    } else {
+                        console.warn('⚠️ Service Worker源文件不存在:', sourcePath);
+                    }
+                });
+            }
+        }
     ],
 }

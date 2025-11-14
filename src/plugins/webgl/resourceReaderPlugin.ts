@@ -2,6 +2,7 @@
 import { THREE, BasePlugin } from "../basePlugin"
 import eventBus from "../../eventBus/eventBus"
 import { GLTFLoader, DRACOLoader, KTX2Loader, MeshoptDecoder } from "../../utils/three-imports"
+import { getServiceWorkerUrl, registerServiceWorker } from "../../utils/serviceWorkerImporter"
 import {
     TaskScheduler,
     TaskPriority,
@@ -11,7 +12,6 @@ import {
     AsyncTask,
     QueueConfig,
 } from "../../tools/asyncTaskScheduler"
-import { AnyTlsaRecord } from "dns"
 
 /**
  * 预期功能要求：
@@ -37,15 +37,6 @@ interface LoadingTask {
     onError?: (error: Error) => void
 }
 
-// 缓存项接口
-interface CacheItem {
-    url: string
-    model: THREE.Group | THREE.Scene | THREE.Object3D
-    timestamp: number
-    //   size: number
-    lastAccessed: number
-}
-
 // 插件配置接口
 interface ResourceReaderConfig {
     url?: string
@@ -67,7 +58,7 @@ export class ResourceReaderPlugin extends BasePlugin {
     private ktx2Loader: KTX2Loader | null = null
     private meshoptDecoder: any = null
     private taskScheduler!: TaskScheduler<THREE.Group | THREE.Scene | THREE.Object3D>
-    private resourceCache: Map<string, CacheItem> = new Map()
+    private serviceWorkerRegistration: ServiceWorkerRegistration | null = null
 
     // 保留旧接口的兼容性
     private loadingTasks: Map<string, LoadingTask> = new Map()
@@ -110,7 +101,7 @@ export class ResourceReaderPlugin extends BasePlugin {
         this.maxCacheSize = this.config.maxCacheSize!
         this.maxConcurrentLoads = this.config.maxConcurrentLoads!
     }
-    
+
     /**
      * 初始化，默认执行
     */
@@ -119,6 +110,7 @@ export class ResourceReaderPlugin extends BasePlugin {
         this.initializeDracoLoader(this.config) // 初始化DRACO解压器
         this.initializeKTX2Loader(this.config) // 初始化KTX2纹理加载器
         this.initializeMeshoptDecoder(this.config) // 初始化Meshopt量化解码器
+        this.initializeServiceWorker() // 初始化Service Worker网络拦截器
     }
 
     /**
@@ -154,7 +146,7 @@ export class ResourceReaderPlugin extends BasePlugin {
     private initializeKTX2Loader(config: ResourceReaderConfig): void {
         const enableKTX2 = config.enableKTX2 !== false
         if (enableKTX2) {
-            
+
             try {
                 this.ktx2Loader = new KTX2Loader()
                 const ktx2Path = config.ktx2Path || "./ktx2/"
@@ -181,10 +173,10 @@ export class ResourceReaderPlugin extends BasePlugin {
             // 检查renderer是否是有效的Three.js WebGLRenderer
             if (this.renderer) {
                 this.ktx2Loader.detectSupport(this.renderer)
-                
+
                 // 等待一小段时间确保支持检测完成
                 await new Promise(resolve => setTimeout(resolve, 10))
-                
+
             } else {
                 console.warn("⚠️ Renderer未提供，无法检测KTX2支持")
             }
@@ -293,7 +285,76 @@ export class ResourceReaderPlugin extends BasePlugin {
         this.taskScheduler = new TaskScheduler<THREE.Group | THREE.Scene | THREE.Object3D>(modelExecutor, queueConfig)
         this.taskScheduler.start()
     }
-    
+
+    /**
+     * 初始化Service Worker网络拦截器
+     */
+    private async initializeServiceWorker(): Promise<void> {
+        // 检查浏览器是否支持 Service Worker
+        if (!('serviceWorker' in navigator)) {
+            console.warn('[ResourceReaderPlugin] Service Worker 不支持');
+            return;
+        }
+
+        try {
+            // 使用新的Service Worker注册工具
+            const registration = await registerServiceWorker();
+            
+            // Service Worker 注册成功后的处理
+            this.serviceWorkerRegistration = registration;
+
+            // 监听来自Service Worker的消息
+            navigator.serviceWorker.addEventListener('message', (event) => {
+                const { type, data } = event.data
+
+                switch (type) {
+                    case 'NETWORK_REQUEST':
+                        // console.group('📤 Service Worker 拦截到网络请求')
+                        // console.log('🔗 URL:', data.url)
+                        // console.log('⚡ 方法:', data.method)
+                        // console.log('📋 请求头:', data.headers)
+                        // console.log('⏰ 时间:', data.timestamp)
+                        // console.groupEnd()
+
+                        // 通过事件总线发送网络请求信息
+                        eventBus.emit('network:request', data)
+                        break
+
+                    case 'NETWORK_RESPONSE':
+                        // console.group('📥 Service Worker 收到网络响应')
+                        // console.log('🔗 URL:', data.url)
+                        // console.log('✅ 状态码:', data.status, data.statusText)
+                        // console.log('📋 响应头:', data.headers)
+                        // console.log('⏱️ 响应时间:', data.responseTime + 'ms')
+                        // console.groupEnd()
+
+                        // 通过事件总线发送网络响应信息
+                        eventBus.emit('network:response', data)
+                        break
+
+                    case 'NETWORK_ERROR':
+                        console.error('❌ Service Worker 网络请求失败:', data)
+
+                        // 通过事件总线发送网络错误信息
+                        eventBus.emit('network:error', data)
+                        break
+
+                    default:
+                        console.log('ℹ️ Service Worker 未知消息类型:', type, data)
+                }
+            })
+
+            // 发送消息给Service Worker确认连接
+            if (navigator.serviceWorker.controller) {
+                navigator.serviceWorker.controller.postMessage({
+                    type: 'CONNECTION_ESTABLISHED',
+                    message: 'ResourceReaderPlugin已连接'
+                })
+            }
+        } catch (error) {
+            console.error('❌ Service Worker 注册失败:', error);
+        }
+    }
     // /**
     //  * 插件初始化
     //  */
@@ -337,14 +398,6 @@ export class ResourceReaderPlugin extends BasePlugin {
     ): Promise<THREE.Group | THREE.Scene | THREE.Object3D> {
         const fullUrl = this.resolveUrl(url)
 
-        // 检查缓存
-        const cached = this.getCachedResource(fullUrl)
-        if (cached) {
-            console.log(`📦 从缓存异步加载模型: ${url}`)
-            eventBus.emit("resource:loaded", { url: fullUrl, fromCache: true })
-            return cached.model.clone()
-        }
-
         // 创建任务配置
         const taskConfig: TaskConfig = {
             id: this.generateTaskId(),
@@ -360,9 +413,6 @@ export class ResourceReaderPlugin extends BasePlugin {
             // 调度任务
             const result = await this.taskScheduler.schedule(taskConfig)
             if (result.success && result.data) {
-                // 添加到缓存
-                this.addToCache(fullUrl, result.data)
-
                 eventBus.emit("resource:loaded", {
                     url: fullUrl,
                     model: result.data,
@@ -417,8 +467,6 @@ export class ResourceReaderPlugin extends BasePlugin {
                 const originalUrl = urls[index]
 
                 if (result.success && result.data) {
-                    // 添加到缓存
-                    this.addToCache(taskConfigs[index].url, result.data)
 
                     return {
                         url: originalUrl,
@@ -469,19 +517,6 @@ export class ResourceReaderPlugin extends BasePlugin {
         priority: number = 0,
     ): string {
         const fullUrl = this.resolveUrl(url)
-
-        // 检查缓存
-        const cached = this.getCachedResource(fullUrl)
-        if (cached) {
-            console.log(`📦 从缓存加载模型: ${url}`)
-            if (onComplete) {
-                // 克隆缓存的模型以避免引用问题
-                const clonedModel = cached.model.clone()
-                onComplete({ scene: clonedModel })
-            }
-            eventBus.emit("resource:loaded", { url: fullUrl, fromCache: true })
-            return "cached"
-        }
 
         // 创建加载任务
         const taskId = this.generateTaskId()
@@ -639,9 +674,6 @@ export class ResourceReaderPlugin extends BasePlugin {
         const processedModel = this.processLoadedModel(gltf.scene, task.url)
         task.model = processedModel
 
-        // 添加到缓存
-        this.addToCache(task.url, processedModel)
-
         // 执行回调，将处理后的模型放回gltf对象
         if (task.onComplete) {
             const enhancedGltf = { ...gltf, scene: processedModel }
@@ -764,127 +796,6 @@ export class ResourceReaderPlugin extends BasePlugin {
      */
     private generateTaskId(): string {
         return `task_${++this.taskIdCounter}_${Date.now()}`
-    }
-
-    /**
-     * 添加到缓存
-     */
-    private addToCache(url: string, model: THREE.Group | THREE.Scene | THREE.Object3D): void {
-        // const size = this.estimateModelSize(model)
-
-        // 检查缓存容量
-        // this.ensureCacheSpace(size)
-
-        const cacheItem: CacheItem = {
-            url,
-            model: model.clone(), // 存储克隆以避免引用问题
-            timestamp: Date.now(),
-            //   size,
-            lastAccessed: Date.now(),
-        }
-
-        this.resourceCache.set(url, cacheItem)
-        // console.log(`💾 模型已缓存: ${url} (${(size / 1024).toFixed(2)}KB)`)
-    }
-
-    /**
-     * 从缓存获取资源
-     */
-    private getCachedResource(url: string): CacheItem | null {
-        const cached = this.resourceCache.get(url)
-        if (cached) {
-            cached.lastAccessed = Date.now()
-            return cached
-        }
-        return null
-    }
-
-    /**
-     * 清理特定资源
-     */
-    public disposeResource(url: string): void {
-        const cached = this.resourceCache.get(url)
-        if (cached) {
-            cached.model.traverse(child => {
-                if (child instanceof THREE.Mesh) {
-                    child.geometry?.dispose()
-                    if (Array.isArray(child.material)) {
-                        child.material.forEach(mat => mat.dispose())
-                    } else {
-                        child.material?.dispose()
-                    }
-                }
-            })
-
-            this.resourceCache.delete(url)
-            console.log(`🗑️ 资源已释放: ${url}`)
-        }
-    }
-
-    /**
-     * 清理所有缓存
-     */
-    public clearCache(): void {
-        const urls: string[] = []
-        this.resourceCache.forEach((_, url) => {
-            urls.push(url)
-        })
-
-        for (const url of urls) {
-            this.disposeResource(url)
-        }
-        console.log("🧹 缓存已全部清理")
-    }
-
-    /**
-     * 开始缓存清理定时器
-     */
-    private startCacheCleanup(): void {
-        setInterval(
-            () => {
-                const now = Date.now()
-                const expireTime = 30 * 60 * 1000 // 30分钟
-
-                const urlsToClean: string[] = []
-                this.resourceCache.forEach((item, url) => {
-                    if (now - item.lastAccessed > expireTime) {
-                        urlsToClean.push(url)
-                    }
-                })
-
-                for (const url of urlsToClean) {
-                    this.disposeResource(url)
-                }
-            },
-            5 * 60 * 1000,
-        ) // 每5分钟检查一次
-    }
-
-    /**
-     * 获取缓存状态
-     */
-    public getCacheStatus(): {
-        // size: number
-        maxSize: number
-        itemCount: number
-        // utilization: number
-        dracoEnabled: boolean
-        ktx2Enabled: boolean
-        meshoptEnabled: boolean
-    } {
-        // const size = this.getCurrentCacheSize()
-        const itemCount = this.resourceCache.size
-        // const utilization = (size / this.maxCacheSize) * 100
-
-        return {
-            //   size,
-            maxSize: this.maxCacheSize,
-            itemCount,
-            //   utilization,
-            dracoEnabled: !!this.dracoLoader,
-            ktx2Enabled: !!this.ktx2Loader,
-            meshoptEnabled: !!this.meshoptDecoder,
-        }
     }
 
     /**
@@ -1017,9 +928,6 @@ export class ResourceReaderPlugin extends BasePlugin {
         for (const taskId of taskIds) {
             this.cancelLoad(taskId)
         }
-
-        // 清理缓存
-        this.clearCache()
 
         // 清理加载器
         if (this.dracoLoader) {

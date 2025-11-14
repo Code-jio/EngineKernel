@@ -15,6 +15,10 @@
     ".": {
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
+    },
+    "./network-interceptor-sw.js": {
+      "import": "./dist/public/network-interceptor-sw.js",
+      "require": "./dist/public/network-interceptor-sw.js"
     }
   },
   "devDependencies": {
