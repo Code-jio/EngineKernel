@@ -2,7 +2,14 @@
 import { THREE, BasePlugin } from "../basePlugin"
 import eventBus from "../../eventBus/eventBus"
 import { GLTFLoader, DRACOLoader, KTX2Loader, MeshoptDecoder } from "../../utils/three-imports"
-import { getServiceWorkerUrl, registerServiceWorker } from "../../utils/serviceWorkerImporter"
+import {
+    registerServiceWorkerImproved,
+    isServiceWorkerActive,
+    forceActivateServiceWorker,
+} from "../../utils/serviceWorkerRegisterImproved"
+
+import { CacheConfig, CacheStatistics, GLTFModelCacheData, GLTFModelCache } from "../../tools/cache"
+
 import {
     TaskScheduler,
     TaskPriority,
@@ -70,7 +77,7 @@ export class ResourceReaderPlugin extends BasePlugin {
     private maxCacheSize: number = 100 * 1024 * 1024 // 100MB
     private maxConcurrentLoads: number = 3
     private taskIdCounter: number = 0
-    private renderer: any = null;
+    private renderer: any = null
 
     // 默认配置参数
     private static readonly DEFAULT_CONFIG: ResourceReaderConfig = {
@@ -80,9 +87,9 @@ export class ResourceReaderPlugin extends BasePlugin {
         enableDraco: true, // 启用DRACO解压
         dracoPath: "./draco/gltf/", // DRACO解码器路径
         enableKTX2: true, // 启用KTX2纹理压缩
-        ktx2Path: "./ktx2/", // KTX2解码器路径 
+        ktx2Path: "./ktx2/", // KTX2解码器路径
         enableMeshopt: true, // 启用网格量化
-        meshoptPath: "./meshopt/", // Meshopt解码器路径 
+        meshoptPath: "./meshopt/", // Meshopt解码器路径
         supportedFormats: ["gltf", "glb", "ktx2"], // 支持的格式
         autoDispose: true, // 自动释放过期资源
     }
@@ -104,13 +111,13 @@ export class ResourceReaderPlugin extends BasePlugin {
 
     /**
      * 初始化，默认执行
-    */
-    public initialize(): void {
+     */
+    public async initialize() {
         this.initializeTaskScheduler()
         this.initializeDracoLoader(this.config) // 初始化DRACO解压器
         this.initializeKTX2Loader(this.config) // 初始化KTX2纹理加载器
         this.initializeMeshoptDecoder(this.config) // 初始化Meshopt量化解码器
-        this.initializeServiceWorker() // 初始化Service Worker网络拦截器
+        // await this.initializeServiceWorker() // 初始化Service Worker网络拦截器
     }
 
     /**
@@ -120,7 +127,6 @@ export class ResourceReaderPlugin extends BasePlugin {
         this.gltfLoader = new GLTFLoader()
         const enableDraco = config.enableDraco !== false
         if (enableDraco) {
-
             try {
                 this.dracoLoader = new DRACOLoader()
                 const dracoPath = config.dracoPath || "/draco/"
@@ -129,7 +135,6 @@ export class ResourceReaderPlugin extends BasePlugin {
 
                 // 设置DRACO解压器到GLTF加载器
                 this.gltfLoader.setDRACOLoader(this.dracoLoader)
-
             } catch (error) {
                 console.warn("⚠️ DRACO解压器初始化失败:", error)
                 this.dracoLoader = null
@@ -146,7 +151,6 @@ export class ResourceReaderPlugin extends BasePlugin {
     private initializeKTX2Loader(config: ResourceReaderConfig): void {
         const enableKTX2 = config.enableKTX2 !== false
         if (enableKTX2) {
-
             try {
                 this.ktx2Loader = new KTX2Loader()
                 const ktx2Path = config.ktx2Path || "./ktx2/"
@@ -176,7 +180,6 @@ export class ResourceReaderPlugin extends BasePlugin {
 
                 // 等待一小段时间确保支持检测完成
                 await new Promise(resolve => setTimeout(resolve, 10))
-
             } else {
                 console.warn("⚠️ Renderer未提供，无法检测KTX2支持")
             }
@@ -220,7 +223,6 @@ export class ResourceReaderPlugin extends BasePlugin {
 
             // 设置Meshopt解码器到GLTF加载器
             this.gltfLoader.setMeshoptDecoder(MeshoptDecoder)
-
         } catch (error) {
             console.warn("⚠️ Meshopt量化解码器异步初始化失败:", error)
             this.meshoptDecoder = null
@@ -288,93 +290,270 @@ export class ResourceReaderPlugin extends BasePlugin {
 
     /**
      * 初始化Service Worker网络拦截器
+     * 改进版本：确保立即激活并开始拦截网络请求
      */
     private async initializeServiceWorker(): Promise<void> {
         // 检查浏览器是否支持 Service Worker
-        if (!('serviceWorker' in navigator)) {
-            console.warn('[ResourceReaderPlugin] Service Worker 不支持');
-            return;
+        if (!("serviceWorker" in navigator)) {
+            console.warn("[ResourceReaderPlugin] Service Worker 不支持")
+            return
         }
 
         try {
-            // 使用新的Service Worker注册工具
-            const registration = await registerServiceWorker();
+            console.log("[ResourceReaderPlugin] 开始Service Worker初始化...")
             
-            // Service Worker 注册成功后的处理
-            this.serviceWorkerRegistration = registration;
+            // 1. 尝试强制激活已有的Service Worker（如果存在）
+            console.log("[ResourceReaderPlugin] 步骤1: 检查现有Service Worker控制...")
+            await this.ensureServiceWorkerControl()
 
-            // 监听来自Service Worker的消息
-            navigator.serviceWorker.addEventListener('message', (event) => {
-                const { type, data } = event.data
+            // 2. 检查是否已经有Service Worker控制页面
+            console.log("[ResourceReaderPlugin] 步骤2: 检查Service Worker活动状态...")
+            const isActive = await isServiceWorkerActive()
+            if (!isActive) {
+                console.log("[ResourceReaderPlugin] 步骤3: 注册新的Service Worker...")
+                
+                // 注册新的Service Worker
+                const { registration, controller } = await registerServiceWorkerImproved({
+                    swPath: "/network-interceptor-sw.js",
+                    scope: "/",
+                    forceUpdate: true,
+                    timeout: 30000, // 增加注册超时到30秒
+                })
 
-                switch (type) {
-                    case 'NETWORK_REQUEST':
-                        // console.group('📤 Service Worker 拦截到网络请求')
-                        // console.log('🔗 URL:', data.url)
-                        // console.log('⚡ 方法:', data.method)
-                        // console.log('📋 请求头:', data.headers)
-                        // console.log('⏰ 时间:', data.timestamp)
-                        // console.groupEnd()
-
-                        // 通过事件总线发送网络请求信息
-                        eventBus.emit('network:request', data)
-                        break
-
-                    case 'NETWORK_RESPONSE':
-                        // console.group('📥 Service Worker 收到网络响应')
-                        // console.log('🔗 URL:', data.url)
-                        // console.log('✅ 状态码:', data.status, data.statusText)
-                        // console.log('📋 响应头:', data.headers)
-                        // console.log('⏱️ 响应时间:', data.responseTime + 'ms')
-                        // console.groupEnd()
-
-                        // 通过事件总线发送网络响应信息
-                        eventBus.emit('network:response', data)
-                        break
-
-                    case 'NETWORK_ERROR':
-                        console.error('❌ Service Worker 网络请求失败:', data)
-
-                        // 通过事件总线发送网络错误信息
-                        eventBus.emit('network:error', data)
-                        break
-
-                    default:
-                        console.log('ℹ️ Service Worker 未知消息类型:', type, data)
-                }
-            })
-
-            // 发送消息给Service Worker确认连接
-            if (navigator.serviceWorker.controller) {
-                navigator.serviceWorker.controller.postMessage({
-                    type: 'CONNECTION_ESTABLISHED',
-                    message: 'ResourceReaderPlugin已连接'
+                // Service Worker 注册成功后的处理
+                this.serviceWorkerRegistration = registration
+                console.log("[ResourceReaderPlugin] Service Worker 注册成功:", {
+                    scope: registration.scope,
+                    state: registration.active?.state || registration.installing?.state || "unknown"
+                })
+            } else {
+                console.log("[ResourceReaderPlugin] 步骤3: 获取现有Service Worker注册...")
+                
+                // 获取现有注册信息
+                const registration = await navigator.serviceWorker.ready
+                this.serviceWorkerRegistration = registration
+                console.log("[ResourceReaderPlugin] 现有Service Worker状态:", {
+                    scope: registration.scope,
+                    active: !!registration.active,
+                    installing: !!registration.installing,
+                    waiting: !!registration.waiting
                 })
             }
+
+            // 4. 设置消息监听器
+            console.log("[ResourceReaderPlugin] 步骤4: 设置消息监听器...")
+            this.setupServiceWorkerMessageListener()
+
+            // 5. 确认与Service Worker的连接
+            console.log("[ResourceReaderPlugin] 步骤5: 确认Service Worker连接...")
+            await this.confirmServiceWorkerConnection()
+            
+            console.log("[ResourceReaderPlugin] ✅ Service Worker 初始化完成")
         } catch (error) {
-            console.error('❌ Service Worker 注册失败:', error);
+            console.error("❌ Service Worker 初始化失败:", error)
+            
+            // 初始化失败时的降级处理
+            console.warn("[ResourceReaderPlugin] Service Worker初始化失败，将继续使用基础功能")
+            
+            // 不抛出错误，让应用可以继续运行
         }
     }
-    // /**
-    //  * 插件初始化
-    //  */
-    // async init(): Promise<void> {
-    //     // // 异步初始化KTX2Loader（需要renderer支持检测）
-    //     // await this.initializeKTX2LoaderAsync()
 
-    //     // // 监听资源释放事件
-    //     // eventBus.on("resource:dispose", (url: string) => {
-    //     //     this.disposeResource(url)
-    //     // })
+    /**
+     * 确保Service Worker控制页面
+     */
+    private async ensureServiceWorkerControl(): Promise<void> {
+        // 如果已经有控制器，检查是否需要强制激活
+        if (navigator.serviceWorker.controller) {
+            return
+        }
 
-    //     // // 监听缓存清理事件
-    //     // eventBus.on("resource:clearCache", () => {
-    //     //     this.clearCache()
-    //     // })
+        // 检查是否有等待的Service Worker
+        try {
+            const registration = await navigator.serviceWorker.ready
+            if (registration.waiting) {
+                await forceActivateServiceWorker()
+            }
+        } catch (error) {
+            console.warn("[ResourceReaderPlugin] 检查Service Worker状态失败:", error)
+        }
+    }
 
-    //     // // 定时清理过期缓存
-    //     // this.startCacheCleanup()
-    // }
+    /**
+     * 设置Service Worker消息监听器
+     */
+    private setupServiceWorkerMessageListener(): void {
+        // 移除旧监听器（如果存在）
+        if (this.serviceWorkerMessageHandler) {
+            navigator.serviceWorker.removeEventListener("message", this.serviceWorkerMessageHandler)
+        }
+
+        // 设置新的监听器
+        this.serviceWorkerMessageHandler = (event: MessageEvent) => {
+            const { type, data } = event.data
+
+            switch (type) {
+                case "NETWORK_REQUEST":
+                    // 通过事件总线发送网络请求信息
+                    eventBus.emit("network:request", data)
+                    break
+
+                case "NETWORK_RESPONSE":
+                    // 通过事件总线发送网络响应信息
+                    eventBus.emit("network:response", data)
+                    break
+
+                case "NETWORK_ERROR":
+                    console.error("❌ Service Worker 网络请求失败:", data)
+                    // 通过事件总线发送网络错误信息
+                    eventBus.emit("network:error", data)
+                    break
+
+                case "SW_ACTIVATED":
+                    console.log("[ResourceReaderPlugin] Service Worker 已激活")
+                    break
+
+                case "CONNECTION_CONFIRMED":
+                    console.log("[ResourceReaderPlugin] Service Worker 连接已确认")
+                    break
+
+                case "IMMEDIATE_ACTIVATION_CONFIRMED":
+                    // 立即激活成功，可以在这里记录状态
+                    console.log("[ResourceReaderPlugin] Service Worker 立即激活成功")
+                    break
+
+                case "PONG":
+                    // 服务端响应PING，可以记录延迟
+                    const latency = Date.now() - (data?.timestamp || Date.now())
+                    console.log(`[ResourceReaderPlugin] Service Worker 延迟: ${latency}ms`)
+                    break
+
+                default:
+                    // 静默处理未知消息类型，避免警告信息
+                    break
+            }
+        }
+
+        navigator.serviceWorker.addEventListener("message", this.serviceWorkerMessageHandler)
+    }
+    /**
+     * 确认与Service Worker的连接
+     */
+    private async confirmServiceWorkerConnection(): Promise<void> {
+        return new Promise((resolve, reject) => {
+            const startTime = Date.now()
+            const timeout = 20000 // 增加超时到20秒
+
+            const timeoutId = setTimeout(() => {
+                const elapsed = Date.now() - startTime
+                reject(new Error(`Service Worker 连接超时 (${elapsed}ms)`))
+            }, timeout)
+
+            // 监听连接确认消息
+            const connectionHandler = (event: MessageEvent) => {
+                const { type } = event.data
+
+                if (type === "CONNECTION_CONFIRMED") {
+                    clearTimeout(timeoutId)
+                    navigator.serviceWorker.removeEventListener("message", connectionHandler)
+                    const elapsed = Date.now() - startTime
+                    console.log(`[ResourceReaderPlugin] Service Worker 连接建立成功 (${elapsed}ms)`)
+                    resolve()
+                }
+            }
+
+            navigator.serviceWorker.addEventListener("message", connectionHandler)
+
+            // 增强的Service Worker状态检查和连接逻辑
+            const checkAndConnect = async (retryCount = 0) => {
+                const maxRetries = 5 // 最多重试5次
+                const retryDelay = 2000 * (retryCount + 1) // 递增延迟
+
+                try {
+                    console.log(`[ResourceReaderPlugin] 第${retryCount + 1}次检查Service Worker状态...`)
+                    
+                    const registration = await navigator.serviceWorker.ready
+                    const sw = registration.active || registration.installing || registration.waiting
+                    
+                    if (sw) {
+                        console.log(`[ResourceReaderPlugin] 找到Service Worker状态:`, {
+                            active: !!registration.active,
+                            installing: !!registration.installing, 
+                            waiting: !!registration.waiting
+                        })
+                        
+                        sw.postMessage({
+                            type: "PING",
+                            data: { timestamp: startTime, attempt: retryCount + 1 },
+                        })
+                    } else {
+                        console.log(`[ResourceReaderPlugin] 当前没有可用的Service Worker，等待重试...`)
+                        
+                        if (retryCount < maxRetries) {
+                            console.log(`[ResourceReaderPlugin] ${retryDelay}ms后进行第${retryCount + 2}次重试...`)
+                            setTimeout(() => checkAndConnect(retryCount + 1), retryDelay)
+                        } else {
+                            clearTimeout(timeoutId)
+                            navigator.serviceWorker.removeEventListener("message", connectionHandler)
+                            
+                            // 提供更详细的错误信息
+                            const errorMsg = [
+                                "Service Worker 激活失败",
+                                `已重试${maxRetries}次`,
+                                "可能的解决方案：",
+                                "1. 确保在HTTPS或localhost环境下运行",
+                                "2. 检查network-interceptor-sw.js文件是否存在",
+                                "3. 确认浏览器支持Service Worker",
+                                "4. 检查控制台是否有其他错误信息"
+                            ].join("\n")
+                            
+                            reject(new Error(errorMsg))
+                        }
+                    }
+                } catch (error) {
+                    console.error(`[ResourceReaderPlugin] 第${retryCount + 1}次检查失败:`, error)
+                    
+                    if (retryCount < maxRetries) {
+                        console.log(`[ResourceReaderPlugin] ${retryDelay}ms后进行第${retryCount + 2}次重试...`)
+                        setTimeout(() => checkAndConnect(retryCount + 1), retryDelay)
+                    } else {
+                        clearTimeout(timeoutId)
+                        navigator.serviceWorker.removeEventListener("message", connectionHandler)
+                        reject(new Error(`Service Worker 连接失败: ${error instanceof Error ? error.message : String(error)}`))
+                    }
+                }
+            }
+
+            // 开始检查
+            checkAndConnect()
+        })
+    }
+
+    /**
+     * Service Worker消息处理器引用（用于移除监听器）
+     */
+    private serviceWorkerMessageHandler: ((event: MessageEvent) => void) | null = null
+    
+    /**
+     * 插件初始化
+     */
+    async init(): Promise<void> {
+        // // 异步初始化KTX2Loader（需要renderer支持检测）
+        // await this.initializeKTX2LoaderAsync()
+
+        // // 监听资源释放事件
+        // eventBus.on("resource:dispose", (url: string) => {
+        //     this.disposeResource(url)
+        // })
+
+        // // 监听缓存清理事件
+        // eventBus.on("resource:clearCache", () => {
+        //     this.clearCache()
+        // })
+
+        // // 定时清理过期缓存
+        // this.startCacheCleanup()
+    }
 
     /**
      * 基类要求的load方法
@@ -385,6 +564,7 @@ export class ResourceReaderPlugin extends BasePlugin {
 
     /**
      * 异步加载GLTF/GLB模型 - 新的推荐方法
+     * 添加了缓存检查功能，加载前先检查本地缓存
      */
     public async loadModelAsync(
         url: string,
@@ -394,9 +574,11 @@ export class ResourceReaderPlugin extends BasePlugin {
             retryCount?: number
             category?: string
             metadata?: any
+            forceReload?: boolean // 是否强制重新加载，忽略缓存
         } = {},
     ): Promise<THREE.Group | THREE.Scene | THREE.Object3D> {
         const fullUrl = this.resolveUrl(url)
+        const forceReload = options.forceReload || false
 
         // 创建任务配置
         const taskConfig: TaskConfig = {
@@ -410,9 +592,32 @@ export class ResourceReaderPlugin extends BasePlugin {
         }
 
         try {
-            // 调度任务
+            // 如果不强制重新加载，先检查缓存
+            if (!forceReload) {
+                const cachedModel = await this.getModelFromCache(fullUrl)
+                if (cachedModel) {
+                    console.log(`✅ 从缓存加载模型: ${fullUrl}`)
+                    eventBus.emit("resource:loaded", {
+                        url: fullUrl,
+                        model: cachedModel,
+                        loadTime: 0, // 缓存加载时间接近0
+                        fromCache: true,
+                    })
+
+                    // 设置模型名称
+                    this.setModelName(cachedModel, this.extractFileNameFromPath(fullUrl))
+
+                    return cachedModel
+                }
+            }
+
+            // 缓存中没有，调度网络加载任务
+            console.log(`🔄 从网络加载模型: ${fullUrl}`)
             const result = await this.taskScheduler.schedule(taskConfig)
             if (result.success && result.data) {
+                // 将加载的模型存入缓存
+                await this.saveModelToCache(fullUrl, result.data, result.executionTime)
+
                 eventBus.emit("resource:loaded", {
                     url: fullUrl,
                     model: result.data,
@@ -467,7 +672,6 @@ export class ResourceReaderPlugin extends BasePlugin {
                 const originalUrl = urls[index]
 
                 if (result.success && result.data) {
-
                     return {
                         url: originalUrl,
                         model: result.data,
@@ -535,8 +739,6 @@ export class ResourceReaderPlugin extends BasePlugin {
         this.loadingTasks.set(taskId, task)
         this.addToQueue(task)
 
-        console.log(`📥 添加加载任务: ${url} (ID: ${taskId})`)
-
         // 处理队列
         this.processQueue()
 
@@ -597,7 +799,6 @@ export class ResourceReaderPlugin extends BasePlugin {
         }
 
         this.loadingTasks.delete(taskId)
-        console.log(`❌ 取消加载任务: ${taskId}`)
 
         eventBus.emit("resource:cancelled", { taskId, url: task.url })
         return true
@@ -641,14 +842,10 @@ export class ResourceReaderPlugin extends BasePlugin {
         task.status = "loading"
         this.activeLoads.add(task.id)
 
-        console.log(`🔄 开始加载: ${task.url}`)
-        console.log(`🔧 使用${this.dracoLoader ? "DRACO增强" : "基础"}GLTFLoader`)
-
         this.gltfLoader.load(
             task.url,
             // onLoad
             (gltf: any) => {
-                console.log(`✅ 模型加载成功: ${task.url}`)
                 this.onLoadComplete(task, gltf)
             },
             // onProgress
@@ -684,7 +881,6 @@ export class ResourceReaderPlugin extends BasePlugin {
         this.activeLoads.delete(task.id)
 
         const loadTime = Date.now() - task.startTime
-        console.log(`✅ 模型加载完成: ${task.url} (${loadTime}ms)`)
 
         eventBus.emit("resource:loaded", {
             url: task.url,
@@ -874,7 +1070,7 @@ export class ResourceReaderPlugin extends BasePlugin {
     /**
      * 获取模型名称
      */
-    public getModelName(object: THREE.Group | THREE.Scene | THREE.Object3D): string {
+    public getModelName(object: THREE.Group | THREE.Object3D): string {
         if (!object) return "未命名模型"
 
         // 优先使用userData.modelName
@@ -975,4 +1171,377 @@ export class ResourceReaderPlugin extends BasePlugin {
         // 建筑模型的文件名必须包含MAIN_BUILDING，而且以MAIN_BUILDING结尾
         return fileName.includes("MAIN_BUILDING") && fileName.endsWith("MAIN_BUILDING")
     }
+
+    // ==================== 缓存相关方法 ====================
+
+    /**
+     * 缓存管理器实例
+     * 使用默认配置创建全局缓存管理器
+     */
+    private static cacheManager: GLTFModelCache | null = null
+
+    /**
+     * 获取或创建缓存管理器实例
+     */
+    private getCacheManager(): GLTFModelCache {
+        if (!ResourceReaderPlugin.cacheManager) {
+            // 创建全局缓存管理器实例
+            ResourceReaderPlugin.cacheManager = new GLTFModelCache({
+                databaseName: 'EngineKernel_GLTF_Cache',
+                maxCacheSize: 500 * 1024 * 1024, // 500MB
+                maxModels: 100,
+                ttl: 7 * 24 * 60 * 60 * 1000, // 7天
+                cleanupInterval: 60 * 60 * 1000 // 60分钟
+            })
+        }
+        return ResourceReaderPlugin.cacheManager
+    }
+
+    /**
+     * 从缓存中获取模型数据
+     */
+    private async getModelFromCache(url: string): Promise<THREE.Group | THREE.Scene | THREE.Object3D | null> {
+        try {
+            const cacheManager = this.getCacheManager()
+            await cacheManager.initialize()
+
+            // 通过URL查找缓存的模型数据
+            const cachedData = await cacheManager.getModelByUrl(url)
+            
+            if (!cachedData) {
+                return null
+            }
+
+            // 从序列化数据中恢复THREE对象
+            const restoredModel = await this.restoreModelFromCacheData(cachedData)
+            
+            if (restoredModel) {
+                console.log(`✅ 成功从缓存恢复模型: ${url}`)
+                return restoredModel
+            } else {
+                console.warn(`⚠️ 缓存数据恢复失败: ${url}`)
+                // 缓存数据可能损坏，删除它
+                await cacheManager.deleteModel(cachedData.id)
+                return null
+            }
+        } catch (error) {
+            console.warn(`⚠️ 缓存读取失败: ${url}`, error)
+            return null
+        }
+    }
+
+    /**
+     * 将模型数据保存到缓存
+     */
+    private async saveModelToCache(url: string, model: THREE.Group | THREE.Scene | THREE.Object3D, loadTime: number): Promise<void> {
+        try {
+            const cacheManager = this.getCacheManager()
+            await cacheManager.initialize()
+
+            // 生成缓存数据
+            const cacheData = await this.generateCacheData(url, model, loadTime)
+
+            if (cacheData) {
+                // 保存到缓存
+                await cacheManager.storeModel(url, cacheData.modelData)
+                console.log(`💾 模型已缓存: ${url} (大小: ${this.formatFileSize(cacheData.metadata.estimatedSize)})`)
+            }
+        } catch (error) {
+            console.warn(`⚠️ 缓存保存失败: ${url}`, error)
+        }
+    }
+
+    /**
+     * 生成模型的缓存数据
+     */
+    private async generateCacheData(
+        url: string, 
+        model: THREE.Group | THREE.Scene | THREE.Object3D,
+        loadTime?: number
+    ): Promise<GLTFModelCacheData | null> {
+        try {
+            // 获取文件扩展名
+            const fileExt = this.extractFileExtFromUrl(url)
+            const format = (fileExt.toLowerCase() === 'glb') ? 'glb' : 'gltf'
+
+            // 提取模型信息
+            const modelInfo = this.extractModelInfo(model)
+            
+            // 计算原始文件大小（估算）
+            const estimatedSize = this.estimateModelSize(model)
+
+            // 生成模型ID
+            const modelId = this.generateCacheModelId(url)
+
+            const cacheData: GLTFModelCacheData = {
+                id: modelId,
+                url: url,
+                modelData: model, // 原始THREE对象
+                metadata: {
+                    cachedAt: Date.now(),
+                    lastAccessed: Date.now(),
+                    accessCount: 1,
+                    estimatedSize: estimatedSize,
+                    userAgent: navigator.userAgent
+                }
+            }
+
+            return cacheData
+        } catch (error) {
+            console.warn(`⚠️ 缓存数据生成失败: ${url}`, error)
+            return null
+        }
+    }
+
+    /**
+     * 提取模型信息
+     */
+    private extractModelInfo(model: THREE.Group | THREE.Scene | THREE.Object3D): { materials: string[], textures: string[], animations: string[] } {
+        const materials: string[] = []
+        const textures: string[] = []
+        const animations: string[] = []
+
+        try {
+            // 递归遍历所有子对象
+            model.traverse((child: any) => {
+                // 收集材质信息
+                if (child.material) {
+                    if (Array.isArray(child.material)) {
+                        child.material.forEach((mat: any) => {
+                            if (mat.name && !materials.includes(mat.name)) {
+                                materials.push(mat.name)
+                            }
+                            // 收集贴图信息
+                            if (mat.map) textures.push(mat.map.name || 'texture')
+                            if (mat.normalMap) textures.push(mat.normalMap.name || 'normalMap')
+                            if (mat.roughnessMap) textures.push(mat.roughnessMap.name || 'roughnessMap')
+                            if (mat.metalnessMap) textures.push(mat.metalnessMap.name || 'metalnessMap')
+                        })
+                    } else {
+                        const mat = child.material
+                        if (mat.name && !materials.includes(mat.name)) {
+                            materials.push(mat.name)
+                        }
+                        // 收集贴图信息
+                        if (mat.map) textures.push(mat.map.name || 'texture')
+                        if (mat.normalMap) textures.push(mat.normalMap.name || 'normalMap')
+                        if (mat.roughnessMap) textures.push(mat.roughnessMap.name || 'roughnessMap')
+                        if (mat.metalnessMap) textures.push(mat.metalnessMap.name || 'metalnessMap')
+                    }
+                }
+
+                // 收集动画信息
+                if (child.animations && child.animations.length > 0) {
+                    child.animations.forEach((anim: any) => {
+                        if (anim.name && !animations.includes(anim.name)) {
+                            animations.push(anim.name)
+                        }
+                    })
+                }
+            })
+        } catch (error) {
+            console.warn('⚠️ 模型信息提取失败:', error)
+        }
+
+        return { materials, textures, animations }
+    }
+
+    /**
+     * 估算模型大小
+     */
+    private estimateModelSize(model: THREE.Group | THREE.Scene | THREE.Object3D): number {
+        let estimatedSize = 0
+
+        try {
+            // 基础对象大小
+            estimatedSize += 1024 // 基础对象
+
+            model.traverse((child: any) => {
+                // 几何体大小估算
+                if (child.geometry) {
+                    const geometry = child.geometry
+                    if (geometry.attributes && geometry.attributes.position) {
+                        const positions = geometry.attributes.position
+                        estimatedSize += positions.count * positions.itemSize * 4 // float32 = 4 bytes
+                    }
+                    if (geometry.attributes.normal) {
+                        const normals = geometry.attributes.normal
+                        estimatedSize += normals.count * normals.itemSize * 4
+                    }
+                    if (geometry.attributes.uv) {
+                        const uvs = geometry.attributes.uv
+                        estimatedSize += uvs.count * uvs.itemSize * 4
+                    }
+                }
+
+                // 材质大小估算
+                if (child.material) {
+                    if (Array.isArray(child.material)) {
+                        estimatedSize += child.material.length * 2048 // 每个材质估算
+                    } else {
+                        estimatedSize += 2048 // 单个材质
+                    }
+                }
+
+                // 贴图大小估算（假设每张贴图1MB）
+                if (child.material && child.material.map) {
+                    estimatedSize += 1024 * 1024
+                }
+            })
+        } catch (error) {
+            console.warn('⚠️ 模型大小估算失败:', error)
+            estimatedSize = 1024 * 1024 // 默认1MB
+        }
+
+        return estimatedSize
+    }
+
+    /**
+     * 从缓存数据中恢复THREE对象
+     */
+    private async restoreModelFromCacheData(cacheData: GLTFModelCacheData): Promise<THREE.Group | THREE.Scene | THREE.Object3D | null> {
+        try {
+            // 优先使用原始THREE对象数据
+            if (cacheData.modelData) {
+                return cacheData.modelData
+            }
+
+            // 如果原始对象不可用，返回null
+            return null
+        } catch (error) {
+            console.warn('⚠️ 模型恢复失败:', error)
+            return null
+        }
+    }
+
+    /**
+     * 序列化场景
+     */
+    private serializeScene(model: THREE.Group | THREE.Scene | THREE.Object3D): any {
+        try {
+            // 这里可以实现场景的序列化逻辑
+            // 返回基本的模型信息用于备份
+            return {
+                type: model.type,
+                name: model.name,
+                userData: model.userData,
+                children: model.children?.length || 0,
+                serializedAt: Date.now()
+            }
+        } catch (error) {
+            console.warn('⚠️ 场景序列化失败:', error)
+            return null
+        }
+    }
+
+    /**
+     * 生成缓存模型ID
+     */
+    private generateCacheModelId(url: string): string {
+        // 使用URL生成简单的哈希ID
+        const str = url.replace(/[^a-zA-Z0-9]/g, '')
+        return `cache_${str}_${Date.now()}`
+    }
+
+    /**
+     * 从URL提取文件扩展名
+     */
+    private extractFileExtFromUrl(url: string): string {
+        const cleanUrl = url.split('?')[0] // 移除查询参数
+        const lastDot = cleanUrl.lastIndexOf('.')
+        if (lastDot === -1) return ''
+        return cleanUrl.substring(lastDot + 1)
+    }
+
+    /**
+     * 格式化文件大小显示
+     */
+    private formatFileSize(bytes: number): string {
+        if (bytes === 0) return '0 Bytes'
+        
+        const k = 1024
+        const sizes = ['Bytes', 'KB', 'MB', 'GB']
+        const i = Math.floor(Math.log(bytes) / Math.log(k))
+        
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+    }
+
+    /**
+     * 清理过期缓存
+     */
+    public async cleanupExpiredCache(): Promise<number> {
+        try {
+            const cacheManager = this.getCacheManager()
+            await cacheManager.initialize()
+            
+            const cleanedCount = await cacheManager.cleanupExpired()
+            console.log(`🧹 缓存清理完成，删除了${cleanedCount}个过期项`)
+            return cleanedCount
+        } catch (error) {
+            console.warn('⚠️ 缓存清理失败:', error)
+            return 0
+        }
+    }
+
+    /**
+     * 获取缓存统计信息
+     */
+    public async getCacheStatistics(): Promise<CacheStatistics | null> {
+        try {
+            const cacheManager = this.getCacheManager()
+            await cacheManager.initialize()
+            
+            return await cacheManager.getStatistics()
+        } catch (error) {
+            console.warn('⚠️ 缓存统计获取失败:', error)
+            return null
+        }
+    }
+
+    /**
+     * 清空所有缓存
+     */
+    public async clearAllCache(): Promise<boolean> {
+        try {
+            const cacheManager = this.getCacheManager()
+            await cacheManager.initialize()
+            
+            await cacheManager.clearAll()
+            console.log('🗑️ 所有缓存已清空')
+            return true
+        } catch (error) {
+            console.warn('⚠️ 缓存清空失败:', error)
+            return false
+        }
+    }
+
+    /**
+     * 从缓存中删除特定模型
+     */
+    public async removeModelFromCache(url: string): Promise<boolean> {
+        try {
+            const cacheManager = this.getCacheManager()
+            await cacheManager.initialize()
+            
+            // 首先通过URL查找缓存数据获取ID
+            const cachedData = await cacheManager.getModelByUrl(url)
+            if (!cachedData) {
+                console.log(`ℹ️ 缓存中未找到模型: ${url}`)
+                return false
+            }
+            
+            const success = await cacheManager.deleteModel(cachedData.id)
+            if (success) {
+                console.log(`🗑️ 缓存模型已删除: ${url}`)
+            } else {
+                console.warn(`⚠️ 删除缓存模型失败: ${url}`)
+            }
+            return success
+        } catch (error) {
+            console.warn(`⚠️ 删除缓存模型失败: ${url}`, error)
+            return false
+        }
+    }
+
+
 }
