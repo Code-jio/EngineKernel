@@ -232,15 +232,14 @@ export class MousePickPlugin extends BasePlugin {
         window.addEventListener("keydown", this.boundKeyDown)
         window.addEventListener("keyup", this.boundKeyUp)
 
-        console.log("✅ 事件监听器绑定完成 (capture模式):", {
-            mousedown: true,
-            mousemove: true,
-            mouseup: true,
-            keydown: true,
-            keyup: true,
-        })
+        // console.log("✅ 事件监听器绑定完成 (capture模式):", {
+        //     mousedown: true,
+        //     mousemove: true,
+        //     mouseup: true,
+        //     keydown: true,
+        //     keyup: true,
+        // })
 
-        console.log("🧪 测试点击监听器已添加，点击controlLayer查看是否触发")
     }
 
     /**
@@ -254,6 +253,7 @@ export class MousePickPlugin extends BasePlugin {
         this.boxSelectElement.style.pointerEvents = "none"
         this.boxSelectElement.style.display = "none"
         this.boxSelectElement.style.zIndex = "9999"
+        this.boxSelectElement.className = "BoxSelect"
         document.body.appendChild(this.boxSelectElement)
     }
 

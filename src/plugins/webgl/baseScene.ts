@@ -298,7 +298,6 @@ export class BaseScene extends BasePlugin {
 
             }
 
-            console.log('🎮 控制器系统已初始化')
         } catch (error) {
             console.error('❌ 控制器初始化失败:', error)
             this.controls = null

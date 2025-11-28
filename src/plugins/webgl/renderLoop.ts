@@ -63,7 +63,6 @@ export class RenderLoop extends BasePlugin {
         };
         
         this.animationID = requestAnimationFrame(render);
-        console.log("🎬 渲染循环已启动");
     }
 
     private executeTasks(): void {
