@@ -182,6 +182,111 @@ export class GLTFModelCache {
   }
 
   /**
+   * 清理模型数据，移除不可序列化的对象
+   * 添加循环引用检测和深度限制，防止栈溢出
+   */
+  private cleanModelData(data: any, visited = new WeakSet(), depth = 0): any {
+    const MAX_DEPTH = 50 // 最大递归深度
+    const MAX_ITEMS = 10000 // 最大处理项目数
+
+    if (depth > MAX_DEPTH) {
+      console.warn(`[GLTFModelCache] 达到最大递归深度 ${MAX_DEPTH}，停止处理`)
+      return undefined
+    }
+
+    if (data === null || data === undefined) {
+      return data
+    }
+
+    if (typeof data === 'function') {
+      return undefined // 移除函数
+    }
+
+    if (typeof data === 'object') {
+      // 检测循环引用
+      if (visited.has(data)) {
+        console.warn('[GLTFModelCache] 检测到循环引用，跳过处理')
+        return undefined
+      }
+
+      if (data instanceof ArrayBuffer) {
+        return data // 保留 ArrayBuffer
+      }
+      
+      if (data instanceof Blob) {
+        return data // 保留 Blob
+      }
+
+      if (Array.isArray(data)) {
+        // 限制数组长度以避免处理过多数据
+        if (data.length > MAX_ITEMS) {
+          console.warn(`[GLTFModelCache] 数组过长 (${data.length} > ${MAX_ITEMS})，截断处理`)
+          return data.slice(0, MAX_ITEMS).map((item, index) => {
+            if (index >= MAX_ITEMS) return undefined
+            return this.cleanModelData(item, visited, depth + 1)
+          })
+        }
+
+        // 递归清理数组中的每个元素
+        visited.add(data)
+        const result = data.map(item => this.cleanModelData(item, visited, depth + 1))
+        visited.delete(data)
+        return result
+      }
+
+      // 处理普通对象
+      const cleaned: any = {}
+      visited.add(data)
+      
+      // 限制对象属性数量
+      const keys = Object.keys(data)
+      if (keys.length > MAX_ITEMS) {
+        console.warn(`[GLTFModelCache] 对象属性过多 (${keys.length} > ${MAX_ITEMS})，截断处理`)
+      }
+
+      const limitedKeys = keys.slice(0, MAX_ITEMS)
+      let processedCount = 0
+      
+      for (const key of limitedKeys) {
+        if (processedCount >= MAX_ITEMS) {
+          console.warn(`[GLTFModelCache] 已处理 ${processedCount} 个属性，停止处理更多属性`)
+          break
+        }
+
+        if (data.hasOwnProperty(key)) {
+          const value = data[key]
+          
+          // 跳过函数和不可序列化的对象
+          if (typeof value === 'function') {
+            console.warn(`[GLTFModelCache] 移除函数属性: ${key}`)
+            continue
+          }
+          
+          // 跳过DOM元素和其他不可序列化的对象
+          if ((typeof value === 'object' && value !== null) &&
+              (value.constructor?.name === 'Element' || 
+               value.constructor?.name === 'Window' ||
+               value.constructor?.name === 'Document' ||
+               (typeof Element !== 'undefined' && value instanceof Element))) {
+            console.warn(`[GLTFModelCache] 移除不可序列化对象: ${key}`)
+            continue
+          }
+          
+          // 递归清理对象的属性
+          cleaned[key] = this.cleanModelData(value, visited, depth + 1)
+          processedCount++
+        }
+      }
+      
+      visited.delete(data)
+      return cleaned
+    }
+
+    // 保留原始值（字符串、数字、布尔值等）
+    return data
+  }
+
+  /**
    * 计算数据大小
    */
   private calculateSize(data: any): number {
@@ -247,12 +352,15 @@ export class GLTFModelCache {
 
     try {
       const id = this.generateModelId(url)
-      const estimatedSize = this.calculateSize(modelData) + (binaryData?.byteLength || 0)
+      
+      // 清理模型数据，移除不可序列化的对象（如函数）
+      const cleanedModelData = this.cleanModelData(modelData)
+      const estimatedSize = this.calculateSize(cleanedModelData) + (binaryData?.byteLength || 0)
 
       const cacheData: GLTFModelCacheData = {
         id,
         url,
-        modelData,
+        modelData: cleanedModelData,
         binaryData,
         metadata: {
           cachedAt: Date.now(),
@@ -282,6 +390,14 @@ export class GLTFModelCache {
   }
 
   /**
+   * 获取已清理的模型数据（用于调试）
+   */
+  async getModelData(url: string): Promise<any> {
+    const model = await this.getModel(url)
+    return model ? model.modelData : null
+  }
+
+  /**
    * 从缓存获取模型
    */
   async getModel(url: string): Promise<GLTFModelCacheData | null> {
@@ -294,6 +410,9 @@ export class GLTFModelCache {
       // 更新访问统计
       model.metadata.lastAccessed = Date.now()
       model.metadata.accessCount++
+
+      // 重新清理模型数据，确保没有新添加的不可序列化对象
+      // model.modelData = this.cleanModelData(model.modelData)
 
       await this.performTransaction('readwrite', (store) => {
         return new Promise<void>((resolve, reject) => {

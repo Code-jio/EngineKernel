@@ -2,7 +2,8 @@
 import * as THREE from "three"
 
 // 常用扩展模块
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader"
+// @ts-ignore
+import { GLTFLoader } from "../THREE/GLTFLoader.js"
 import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader"
 import { KTX2Loader } from "three/examples/jsm/loaders/KTX2Loader"
 import { RGBELoader } from "three/examples/jsm/loaders/RGBELoader"

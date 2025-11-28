@@ -257,6 +257,8 @@ export class ResourceReaderPlugin extends BasePlugin {
                     task.config.url,
                     // onLoad
                     (gltf: any) => {
+                        console.log(`✅ 异步加载成功: ${task.config.url}`,gltf);
+                        debugger
                         // 处理模型：设置名称和建筑模型特殊逻辑
                         const processedModel = this.processLoadedModel(gltf.scene, task.config.url)
 
@@ -595,6 +597,8 @@ export class ResourceReaderPlugin extends BasePlugin {
             // 如果不强制重新加载，先检查缓存
             if (!forceReload) {
                 const cachedModel = await this.getModelFromCache(fullUrl)
+                console.log(`缓存检查结果: ${cachedModel ? '有缓存' : '无缓存'}`,cachedModel);
+                
                 if (cachedModel) {
                     console.log(`✅ 从缓存加载模型: ${fullUrl}`)
                     eventBus.emit("resource:loaded", {
