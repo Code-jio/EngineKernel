@@ -6,7 +6,7 @@ interface TextStyle {
     fontSize: number
     fontFamily: string
     fontWeight: "normal" | "bold" | "lighter" | "bolder"
-    color: string
+    textColor: string
     textAlign: "left" | "center" | "right"
     lineHeight: number
     maxWidth?: number
@@ -54,8 +54,9 @@ interface ImageConfig {
 // 标记配置接口
 interface TextMarkerConfig {
     text: string
-    position: Array<number> | THREE.Vector3 | { x: number; y: number; z: number }
+    position?: Array<number> | THREE.Vector3 | { x: number; y: number; z: number }
     textStyle?: Partial<TextStyle>
+    offset?: [] 
     backgroundStyle?: Partial<BackgroundStyle>
     image?: ImageConfig
     scale?: number
@@ -115,7 +116,7 @@ export class TextMarkerPlugin extends BasePlugin {
             fontSize: 16,
             fontFamily: "Arial, sans-serif",
             fontWeight: "normal",
-            color: "#ffffff",
+            textColor: "#ffffff",
             textAlign: "center",
             lineHeight: 1.2,
             ...meta.userData?.defaultTextStyle,
@@ -139,6 +140,7 @@ export class TextMarkerPlugin extends BasePlugin {
             autoSize: false,
             scale: 1,
             rotation: 0,
+            offset:[0,0,0],
             ...meta.userData?.defaultConfig,
         }
 
@@ -220,14 +222,34 @@ export class TextMarkerPlugin extends BasePlugin {
         const sprite = new THREE.Sprite(material)
         sprite.renderOrder = 999
         
-        // 设置位置
+        // 设置位置 + 偏移
+        let position = new THREE.Vector3();
+
         if (Array.isArray(finalConfig.position)) {
-            sprite.position.set(finalConfig.position[0], finalConfig.position[1], finalConfig.position[2])
+            position.set(finalConfig.position[0], finalConfig.position[1], finalConfig.position[2]);
         } else if (finalConfig.position instanceof THREE.Vector3) {
-            sprite.position.copy(finalConfig.position)
+            position.copy(finalConfig.position);
+        } else if (finalConfig.position && typeof finalConfig.position === 'object') {
+            position.set(
+                finalConfig.position.x ?? 0,
+                finalConfig.position.y ?? 0,
+                finalConfig.position.z ?? 0
+            );
         } else {
-            sprite.position.set(finalConfig.position.x, finalConfig.position.y, finalConfig.position.z)
+            position.set(0, 0, 0);
         }
+
+        // 设置偏移
+        const offset = finalConfig.offset instanceof THREE.Vector3
+            ? finalConfig.offset
+            : Array.isArray(finalConfig.offset)
+                ? new THREE.Vector3(...finalConfig.offset)
+                : new THREE.Vector3(0, 0, 0); // 默认偏移为 [0, 0, 0]
+
+        position.add(offset); // 将偏移应用到最终位置
+        sprite.position.copy(position);
+
+
         // // 设置缩放
         // if (finalConfig.scale) {
         //     sprite.scale.multiplyScalar(finalConfig.scale);
@@ -286,7 +308,13 @@ export class TextMarkerPlugin extends BasePlugin {
 
         const { canvas, context, config } = instance
         const textStyle = { ...this.defaultTextStyle, ...config.textStyle }
-        const backgroundStyle = { ...this.defaultBackgroundStyle, ...config.backgroundStyle }
+        let backgroundStyle       
+        if (config.backgroundStyle) {
+            backgroundStyle = { ...this.defaultBackgroundStyle, ...config.backgroundStyle }
+        }
+
+        // console.log(textStyle, backgroundStyle,"renderMarker", instance);
+        
 
         // 预处理文本
         const lines = this.wrapText(config.text, textStyle, textStyle.maxWidth)
@@ -310,8 +338,10 @@ export class TextMarkerPlugin extends BasePlugin {
         // 清除Canvas
         context.clearRect(0, 0, canvas.width, canvas.height)
 
-        // 绘制背景
-        this.drawBackground(context, totalSize, backgroundStyle)
+        if (backgroundStyle) {
+            // 绘制背景
+            this.drawBackground(context, totalSize, backgroundStyle)
+        }
 
         // 绘制图片
         if (image && config.image) {
@@ -587,7 +617,7 @@ export class TextMarkerPlugin extends BasePlugin {
 
         // 设置字体
         context.font = `${textStyle.fontWeight} ${textStyle.fontSize}px ${textStyle.fontFamily}`
-        context.fillStyle = textStyle.color
+        context.fillStyle = textStyle.textColor
         context.textAlign = textStyle.textAlign
         context.textBaseline = "middle"
 
@@ -840,6 +870,27 @@ export class TextMarkerPlugin extends BasePlugin {
 
         eventBus.emit("textMarker:updated", { markerId, config })
         return true
+    }
+
+    /**
+     * 设置位置
+     * @param sprite 
+     * @param position 
+     */
+    public setPosition(sprite: THREE.Sprite, position: number[] | THREE.Vector3 | { x?: number; y?: number; z?: number } | null | undefined): void {
+        if (Array.isArray(position)) {
+            sprite.position.set(position[0], position[1], position[2]);
+        } else if (position instanceof THREE.Vector3) {
+            sprite.position.copy(position);
+        } else if (position && typeof position === 'object') {
+            sprite.position.set(
+                position.x ?? 0,
+                position.y ?? 0,
+                position.z ?? 0
+            );
+        } else {
+            sprite.position.set(0, 0, 0);
+        }
     }
 
     /**
