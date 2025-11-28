@@ -89,6 +89,7 @@ export class CSS3DRenderPlugin extends BasePlugin {
         this.domElement.style.width = "100%"
         this.domElement.style.height = "100%"
         this.domElement.style.zIndex = "1000"
+        this.domElement.style.background = 'transparent';
 
         // 设置渲染器尺寸并添加到DOM
         this.css3Drenderer.setSize(window.innerWidth, window.innerHeight)

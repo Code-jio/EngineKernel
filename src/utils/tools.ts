@@ -107,6 +107,7 @@ function sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// 安全深度克隆
 function safeDeepClone(obj: any, visited = new WeakMap()): any {
     // 处理基本类型
     if (obj === null || typeof obj !== 'object') {
@@ -651,31 +652,93 @@ function objectToVector3(obj: { x: number; y: number; z: number }): THREE.Vector
     return new THREE.Vector3(obj.x, obj.y, obj.z);
 }
 
-export {
-    degreesToRadians,
-    radiansToDegrees,
-    clamp,
-    lerp,
-    lerpVector3,
-    distance2D,
-    distance3D,
-    randomColor,
-    deepClone,
-    debounce,
-    throttle,
-    isMobile,
-    formatFileSize,
-    sleep,
-    safeDeepClone,
-    mergeConfigs,
-    setObjectOpacity,
-    restoreOriginalOpacity,
-    // 轮廓提取相关函数
-    ccw,
-    computeConvexHull,
-    extractObjectContour,
-    extractAndSaveObjectBounding,
-    centerContourAtOrigin,
-    objectToVector3,
-    vector3ToObject
+/**
+ * 将 mesh 的材质克隆并修改颜色，原始材质保存在 mesh.userData.originalMaterial 或 mesh.userData.originalMaterials
+ * @param mesh - 你要修改的 Three.js mesh
+ * @param targetHexColor - 目标颜色（十六进制，例如 0x00ff00）
+ */
+function changeMeshColor(mesh: THREE.Mesh, targetHexColor: number): void {
+    if (!mesh.material) return;
+
+    // 保存原始材质
+    if (Array.isArray(mesh.material)) {
+        if (!mesh.userData.originalMaterials) {
+            mesh.userData.originalMaterials = [];
+        }
+
+        mesh.material.forEach((mat, index) => {
+            const clone = mat.clone();
+            if (clone instanceof THREE.MeshStandardMaterial) {
+                clone.color.set(targetHexColor);
+            }
+
+            if (Array.isArray(mesh.material)) {
+                mesh.material[index] = clone;
+            } else {
+                mesh.material = clone;
+            }
+
+            // 保存原材质到 userData
+            mesh.userData.originalMaterials![index] = mat;
+        });
+    } else {
+        const original = mesh.material.clone();
+        const clone = mesh.material.clone();
+        if (clone instanceof THREE.MeshStandardMaterial) {
+            clone.color.set(targetHexColor);
+        }
+        mesh.material = clone;
+
+        mesh.userData.originalMaterial = original;
+    }
 }
+
+/**
+ * 从 mesh.userData 恢复原始材质
+ * @param mesh - 你要恢复的 Three.js mesh
+ */
+function restoreMeshOriginalMaterial(mesh: THREE.Mesh): void {
+    if (mesh.userData.originalMaterial) {
+        mesh.material = mesh.userData.originalMaterial.clone();
+        delete mesh.userData.originalMaterial;
+    } else if (Array.isArray(mesh.userData.originalMaterials)) {
+        mesh.material = mesh.userData.originalMaterials.map(mat => mat.clone());
+        delete mesh.userData.originalMaterials;
+    }
+}
+
+export {
+    degreesToRadians, // 角度转弧度
+    radiansToDegrees, // 弧度转角度
+    clamp, // 限制数值在指定范围内
+    lerp, //线性插值
+    lerpVector3, // 向量线性插值
+    distance2D, // 计算两点之间的距离
+    distance3D, // 计算3D空间中的距离
+    randomColor, // 生成随机颜色
+    deepClone, // 深度克隆对象（简单对象）
+    debounce, // 防抖函数
+    throttle, // 节流函数
+    isMobile, // 判断是否为移动设备
+    formatFileSize, // 格式化文件大小
+    sleep, // 等待指定时间
+
+    safeDeepClone, // 安全深度克隆
+    mergeConfigs, // 深度合并配置对象（防止循环引用）
+    
+    setObjectOpacity, // 设置物体透明度（自动保存原始材质）
+    restoreOriginalOpacity, // 恢复物体的原始透明度（使用之前在setObjectOpacity中保存的材质信息）
+
+    ccw, // 判断三点是否构成逆时针转向
+    computeConvexHull, // 计算点集的凸包
+
+    extractObjectContour, // 提取3D对象的2D平面轮廓（俯视视角）,专用于房间
+    extractAndSaveObjectBounding, // 为对象提取并保存轮廓信息到userData
+    centerContourAtOrigin, // 将轮廓的几何中心移动到原点
+
+    objectToVector3, // 对象转向量
+    vector3ToObject, // 向量转对象
+
+    changeMeshColor, // 将 mesh 的材质克隆并修改颜色，原始材质保存在 mesh.userData
+    restoreMeshOriginalMaterial // 从 mesh.userData 恢复原始材质
+} 
