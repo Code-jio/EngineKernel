@@ -41,7 +41,7 @@ export { OutLinePlugin } from "./webgl/OutLinePlugin";
 export { DataRainEffect } from "./effects/DataRainEffect";
 export { TechRingEffect } from "./effects/TechRingEffect";
 export { PostProcessingPlugin } from "./postProcessing/index";
-export { StaticGeometryMerger } from "./mergeTools/index";
+export { StaticGeometryMerger } from "./merge/index";
 
 export { FloatPoint } from "./effects/FloatPoint"
 
