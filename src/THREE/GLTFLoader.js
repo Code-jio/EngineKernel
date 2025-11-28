@@ -1,5 +1,8 @@
 // THREEJS R165 版本
  
+// 静态导入缓存工具
+import { gltfModelCache } from '../tools/cache.ts';
+
 import {
 	AnimationClip,
 	Bone,
@@ -233,33 +236,77 @@ class GLTFLoader extends Loader {
 
 		};
 
-		const loader = new FileLoader( this.manager );
-
-		loader.setPath( this.path );
-		loader.setResponseType( 'arraybuffer' );
-		loader.setRequestHeader( this.requestHeader );
-		loader.setWithCredentials( this.withCredentials );
-
-		loader.load( url, function ( data ) {
-
-			try {
-
-				scope.parse( data, resourcePath, function ( gltf ) {
-					console.log(url, data, resourcePath,gltf ,"gltf ,data, resourcePath,	");
-					
-					onLoad( gltf );
-
-					scope.manager.itemEnd( url );
-
-				}, _onError );
-
-			} catch ( e ) {
-
-				_onError( e );
-
+		// 检查浏览器是否支持IndexedDB
+		const isIndexedDBSupported = typeof indexedDB !== 'undefined';
+		
+		// 尝试从缓存加载模型
+		const tryLoadFromCache = async () => {
+			if ( !isIndexedDBSupported ) {
+				// 不支持IndexedDB，直接进行网络请求
+				return false;
 			}
+			
+			try {
+				const cachedData = await gltfModelCache.get( url );
+				
+				if ( cachedData ) {
+					console.log( 'GLTFLoader: 从缓存加载模型', url );
+					// 从缓存获取数据，创建一个包含缓存数据的对象
+					const cachedResponse = {
+						bufferData: cachedData.bufferData,
+						jsonData: cachedData.jsonData
+					};
+					
+					// 使用缓存数据执行解析流程
+					scope.parseWithCache( cachedResponse, resourcePath, function ( gltf ) {
+						onLoad( gltf );
+						scope.manager.itemEnd( url );
+					}, _onError );
+					
+					return true;
+				}
+			} catch ( error ) {
+				console.warn( 'GLTFLoader: 从缓存加载模型失败', error );
+			}
+			
+			return false;
+		};
 
-		}, onProgress, _onError );
+		// 先尝试从缓存加载
+		tryLoadFromCache().then( ( loadedFromCache ) => {
+			if ( loadedFromCache ) {
+				return;
+			}
+			
+			// 缓存未命中，执行正常的网络请求
+			console.log( 'GLTFLoader: 从网络加载模型', url );
+			const loader = new FileLoader( this.manager );
+
+			loader.setPath( this.path );
+			loader.setResponseType( 'arraybuffer' );
+			loader.setRequestHeader( this.requestHeader );
+			loader.setWithCredentials( this.withCredentials );
+
+			loader.load( url, function ( data ) {
+
+				try {
+
+					scope.parse( data, resourcePath, function ( gltf ) {
+
+						onLoad( gltf );
+
+						scope.manager.itemEnd( url );
+
+					}, _onError, url );
+
+				} catch ( e ) {
+
+					_onError( e );
+
+				}
+
+			}, onProgress, _onError );
+		} );
 
 	}
 
@@ -318,7 +365,7 @@ class GLTFLoader extends Loader {
 
 	}
 
-	parse( data, path, onLoad, onError ) {
+	parse( data, path, onLoad, onError, url ) {
 
 		let json;
 		const extensions = {};
@@ -437,9 +484,115 @@ class GLTFLoader extends Loader {
 
 		parser.setExtensions( extensions );
 		parser.setPlugins( plugins );
-		parser.parse( onLoad, onError );
-		console.log( parser, json, data, path,"parser + json + data + path");
 		
+		// 解析完成后存储到缓存
+		const originalOnLoad = onLoad;
+		const scope = this;
+		
+		onLoad = function ( gltf ) {
+			// 执行原始的onLoad回调
+			originalOnLoad( gltf );
+			
+			// 如果提供了url，将数据存储到缓存
+			if ( url && data instanceof ArrayBuffer ) {
+				// 检查浏览器是否支持IndexedDB
+				const isIndexedDBSupported = typeof indexedDB !== 'undefined';
+				if ( isIndexedDBSupported ) {
+					try {
+						// 使用静态导入的缓存工具存储数据
+			gltfModelCache.store( url, data, json ).then( () => {
+				console.log( 'GLTFLoader: 模型已缓存', url );
+			} ).catch( ( error ) => {
+				console.warn( 'GLTFLoader: 缓存模型失败', error );
+			} );
+					} catch ( error ) {
+						console.warn( 'GLTFLoader: 缓存模型失败', error );
+					}
+				}
+			}
+		};
+		
+		parser.parse( onLoad, onError );
+
+	}
+	
+	/**
+	 * 从缓存数据解析模型
+	 * @param {Object} cachedData 包含bufferData和jsonData的缓存对象
+	 * @param {string} path 资源路径
+	 * @param {Function} onLoad 加载完成回调
+	 * @param {Function} onError 错误回调
+	 */
+	parseWithCache( cachedData, path, onLoad, onError ) {
+		const json = cachedData.jsonData;
+		const extensions = {};
+		const plugins = {};
+		
+		if ( json.asset === undefined || json.asset.version[ 0 ] < 2 ) {
+			if ( onError ) onError( new Error( 'THREE.GLTFLoader: Unsupported asset. glTF versions >=2.0 are supported.' ) );
+			return;
+		}
+		
+		const parser = new GLTFParser( json, {
+			path: path || this.resourcePath || '',
+			crossOrigin: this.crossOrigin,
+			requestHeader: this.requestHeader,
+			manager: this.manager,
+			ktx2Loader: this.ktx2Loader,
+			meshoptDecoder: this.meshoptDecoder
+		} );
+		
+		parser.fileLoader.setRequestHeader( this.requestHeader );
+		
+		for ( let i = 0; i < this.pluginCallbacks.length; i ++ ) {
+			const plugin = this.pluginCallbacks[ i ]( parser );
+			if ( ! plugin.name ) console.error( 'THREE.GLTFLoader: Invalid plugin found: missing name' );
+			plugins[ plugin.name ] = plugin;
+			extensions[ plugin.name ] = true;
+		}
+		
+		if ( json.extensionsUsed ) {
+			for ( let i = 0; i < json.extensionsUsed.length; ++ i ) {
+				const extensionName = json.extensionsUsed[ i ];
+				const extensionsRequired = json.extensionsRequired || [];
+				switch ( extensionName ) {
+					case EXTENSIONS.KHR_MATERIALS_UNLIT:
+						extensions[ extensionName ] = new GLTFMaterialsUnlitExtension();
+						break;
+					case EXTENSIONS.KHR_DRACO_MESH_COMPRESSION:
+						extensions[ extensionName ] = new GLTFDracoMeshCompressionExtension( json, this.dracoLoader );
+						break;
+					case EXTENSIONS.KHR_TEXTURE_TRANSFORM:
+						extensions[ extensionName ] = new GLTFTextureTransformExtension();
+						break;
+					case EXTENSIONS.KHR_MESH_QUANTIZATION:
+						extensions[ extensionName ] = new GLTFMeshQuantizationExtension();
+						break;
+					default:
+						if ( extensionsRequired.indexOf( extensionName ) >= 0 && plugins[ extensionName ] === undefined ) {
+							console.warn( 'THREE.GLTFLoader: Unknown extension "' + extensionName + '".' );
+						}
+				}
+			}
+		}
+		
+		// 处理二进制扩展数据
+		if ( cachedData.bufferData ) {
+			const textDecoder = new TextDecoder();
+			const magic = textDecoder.decode( new Uint8Array( cachedData.bufferData, 0, 4 ) );
+			if ( magic === BINARY_EXTENSION_HEADER_MAGIC ) {
+				try {
+					extensions[ EXTENSIONS.KHR_BINARY_GLTF ] = new GLTFBinaryExtension( cachedData.bufferData );
+				} catch ( error ) {
+					if ( onError ) onError( error );
+					return;
+				}
+			}
+		}
+		
+		parser.setExtensions( extensions );
+		parser.setPlugins( plugins );
+		parser.parse( onLoad, onError );
 	}
 
 	parseAsync( data, path ) {
