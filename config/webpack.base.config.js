@@ -103,6 +103,30 @@ export default {
                     }
                 });
             }
+        },
+        
+        // 自定义插件：复制GLTF Worker文件到dist目录
+        {
+            apply: (compiler) => {
+                compiler.hooks.afterEmit.tap('CopyGLTFWorkerPlugin', (compilation) => {
+                    const sourcePath = path.resolve(__dirname, '../src/workers/gltfLoaderWorker.ts');
+                    const destPath = path.resolve(__dirname, '../dist/workers/gltfLoaderWorker.js');
+                    
+                    // 确保目标目录存在
+                    const destDir = path.dirname(destPath);
+                    if (!fs.existsSync(destDir)) {
+                        fs.mkdirSync(destDir, { recursive: true });
+                    }
+                    
+                    // 复制文件
+                    if (fs.existsSync(sourcePath)) {
+                        // 这里我们只需要确保目录存在，文件将由webpack的asset/resource处理
+                        console.log('✅ GLTF Worker目录已准备好:', destDir);
+                    } else {
+                        console.warn('⚠️ GLTF Worker源文件不存在:', sourcePath);
+                    }
+                });
+            }
         }
     ],
 }

@@ -2,6 +2,7 @@ import { THREE, BasePlugin } from "../basePlugin"
 import eventBus from "../../eventBus/eventBus"
 import { GLTFLoader, DRACOLoader } from "../../utils/three-imports"
 import * as TWEEN from "@tweenjs/tween.js"
+import { GLTFWorkerManager, loadModelWithWorker } from "../../workers/gltfWorkerManager"
 
 // 本插件承担任务：
 // 1. 在场景中添加一个3D模型
@@ -123,6 +124,7 @@ export class ModelMarker extends BasePlugin {
     private enableDebugMode: boolean = false
     private defaultConfig: Partial<ModelMarkerConfig>
     private animateGroup: TWEEN.Group = new TWEEN.Group()
+    private gltfWorkerManager: GLTFWorkerManager | null = null // GLTF Worker管理器实例
 
     constructor(meta: any = {}) {
         super(meta)
@@ -163,6 +165,15 @@ export class ModelMarker extends BasePlugin {
         if (!this.resourceReaderPlugin) {
             console.warn("⚠️ ModelMarker: 未找到ResourceReaderPlugin，将使用默认加载器")
         }
+        
+        // 初始化GLTF Worker管理器
+        this.gltfWorkerManager = new GLTFWorkerManager() // 使用默认路径，自动处理.js扩展名
+        await this.gltfWorkerManager.initialize({
+            enableDraco: true,
+            enableKTX2: true,
+            enableMeshopt: true
+        })
+        
         // 启动动画循环
         this.startAnimationLoop()
         // 监听事件
@@ -349,7 +360,7 @@ export class ModelMarker extends BasePlugin {
     }
 
     /**
-     * 加载模型的核心实现
+     * 加载模型的核心实现（使用Web Worker）
      */
     private loadModelDirectWithCallback(
         modelId: string,
@@ -363,59 +374,120 @@ export class ModelMarker extends BasePlugin {
 
         const config = instance.config
 
-        // 创建独立的GLTF加载器
-        const loader = new GLTFLoader()
+        // 使用Web Worker加载模型
+        if (this.gltfWorkerManager) {
+            console.log(`🚀 使用Worker加载模型: ${modelUrl}`)
+            this.gltfWorkerManager.loadModel(
+                {
+                    url: modelUrl,
+                    config: {
+                        enableDraco: true,
+                        enableKTX2: true,
+                        enableMeshopt: true
+                    }
+                },
+                {
+                    onProgress: (progressData: any) => {
+                        const percent = progressData.progress
+                        eventBus.emit("model:loadProgress", { modelId, progress: percent })
+                        
+                        // 执行用户进度回调
+                        if (config.onProgress) {
+                            config.onProgress({
+                                lengthComputable: true,
+                                loaded: progressData.loaded || 0,
+                                total: progressData.total || 100,
+                                percent: percent
+                            })
+                        }
+                    },
+                    onComplete: (result: any) => {
+                        const loadTime = performance.now() - startTime
+                        console.log(`⚡ Worker模型加载完成: ${modelUrl} - ${loadTime.toFixed(2)}ms`)
+                        
+                        // 转换结果格式，确保与原有代码兼容
+                        const gltfResult = {
+                            scene: result.scene,
+                            animations: result.animations
+                        }
+                        
+                        this.onModelLoaded(modelId, gltfResult)
 
-        // 配置DRACO解压器
-        const dracoLoader = new DRACOLoader()
-        dracoLoader.setDecoderPath("/draco/")
-        loader.setDRACOLoader(dracoLoader)
+                        // 执行用户回调
+                        if (config.onComplete) {
+                            config.onComplete(gltfResult.scene)
+                        }
 
+                        // 调用Promise resolve
+                        if (resolve) {
+                            resolve()
+                        }
+                    },
+                    onError: (errorData: any) => {
+                        console.error(`❌ Worker模型加载失败: ${modelUrl}`, errorData)
+                        const error = new Error(errorData.error || "Worker加载失败")
+                        eventBus.emit("model:loadError", { modelId, error: error.message })
 
-        loader.load(
-            modelUrl,
-            (gltf: any) => {
-                const loadTime = performance.now() - startTime
-                console.log(`⚡ 模型直接加载完成: ${modelUrl} - ${loadTime.toFixed(2)}ms`)
+                        // 执行用户错误回调
+                        if (config.onError) {
+                            config.onError(error)
+                        }
 
-                this.onModelLoaded(modelId, gltf)
-
-                // 执行用户回调
-                if (config.onComplete) {
-                    config.onComplete(gltf.scene)
-                }
-
-                // 调用Promise resolve
-                if (resolve) {
-                    resolve()
-                }
-            },
-            (progress: any) => {
-                if (progress.lengthComputable) {
-                    const percent = ((progress.loaded / progress.total) * 100).toFixed(2)
-                    eventBus.emit("model:loadProgress", { modelId, progress: percent })
-
-                    // 执行用户进度回调
-                    if (config.onProgress) {
-                        config.onProgress(progress)
+                        // 调用Promise reject
+                        if (reject) {
+                            reject(error)
+                        }
                     }
                 }
-            },
-            (error: any) => {
-                console.error(`❌ 模型直接加载失败: ${modelUrl}`, error)
-                eventBus.emit("model:loadError", { modelId, error: error.message })
-
-                // 执行用户错误回调
-                if (config.onError) {
-                    config.onError(error)
+            )
+        } else {
+            // 降级方案：使用传统的GLTF加载器
+            console.log(`⚠️ Worker未初始化，使用传统方式加载模型: ${modelUrl}`)
+            const loader = new GLTFLoader()
+            const dracoLoader = new DRACOLoader()
+            dracoLoader.setDecoderPath("/draco/")
+            loader.setDRACOLoader(dracoLoader)
+            
+            loader.load(
+                modelUrl,
+                (gltf: any) => {
+                    const loadTime = performance.now() - startTime
+                    console.log(`⚡ 传统方式模型加载完成: ${modelUrl} - ${loadTime.toFixed(2)}ms`)
+                    
+                    this.onModelLoaded(modelId, gltf)
+                    
+                    if (config.onComplete) {
+                        config.onComplete(gltf.scene)
+                    }
+                    
+                    if (resolve) {
+                        resolve()
+                    }
+                },
+                (progress: any) => {
+                    if (progress.lengthComputable) {
+                        const percent = ((progress.loaded / progress.total) * 100).toFixed(2)
+                        eventBus.emit("model:loadProgress", { modelId, progress: percent })
+                        
+                        if (config.onProgress) {
+                            config.onProgress(progress)
+                        }
+                    }
+                },
+                (error: any) => {
+                    console.error(`❌ 传统方式模型加载失败: ${modelUrl}`, error)
+                    eventBus.emit("model:loadError", { modelId, error: error.message })
+                    
+                    if (config.onError) {
+                        config.onError(error)
+                    }
+                    
+                    if (reject) {
+                        reject(error)
+                    }
                 }
-
-                // 调用Promise reject
-                if (reject) {
-                    reject(error)
-                }
-            },
-        )
+            )
+        }
     }
 
     /**
@@ -1392,6 +1464,13 @@ export class ModelMarker extends BasePlugin {
         // 清理事件监听器
         eventBus.off("resource:loaded", this.onResourceLoaded)
         eventBus.off("model:unload", this.removeModel)
+        
+        // 清理GLTF Worker管理器
+        if (this.gltfWorkerManager) {
+            console.log("🧹 清理GLTF Worker管理器资源")
+            this.gltfWorkerManager.dispose()
+            this.gltfWorkerManager = null
+        }
 
         console.log("🧹 ModelMarker插件已销毁")
     }

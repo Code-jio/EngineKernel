@@ -131,9 +131,9 @@ export class ResourceReaderPlugin extends BasePlugin {
             try {
                 this.dracoLoader = new DRACOLoader()
                 const dracoPath = config.dracoPath || "/draco/"
-                this.dracoLoader.setDecoderPath(dracoPath)
                 this.dracoLoader.setDecoderConfig({ type: "js" })
-
+                this.dracoLoader.setDecoderPath(dracoPath)
+                this.dracoLoader.setWorkerLimit(4)
                 // 设置DRACO解压器到GLTF加载器
                 this.gltfLoader.setDRACOLoader(this.dracoLoader)
             } catch (error) {
@@ -156,6 +156,7 @@ export class ResourceReaderPlugin extends BasePlugin {
                 this.ktx2Loader = new KTX2Loader()
                 const ktx2Path = config.ktx2Path || "./ktx2/"
                 this.ktx2Loader.setTranscoderPath(ktx2Path)
+                this.gltfLoader.setKTX2Loader(this.ktx2Loader)
             } catch (error) {
                 console.error("❌ KTX2纹理加载器初始化失败:", error)
                 this.ktx2Loader = null
@@ -178,9 +179,6 @@ export class ResourceReaderPlugin extends BasePlugin {
             // 检查renderer是否是有效的Three.js WebGLRenderer
             if (this.renderer) {
                 this.ktx2Loader.detectSupport(this.renderer)
-                
-                // 等待一小段时间确保支持检测完成
-                await new Promise(resolve => setTimeout(resolve, 10))
             } else {
                 console.warn("⚠️ Renderer未提供，无法检测KTX2支持")
             }
